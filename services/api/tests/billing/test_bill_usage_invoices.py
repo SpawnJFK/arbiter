@@ -7,6 +7,7 @@ from bill_helpers import make_org
 
 from arbiter.billing import invoices, usage
 from arbiter.community.errors import Invalid
+from arbiter.config import Settings
 from arbiter.models import UsageRecord
 
 
@@ -47,6 +48,7 @@ def test_ai_units_and_usage_view(db):
 def test_invoice_numbering_idempotency_and_lines(db, monkeypatch):
     monkeypatch.delenv("ARBITER_SELLER_COUNTRY", raising=False)
     monkeypatch.delenv("ARBITER_VAT_RATE", raising=False)
+    monkeypatch.setattr("arbiter.billing.invoices.get_settings", lambda: Settings())
     a, b = make_org(db), make_org(db)
     usage.record(db, a.id, "job_1", "word", 100, Decimal("7.004"), "a1", period="2030-05")
     usage.record(db, a.id, "job_1", "word", 50, Decimal("3.50"), "a2", period="2030-05")
@@ -76,6 +78,7 @@ def test_invoice_numbering_idempotency_and_lines(db, monkeypatch):
 def test_reverse_charge_and_configured_vat(db, monkeypatch):
     monkeypatch.setenv("ARBITER_SELLER_COUNTRY", "RS")
     monkeypatch.setenv("ARBITER_VAT_RATE", "0.20")
+    monkeypatch.setattr("arbiter.billing.invoices.get_settings", lambda: Settings())
     eu_b2b = make_org(db, settings={"vat_id": "DE123456789", "country": "DE"})
     domestic = make_org(db, settings={"vat_id": "RS100000000", "country": "RS"})
     for org in (eu_b2b, domestic):

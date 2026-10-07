@@ -96,8 +96,12 @@ def test_pptx_identity() -> None:
     assert all("/slides/" in n or "/notesSlides/" in n for n in changed)
     prs = pptx.Presentation(io.BytesIO(forced))
     texts = [sh.text_frame.text for s in prs.slides for sh in s.shapes if sh.has_text_frame]
-    orig = [sh.text_frame.text for s in pptx.Presentation(io.BytesIO(data)).slides for sh in s.shapes
-            if sh.has_text_frame]
+    orig = [
+        sh.text_frame.text
+        for s in pptx.Presentation(io.BytesIO(data)).slides
+        for sh in s.shapes
+        if sh.has_text_frame
+    ]
     assert texts == orig
 
 

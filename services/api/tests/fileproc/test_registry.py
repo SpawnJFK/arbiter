@@ -39,8 +39,15 @@ def test_unknown_lists_supported() -> None:
         get_handler("README")
 
 
-@pytest.mark.parametrize("name,data", [("empty.txt", b""), ("blank.md", b"  \n\n"), ("nums.csv", b"1,2\n3,4\n"),
-                                       ("only.json", b'{"a": 1, "b": "42"}')])
+@pytest.mark.parametrize(
+    "name,data",
+    [
+        ("empty.txt", b""),
+        ("blank.md", b"  \n\n"),
+        ("nums.csv", b"1,2\n3,4\n"),
+        ("only.json", b'{"a": 1, "b": "42"}'),
+    ],
+)
 def test_no_translatable_text(name: str, data: bytes) -> None:
     with pytest.raises(FormatError, match="no translatable text"):
         detect_and_extract(name, data, "en")

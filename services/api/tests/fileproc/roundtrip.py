@@ -17,8 +17,14 @@ def identity(handler: FormatHandler, data: bytes, lang: str = "en") -> tuple[byt
     return merged, first
 
 
-def translation(handler: FormatHandler, data: bytes, lang: str = "en", target_lang: str = "de",
-                left: str = "[[", right: str = "]]") -> tuple[bytes, ExtractionResult, ExtractionResult]:
+def translation(
+    handler: FormatHandler,
+    data: bytes,
+    lang: str = "en",
+    target_lang: str = "de",
+    left: str = "[[",
+    right: str = "]]",
+) -> tuple[bytes, ExtractionResult, ExtractionResult]:
     """Pseudo-translate every segment; the result must carry the new text and every code.
 
     Only for formats where the translation replaces the source text. Bilingual formats

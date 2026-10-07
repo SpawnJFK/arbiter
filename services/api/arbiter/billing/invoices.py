@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 from collections import defaultdict
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
@@ -37,13 +36,11 @@ NO_TAX_CONFIG_NOTE = "VAT not configured (legal and tax review before launch)."
 
 
 def seller_country() -> str:
-    return (
-        getattr(get_settings(), "seller_country", "") or os.environ.get("ARBITER_SELLER_COUNTRY", "")
-    ).upper()
+    return get_settings().seller_country.upper()
 
 
 def vat_rate() -> Decimal:
-    raw = getattr(get_settings(), "vat_rate", None) or os.environ.get("ARBITER_VAT_RATE", "0") or "0"
+    raw = get_settings().vat_rate or "0"
     try:
         return Decimal(str(raw))
     except InvalidOperation:

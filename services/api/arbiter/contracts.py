@@ -100,7 +100,13 @@ class LlmClient(Protocol):
     def available(self) -> bool: ...
 
     def complete_json(
-        self, system: str, user: str, *, schema_hint: str = "", max_tokens: int = 2000, temperature: float = 0.0
+        self,
+        system: str,
+        user: str,
+        *,
+        schema_hint: str = "",
+        max_tokens: int = 2000,
+        temperature: float = 0.0,
     ) -> tuple[dict[str, Any], Usage, str]:
         """Returns (parsed_json, usage, model_version). Raises EngineError on failure."""
         ...
@@ -159,7 +165,9 @@ class SegmentContext:
     context_before: str = ""
     context_after: str = ""
     max_length: int | None = None
-    document_targets: list[tuple[str, str]] = field(default_factory=list)  # (source, target) of other segments
+    document_targets: list[tuple[str, str]] = field(
+        default_factory=list
+    )  # (source, target) of other segments
 
 
 Decision = Literal["auto_approve", "senate", "review", "blocked"]

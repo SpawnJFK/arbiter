@@ -62,10 +62,10 @@ def docx_body(tracked: bool = False, extra: str = "") -> str:
         # split runs with identical formatting but different rsids, plus proofing noise
         _p(
             _r("This is ", "", "00A1")
-            + "<w:proofErr w:type=\"spellStart\"/>"
+            + '<w:proofErr w:type="spellStart"/>'
             + _r("im", "<w:b/>", "00A2")
-            + _r("portant", "<w:b/><w:lang w:val=\"en-GB\"/>", "00A3")
-            + "<w:proofErr w:type=\"spellEnd\"/>"
+            + _r("portant", '<w:b/><w:lang w:val="en-GB"/>', "00A3")
+            + '<w:proofErr w:type="spellEnd"/>'
             + _r(" and ", "", "00A4")
             + _r("styled", "<w:i/>")
             + _r(" text in one sentence. It has a second sentence.")
@@ -94,9 +94,7 @@ def docx_body(tracked: bool = False, extra: str = "") -> str:
         ),
         _p(_r("Logo here: ") + f"<w:r>{DRAWING}</w:r>" + _r(" and the text goes on.")),
         _p(
-            '<w:bookmarkStart w:id="0" w:name="intro"/>'
-            + _r("Bookmarked text")
-            + '<w:bookmarkEnd w:id="0"/>'
+            '<w:bookmarkStart w:id="0" w:name="intro"/>' + _r("Bookmarked text") + '<w:bookmarkEnd w:id="0"/>'
         ),
         _p(_r("Line one") + "<w:r><w:br/></w:r>" + _r("Line two")),
         _p(_r("12345")),
@@ -109,7 +107,7 @@ def docx_body(tracked: bool = False, extra: str = "") -> str:
         "</w:tr></w:tbl>",
     ]
     if tracked:
-        paras.append(_p(_r("Old text ") + f"<w:ins w:id=\"9\" w:author=\"x\">{_r('inserted')}</w:ins>"))
+        paras.append(_p(_r("Old text ") + f'<w:ins w:id="9" w:author="x">{_r("inserted")}</w:ins>'))
     body = "".join(paras) + extra
     return (
         f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document {NS}><w:body>{body}'
@@ -173,17 +171,19 @@ def make_docx(tracked: bool = False, extra: str = "") -> bytes:
         f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:comments {NS}>'
         f'<w:comment w:id="0" w:author="A">{_p(_r("Reviewer comment, not translated"))}</w:comment></w:comments>'
     )
-    return _zip({
-        "[Content_Types].xml": ct,
-        "_rels/.rels": rels,
-        "word/document.xml": docx_body(tracked, extra),
-        "word/_rels/document.xml.rels": doc_rels,
-        "word/header1.xml": header,
-        "word/footer1.xml": footer,
-        "word/footnotes.xml": footnotes,
-        "word/comments.xml": comments,
-        "word/media/image1.png": PNG,
-    })
+    return _zip(
+        {
+            "[Content_Types].xml": ct,
+            "_rels/.rels": rels,
+            "word/document.xml": docx_body(tracked, extra),
+            "word/_rels/document.xml.rels": doc_rels,
+            "word/header1.xml": header,
+            "word/footer1.xml": footer,
+            "word/footnotes.xml": footnotes,
+            "word/comments.xml": comments,
+            "word/media/image1.png": PNG,
+        }
+    )
 
 
 # --------------------------------------------------------------------------- XLSX
@@ -194,18 +194,29 @@ S = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 # A table of contents: one complex field spanning three paragraphs, with a nested PAGEREF field
 # inside a hyperlink, followed by a paragraph holding a text box (with a VML fallback copy).
 TOC_AND_TEXTBOX = (
-    _p(_r("Contents ") + '<w:r><w:fldChar w:fldCharType="begin"/></w:r>'
-       '<w:r><w:instrText xml:space="preserve"> TOC \\o "1-3" </w:instrText></w:r>'
-       '<w:r><w:fldChar w:fldCharType="separate"/></w:r>')
-    + _p('<w:hyperlink w:anchor="_Toc1">' + _r("Introduction chapter")
-         + '<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText> PAGEREF _Toc1 </w:instrText></w:r>'
-         '<w:r><w:fldChar w:fldCharType="separate"/></w:r>' + _r("2")
-         + '<w:r><w:fldChar w:fldCharType="end"/></w:r></w:hyperlink>')
+    _p(
+        _r("Contents ") + '<w:r><w:fldChar w:fldCharType="begin"/></w:r>'
+        '<w:r><w:instrText xml:space="preserve"> TOC \\o "1-3" </w:instrText></w:r>'
+        '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'
+    )
+    + _p(
+        '<w:hyperlink w:anchor="_Toc1">'
+        + _r("Introduction chapter")
+        + '<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText> PAGEREF _Toc1 </w:instrText></w:r>'
+        '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'
+        + _r("2")
+        + '<w:r><w:fldChar w:fldCharType="end"/></w:r></w:hyperlink>'
+    )
     + _p('<w:r><w:fldChar w:fldCharType="end"/></w:r>' + _r("After the table of contents."))
-    + _p(_r("Box: ") + "<w:r><mc:AlternateContent><mc:Choice Requires=\"wps\"><w:drawing><w:txbxContent>"
-         + _p(_r("Text box words")) + "</w:txbxContent></w:drawing></mc:Choice><mc:Fallback><w:pict><w:txbxContent>"
-         + _p(_r("Text box words")) + "</w:txbxContent></w:pict></mc:Fallback></mc:AlternateContent></w:r>"
-         + _r(" after the box."))
+    + _p(
+        _r("Box: ")
+        + '<w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing><w:txbxContent>'
+        + _p(_r("Text box words"))
+        + "</w:txbxContent></w:drawing></mc:Choice><mc:Fallback><w:pict><w:txbxContent>"
+        + _p(_r("Text box words"))
+        + "</w:txbxContent></w:pict></mc:Fallback></mc:AlternateContent></w:r>"
+        + _r(" after the box.")
+    )
 )
 
 
@@ -264,14 +275,16 @@ def make_xlsx() -> bytes:
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
         f'<Relationship Id="rId1" Type="{base}officeDocument" Target="xl/workbook.xml"/></Relationships>'
     )
-    return _zip({
-        "[Content_Types].xml": ct,
-        "_rels/.rels": rels,
-        "xl/workbook.xml": workbook,
-        "xl/_rels/workbook.xml.rels": wb_rels,
-        "xl/worksheets/sheet1.xml": sheet,
-        "xl/sharedStrings.xml": sst,
-    })
+    return _zip(
+        {
+            "[Content_Types].xml": ct,
+            "_rels/.rels": rels,
+            "xl/workbook.xml": workbook,
+            "xl/_rels/workbook.xml.rels": wb_rels,
+            "xl/worksheets/sheet1.xml": sheet,
+            "xl/sharedStrings.xml": sst,
+        }
+    )
 
 
 # --------------------------------------------------------------------------- PPTX
@@ -391,7 +404,7 @@ def json_bytes(indent: int | str | None) -> bytes:
     return (json.dumps(JSON_DOC, indent=indent, ensure_ascii=False) + "\n").encode()
 
 
-PO = r'''# Translation template for Arbiter.
+PO = r"""# Translation template for Arbiter.
 msgid ""
 msgstr ""
 "Project-Id-Version: demo 1.0\n"
@@ -425,9 +438,9 @@ msgstr ""
 
 #~ msgid "obsolete"
 #~ msgstr "zastarelo"
-'''
+"""
 
-PO_TRANSLATED = r'''msgid ""
+PO_TRANSLATED = r"""msgid ""
 msgstr ""
 "Language: en\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -440,7 +453,7 @@ msgid "One file"
 msgid_plural "%d files"
 msgstr[0] "One file"
 msgstr[1] "%d files"
-'''
+"""
 
 TXT = (
     "First paragraph has two sentences. This is the second one.\r\n"

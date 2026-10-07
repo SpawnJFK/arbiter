@@ -21,9 +21,14 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://arbiter:arbiter@localhost:5432/arbiter"
     storage_dir: str = "./var/storage"
     public_base_url: str = "http://localhost:8000"
+    cors_origins: str = "http://localhost:3000"  # comma separated
+
+    # Seller (for invoices). Tax treatment needs legal/tax review before public launch.
+    seller_country: str = ""
+    vat_rate: str = "0"
 
     # Auth
-    jwt_secret: str = Field(default="dev-only-change-me", min_length=8)
+    jwt_secret: str = Field(default="dev-only-change-me-not-for-production-use", min_length=32)
     jwt_ttl_minutes: int = 60 * 12
 
     # Providers. Empty string = not configured.

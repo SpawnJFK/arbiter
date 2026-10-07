@@ -46,14 +46,26 @@ def signature(data: bytes) -> dict[str, list[list[tuple]]]:
                     name = el.tag.rsplit("}", 1)[-1]
                     run = next((a for a in el.iterancestors() if a.tag == f"{{{W}}}r"), None)
                     key = _canon(run.find(f"{{{W}}}rPr")) if run is not None else ""
-                    link = next((a.get(R_ID) for a in el.iterancestors() if a.tag == f"{{{W}}}hyperlink"), None)
+                    link = next(
+                        (a.get(R_ID) for a in el.iterancestors() if a.tag == f"{{{W}}}hyperlink"), None
+                    )
                     if name == "t":
                         if seq and seq[-1][0] == "t" and seq[-1][2:] == (key, link):
                             seq[-1] = ("t", seq[-1][1] + (el.text or ""), key, link)
                         else:
                             seq.append(("t", el.text or "", key, link))
-                    elif name in ("tab", "br", "drawing", "footnoteReference", "footnoteRef", "fldChar",
-                                  "instrText", "bookmarkStart", "bookmarkEnd", "fldSimple"):
+                    elif name in (
+                        "tab",
+                        "br",
+                        "drawing",
+                        "footnoteReference",
+                        "footnoteRef",
+                        "fldChar",
+                        "instrText",
+                        "bookmarkStart",
+                        "bookmarkEnd",
+                        "fldSimple",
+                    ):
                         seq.append((name, key, etree.tostring(el) if name == "instrText" else b""))
                 paras.append(seq)
             out[part] = paras
@@ -88,9 +100,21 @@ def test_extraction_model() -> None:
     assert any("This is a footnote." in t for t in texts)
     assert "Company header" in texts
 
-    codes = {c.display for u in result.units for s in u.segments for c in s.content if isinstance(c, InlineCode)}
-    assert {"bold", "italic", "link", "tab", "footnote", "field PAGE", "image", "bookmark", "line break",
-            "footnote number"} <= codes
+    codes = {
+        c.display for u in result.units for s in u.segments for c in s.content if isinstance(c, InlineCode)
+    }
+    assert {
+        "bold",
+        "italic",
+        "link",
+        "tab",
+        "footnote",
+        "field PAGE",
+        "image",
+        "bookmark",
+        "line break",
+        "footnote number",
+    } <= codes
 
 
 def test_identity_is_byte_identical() -> None:
@@ -109,7 +133,9 @@ def test_identity_rebuild_preserves_text_and_formatting() -> None:
             assert before[name] == after[name], name
     assert signature(merged) == signature(data)
     reopened = docx.Document(io.BytesIO(merged))
-    assert [p.text for p in reopened.paragraphs] == [p.text for p in docx.Document(io.BytesIO(data)).paragraphs]
+    assert [p.text for p in reopened.paragraphs] == [
+        p.text for p in docx.Document(io.BytesIO(data)).paragraphs
+    ]
 
 
 def test_translation_roundtrip_keeps_codes_and_formatting() -> None:

@@ -121,3 +121,12 @@ def can(machine: str, src: str, dst: str) -> bool:
 def assert_transition(machine: str, src: str, dst: str) -> None:
     if not can(machine, src, dst):
         raise IllegalTransition(machine, src, dst)
+
+
+def transition(obj: object, machine: str, dst: str) -> None:
+    """The only way code changes a `state` column: validate, then assign."""
+    src = str(obj.state)  # type: ignore[attr-defined]
+    if src == str(dst):
+        return
+    assert_transition(machine, src, str(dst))
+    obj.state = str(dst)  # type: ignore[attr-defined]

@@ -43,7 +43,10 @@ def test_xliff12_roundtrip() -> None:
     xml = {k: etree.tostring(v, encoding="unicode") for k, v in t.items() if v is not None}
     assert "[[HELLO ]]<g" in xml["t1"] and "<x" in xml["t1"] and "[[SECOND SENTENCE HERE.]]" in xml["t1"]
     assert '<bx id="3" rid="1"/>[[HERE]]<ex id="4" rid="1"/>' in xml["t2"]
-    assert '<mrk mtype="seg" mid="1">[[FIRST PART.]]</mrk> <mrk mtype="seg" mid="2">[[SECOND PART.]]</mrk>' in xml["t3"]
+    assert (
+        '<mrk mtype="seg" mid="1">[[FIRST PART.]]</mrk> <mrk mtype="seg" mid="2">[[SECOND PART.]]</mrk>'
+        in xml["t3"]
+    )
     assert "t4" not in xml or t["t4"] is None
     assert b'target-language="de"' in out
     assert import_xliff_targets(out)["t3"] == [["[[FIRST PART.]]"], ["[[SECOND PART.]]"]]
@@ -63,7 +66,11 @@ def test_xliff20_roundtrip() -> None:
     root = etree.fromstring(out)
     assert root.get("trgLang") == "fr"
     segs = list(root.iter(f"{{{X2}}}segment"))
-    tgt = [etree.tostring(s.find(f"{{{X2}}}target"), encoding="unicode") for s in segs if s.find(f"{{{X2}}}target") is not None]
+    tgt = [
+        etree.tostring(s.find(f"{{{X2}}}target"), encoding="unicode")
+        for s in segs
+        if s.find(f"{{{X2}}}target") is not None
+    ]
     assert any('<pc id="1">[[BOLD]]</pc>' in t and '<ph id="2"/>' in t for t in tgt)
     assert any('<sc id="3"/>[[MARKED]]<ec startRef="3"/>' in t for t in tgt)
     assert any('<mrk id="m1" type="term">[[DONE]]</mrk>' in t for t in tgt)
@@ -103,7 +110,9 @@ def test_export_import_any_job() -> None:
     for uid, segs in targets.items():
         assert [to_tagged(s) for s in back[uid]] == [to_tagged(s) for s in segs]
     # The original markup travels in originalData.
-    bold = next(c for s in back["word/document.xml#0"] for c in s if isinstance(c, InlineCode) and c.kind == "open")
+    bold = next(
+        c for s in back["word/document.xml#0"] for c in s if isinstance(c, InlineCode) and c.kind == "open"
+    )
     assert "<w:b/>" in bold.original
     merged = dh.merge(docx_data, back, "de")
     again = {u.unit_id: plain(joined(u)) for u in dh.extract(merged, "en").units}
@@ -116,7 +125,9 @@ def test_export_without_targets_and_partial_import() -> None:
     xlf = export_xliff21(result, None, "en", "sr", "app.json")
     assert b"<target" not in xlf
     assert import_xliff_targets(xlf) == {}
-    xlf2 = export_xliff21(result, {"/a": [["Zdravo ", result.units[0].segments[0].content[1]]]}, "en", "sr", "app.json")
+    xlf2 = export_xliff21(
+        result, {"/a": [["Zdravo ", result.units[0].segments[0].content[1]]]}, "en", "sr", "app.json"
+    )
     back = import_xliff_targets(xlf2)
     assert list(back) == ["/a"]
     out = JsonHandler().merge(data, back, "sr")

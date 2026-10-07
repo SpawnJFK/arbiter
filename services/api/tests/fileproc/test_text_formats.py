@@ -55,7 +55,9 @@ def test_html_extraction() -> None:
     texts = " ".join(plain(joined(u)) for u in result.units)
     for hidden in ("preformatted", "Brand name", "Also stays", "do not translate", "color: red"):
         assert hidden not in texts
-    link = next(c for c in result.units[2].segments[0].content if isinstance(c, InlineCode) and c.display == "<a>")
+    link = next(
+        c for c in result.units[2].segments[0].content if isinstance(c, InlineCode) and c.display == "<a>"
+    )
     assert link.original == '<a href="/docs" class="x">'
 
 
@@ -72,7 +74,7 @@ def test_html_translation() -> None:
     merged, _, _ = translation(HtmlHandler(), HTML.encode())
     out = merged.decode()
     assert '<html lang="de">' in out
-    assert '<b>[[BOLD]]</b>' in out and '<a href="/docs" class="x">[[A LINK]]</a>' in out
+    assert "<b>[[BOLD]]</b>" in out and '<a href="/docs" class="x">[[A LINK]]</a>' in out
     assert 'alt="[[A CAT]]"' in out and 'placeholder="[[YOUR NAME]]"' in out
     assert '<span class="notranslate">ACME</span>' in out
     assert "preformatted, not translated" in out and 'var greeting = "do not translate";' in out
@@ -197,7 +199,9 @@ def test_po_extraction() -> None:
     assert [to_tagged(s.content) for s in hello.segments] == ["Hello ⟦1/⟧, welcome!"]
     assert hello.segments[0].trailing_ws == "\n"
     assert hello.notes == ["Shown on the start page", "Developer comment"]
-    assert [to_tagged(s.content) for s in units["e2"].segments] == ["Long text that wraps over lines. Second ⟦1/⟧."]
+    assert [to_tagged(s.content) for s in units["e2"].segments] == [
+        "Long text that wraps over lines. Second ⟦1/⟧."
+    ]
     plural = units["e3"]
     assert [to_tagged(s.content) for s in plural.segments] == ["One file", "⟦1/⟧ files"]
 
@@ -240,7 +244,9 @@ def test_txt_roundtrips() -> None:
     merged, result = identity(TextHandler(), data)
     assert merged == data
     assert [segs for _, segs, _ in tagged(result)][0] == [
-        "First paragraph has two sentences.", "This is the second one.", "It continues here."
+        "First paragraph has two sentences.",
+        "This is the second one.",
+        "It continues here.",
     ]
     assert result.units[1].leading_ws == "   "
     out, _, _ = translation(TextHandler(), data)
@@ -279,7 +285,11 @@ def test_csv_column_filter() -> None:
 
 
 def test_source_targets_identity_for_all_text_formats() -> None:
-    for handler, data in ((TextHandler(), TXT.encode()), (CsvHandler(), CSV.encode()),
-                          (MarkdownHandler(), MARKDOWN.encode()), (JsonHandler(), json_bytes(2))):
+    for handler, data in (
+        (TextHandler(), TXT.encode()),
+        (CsvHandler(), CSV.encode()),
+        (MarkdownHandler(), MARKDOWN.encode()),
+        (JsonHandler(), json_bytes(2)),
+    ):
         result = handler.extract(data, "en")
         assert handler.merge(data, source_targets(result), "en") == data

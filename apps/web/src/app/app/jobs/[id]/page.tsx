@@ -11,32 +11,40 @@ import { Time } from "@/components/ui/time";
 import { langName, money, num, pct, score, TIER_LABEL } from "@/lib/format";
 import { contentTypeLabel } from "@/lib/langs";
 import { getMe, withAuth } from "@/lib/server-api";
-import type { JobState } from "@/lib/types";
+import { DECISIONS, OUTPUT_STATES, SEGMENT_STATES, TERMINAL_JOB_STATES } from "@/lib/types";
 import { CancelJobButton } from "./cancel-button";
 import { SegmentTable } from "./segment-table";
 
 export const metadata: Metadata = { title: "Job" };
 
-const TERMINAL: JobState[] = ["delivered", "failed", "cancelled"];
 
-export default async function JobPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function JobPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ decision?: string; state?: string }>;
+}) {
   const { id } = await params;
+  const sp = await searchParams;
+  const decision = DECISIONS.find((d) => d === sp.decision) ?? "";
+  const segState = SEGMENT_STATES.find((x) => x === sp.state) ?? "";
   const next = `/app/jobs/${id}`;
   const [{ user }, job, firstPage, senate] = await Promise.all([
     getMe(),
     withAuth((api) => api.job(id), next),
-    withAuth((api) => api.segments(id, { limit: 50 }), next),
+    withAuth((api) => api.segments(id, { limit: 50, decision, state: segState }), next),
     // The Job object has no senate counter; count segments whose decision was the senate.
     withAuth((api) => api.segments(id, { decision: "senate", limit: 200 }), next),
   ]);
   const senateCount = senate.next_offset === null ? num(senate.items.length) : `${num(senate.items.length)}+`;
   const showMoney = user.role === "pm" || user.role === "admin";
-  const delivered = job.state === "delivered";
+  const delivered = OUTPUT_STATES.includes(job.state);
   const dl = (path: string) => `/api/proxy/jobs/${encodeURIComponent(job.id)}${path}`;
 
   return (
     <>
-      <AutoRefresh active={!TERMINAL.includes(job.state)} intervalMs={15_000} />
+      <AutoRefresh active={!TERMINAL_JOB_STATES.includes(job.state)} intervalMs={5_000} />
       <PageHeader
         eyebrow={
           <span className="flex items-center gap-1.5">
@@ -89,11 +97,17 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
             <AnchorButton href={dl("/evidence?format=pdf")} download>
               Evidence PDF
             </AnchorButton>
-            {!TERMINAL.includes(job.state) && <CancelJobButton jobId={job.id} />}
+            {user.role === "pm" && ["draft", "quoted", "running", "review"].includes(job.state) && <CancelJobButton jobId={job.id} />}
           </>
         }
       />
 
+      {job.no_reviewer_fallback_used && (
+        <Callout tone="warn" title="Reviewer fallback used" className="mb-4">
+          No qualified reviewer was available for some segments, so your organisation&apos;s no-reviewer policy was applied.
+          Affected segments are marked in the table and in the evidence pack.
+        </Callout>
+      )}
       {job.failure_reason && (
         <Callout tone="danger" title="Job failed" className="mb-4">
           {job.failure_reason}
@@ -125,7 +139,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
       <div className={`mb-4 grid grid-cols-2 gap-3 ${showMoney ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
         <Stat tone="ok" label="Auto-approved" value={num(job.auto_approved_count)} hint="Cleared threshold + band" />
         <Stat tone="accent" label="Senate" value={senateCount} hint="Decided by the AI senate" />
-        <Stat tone="violet" label="Human reviewed" value={num(job.review_count)} hint="Reviewer or your team" />
+        <Stat tone="violet" label="Routed to humans" value={num(job.review_count)} hint="Sent to a reviewer or your team" />
         <Stat label="AI reviewed" value={num(job.ai_reviewed_count)} hint="Revised by the AI editor" />
         {showMoney && (
           <Stat
@@ -136,7 +150,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
         )}
       </div>
 
-      <SegmentTable job={job} initial={firstPage} />
+      <SegmentTable key={`${job.state}-${decision}-${segState}`} job={job} initial={firstPage} initialDecision={decision} initialState={segState} />
     </>
   );
 }

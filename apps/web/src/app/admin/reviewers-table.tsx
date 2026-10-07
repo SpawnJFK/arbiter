@@ -11,23 +11,22 @@ import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { humanize, money, pct } from "@/lib/format";
+import { humanize, money } from "@/lib/format";
 import { contentTypeLabel } from "@/lib/langs";
-import type { ReviewerProfile } from "@/lib/types";
+import { REVIEWER_LEVELS, type ReviewerProfile } from "@/lib/types";
 
-const LEVELS = [0, 1, 2, 3, 4];
 
 export function ReviewersTable({ initial, status, statuses }: { initial: ReviewerProfile[]; status: string; statuses: string[] }) {
   const toast = useToast();
   const [rows, setRows] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
 
-  async function update(r: ReviewerProfile, body: { status: string; level?: number }) {
+  async function update(r: ReviewerProfile, body: { status: string; level?: string }) {
     setBusy(r.id);
     try {
       const updated = await api.setReviewerStatus(r.id, body);
       setRows((xs) => xs.map((x) => (x.id === r.id ? { ...x, ...updated } : x)));
-      toast.success(`${r.name ?? r.id}: ${humanize(updated.status)}`, body.level !== undefined ? `Level ${body.level}` : undefined);
+      toast.success(`${r.name ?? r.id}: ${humanize(updated.status)}`, body.level !== undefined ? `Level ${humanize(body.level)}` : undefined);
     } catch (e) {
       toast.error("Update failed", errorMessage(e));
     } finally {
@@ -90,7 +89,7 @@ export function ReviewersTable({ initial, status, statuses }: { initial: Reviewe
                   </div>
                 </Td>
                 <Td className="hidden text-[13px] text-muted lg:table-cell">{r.domains.map(contentTypeLabel).join(", ")}</Td>
-                <Td className="tabular text-right">{r.score === null ? "–" : pct(r.score)}</Td>
+                <Td className="tabular text-right">{r.score === null ? "–" : r.score.toFixed(0)}</Td>
                 <Td>
                   <StatusBadge status={r.status} />
                   {!r.tax_info_complete && r.status === "active" && <div className="mt-1 text-[11.5px] text-warn">No tax info</div>}
@@ -100,12 +99,12 @@ export function ReviewersTable({ initial, status, statuses }: { initial: Reviewe
                     aria-label={`Level for ${r.name ?? r.id}`}
                     value={String(r.level)}
                     disabled={busy === r.id}
-                    onChange={(e) => update(r, { status: r.status, level: Number(e.target.value) })}
-                    className="w-20"
+                    onChange={(e) => update(r, { status: r.status, level: e.target.value })}
+                    className="w-36"
                   >
-                    {LEVELS.map((l) => (
+                    {REVIEWER_LEVELS.map((l) => (
                       <option key={l} value={l}>
-                        L{l}
+                        {humanize(l)}
                       </option>
                     ))}
                   </Select>
@@ -114,7 +113,7 @@ export function ReviewersTable({ initial, status, statuses }: { initial: Reviewe
                 <Td className="text-right">
                   <div className="flex justify-end gap-1">
                     {r.status !== "active" && (
-                      <Button size="sm" variant="primary" disabled={busy === r.id} onClick={() => update(r, { status: "active", level: Number(r.level) || 1 })}>
+                      <Button size="sm" variant="primary" disabled={busy === r.id} onClick={() => update(r, { status: "active", level: r.level === "candidate" ? "reviewer" : String(r.level) })}>
                         {r.status === "suspended" ? "Reinstate" : "Approve"}
                       </Button>
                     )}
@@ -123,9 +122,9 @@ export function ReviewersTable({ initial, status, statuses }: { initial: Reviewe
                         Suspend
                       </Button>
                     )}
-                    {(r.status === "applied" || r.status === "testing") && (
-                      <Button size="sm" variant="ghost" disabled={busy === r.id} onClick={() => update(r, { status: "rejected" })}>
-                        Reject
+                    {r.status !== "banned" && (
+                      <Button size="sm" variant="ghost" disabled={busy === r.id} onClick={() => update(r, { status: "banned" })}>
+                        Ban
                       </Button>
                     )}
                   </div>

@@ -11,22 +11,29 @@ export const metadata: Metadata = { title: "Quality" };
 
 export default async function QualityPage() {
   const d = await withAuth((api) => api.qualityDashboard(), "/app/quality");
-  const engines = [...d.engines].sort((a, b) => (b.win_rate ?? 0) - (a.win_rate ?? 0));
+  const engines = d.engines;
+  const cs = d.control_samples;
   return (
     <>
       <PageHeader
         title="Quality"
         description="How much ships without a human, how much of that later turned out wrong, and where the thresholds sit."
       />
-      <div className="mb-4 grid gap-3 sm:grid-cols-3">
-        <Stat tone="ok" label="Auto-approval rate" value={pct(d.auto_rate, 1)} hint="Segments shipped on QE + senate alone" />
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat
-          tone={d.escaped_rate > 0.005 ? "danger" : "accent"}
+          tone="ok"
+          label="Auto-approval rate"
+          value={pct(d.auto_rate, 1)}
+          hint={d.segments !== undefined ? `${num(d.auto_approved ?? 0)} of ${num(d.segments)} segments, last ${d.window_days ?? 30} days` : "Segments shipped on QE + senate alone"}
+        />
+        <Stat
+          tone={d.escaped_rate !== null && d.escaped_rate > 0.005 ? "danger" : "accent"}
           label="Escaped error rate"
           value={pct(d.escaped_rate, 2)}
-          hint="Auto-approved segments later found wrong"
+          hint={d.escaped_rate === null ? "No auto-approved segments yet" : `${num(d.escaped_errors ?? 0)} accepted escaped errors`}
         />
-        <Stat label="Control samples" value={num(d.control_samples)} hint="Auto-approved segments reviewed blind by humans" />
+        <Stat label="Control samples" value={num(cs.total)} hint={`${num(cs.pending)} pending · ${num(cs.ok)} ok · ${num(cs.escaped)} escaped`} />
+        <Stat label="Thresholds" value={num(d.thresholds.length)} hint={`${d.thresholds.filter((t) => t.auto_approval_suspended).length} with auto-approval suspended`} />
       </div>
 
       <Card className="mb-4">
@@ -80,37 +87,34 @@ export default async function QualityPage() {
       </Card>
 
       <Card>
-        <CardHeader title="Engine scoreboard" description="Which engine produced the candidate the senate picked, across your jobs." />
+        <CardHeader title="Engine scoreboard" description="Measured quality per engine for the language pairs you use." />
         {engines.length === 0 ? (
-          <EmptyState title="No engine data yet" />
+          <EmptyState title="No engine data yet" description="Rows appear once jobs in a language pair have been scored." />
         ) : (
           <Table>
             <THead>
               <tr>
                 <Th>Engine</Th>
+                <Th>Pair</Th>
+                <Th className="hidden md:table-cell">Domain</Th>
                 <Th className="text-right">Segments</Th>
-                <Th className="text-right">Avg QE</Th>
-                <Th className="text-right">Auto rate</Th>
-                <Th className="text-right">Escaped</Th>
-                <Th className="w-56">Selected by senate</Th>
+                <Th className="text-right">Mean QE</Th>
+                <Th className="text-right">Edit distance</Th>
+                <Th className="text-right">Term adherence</Th>
               </tr>
             </THead>
             <TBody>
               {engines.map((e) => (
-                <Tr key={e.engine}>
+                <Tr key={`${e.engine}-${e.source_lang}-${e.target_lang}-${e.domain ?? ""}`}>
                   <Td className="font-mono text-[13px]">{e.engine}</Td>
-                  <Td className="tabular text-right">{num(e.segments ?? null)}</Td>
-                  <Td className="tabular text-right">{score(e.avg_qe ?? null)}</Td>
-                  <Td className="tabular text-right">{pct(e.auto_rate ?? null)}</Td>
-                  <Td className="tabular text-right">{pct(e.escaped_rate ?? null, 2)}</Td>
-                  <Td>
-                    <div className="flex items-center gap-2">
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-subtle">
-                        <div className="h-full rounded-full bg-accent" style={{ width: `${Math.round((e.win_rate ?? 0) * 100)}%` }} />
-                      </div>
-                      <span className="tabular w-10 text-right text-[12.5px] text-muted">{pct(e.win_rate ?? null)}</span>
-                    </div>
+                  <Td className="font-mono text-[12.5px] text-muted">
+                    {e.source_lang} → {e.target_lang}
                   </Td>
+                  <Td className="hidden text-muted md:table-cell">{e.domain ? contentTypeLabel(e.domain) : "All"}</Td>
+                  <Td className="tabular text-right">{num(e.segments_measured)}</Td>
+                  <Td className="tabular text-right">{score(e.mean_qe)}</Td>
+                  <Td className="tabular text-right">{e.mean_edit_distance === null ? "–" : e.mean_edit_distance.toFixed(2)}</Td>
+                  <Td className="tabular text-right">{pct(e.term_adherence)}</Td>
                 </Tr>
               ))}
             </TBody>

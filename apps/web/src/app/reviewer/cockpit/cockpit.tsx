@@ -77,7 +77,7 @@ export function Cockpit({ pairs }: { pairs: LangPair[] }) {
           return;
         }
         setTask(t);
-        setTarget(t.target_tagged);
+        setTarget(t.target_tagged ?? "");
         setDeadline(new Date(t.hold_expires_at).getTime());
         startedAt.current = performance.now();
         setStatus("ready");
@@ -106,7 +106,7 @@ export function Cockpit({ pairs }: { pairs: LangPair[] }) {
   }, [status, fetchNext]);
 
   const required = task ? tagsOf(task.source_tagged) : [];
-  const editValid = tagsValid(required, target) && target !== task?.target_tagged;
+  const editValid = tagsValid(required, target) && target !== (task?.target_tagged ?? "");
 
   const submit = useCallback(
     async (decision: TaskDecision) => {
@@ -123,7 +123,7 @@ export function Cockpit({ pairs }: { pairs: LangPair[] }) {
           target_tagged: decision === "edit" ? target : undefined,
           errors:
             decision === "edit" && errors.length > 0
-              ? errors.map(({ dimension, severity, span, explanation }) => ({ dimension, severity, span, explanation }))
+              ? errors.map(({ dimension, severity, excerpt, explanation }) => ({ dimension, severity, span: excerpt, explanation }))
               : undefined,
           comment: comment.trim() || undefined,
           time_ms: Math.round(performance.now() - startedAt.current),
@@ -153,7 +153,7 @@ export function Cockpit({ pairs }: { pairs: LangPair[] }) {
   const cancel = useCallback(() => {
     if (!task) return;
     setMode("view");
-    setTarget(task.target_tagged);
+    setTarget(task.target_tagged ?? "");
     setErrors([]);
     setComment("");
   }, [task]);
@@ -310,7 +310,7 @@ export function Cockpit({ pairs }: { pairs: LangPair[] }) {
                   {mode === "edit" ? "Machine translation (select text to mark errors)" : "Target"}
                 </div>
                 {mode === "edit" ? (
-                  <AnnotatableText ref={mt} value={task.target_tagged} className="rounded-md bg-subtle/60 px-3 py-2 text-[16px] leading-relaxed" />
+                  <AnnotatableText ref={mt} value={task.target_tagged ?? ""} className="rounded-md bg-subtle/60 px-3 py-2 text-[16px] leading-relaxed" />
                 ) : (
                   <TaggedText value={task.target_tagged} className="block rounded-md bg-accent-subtle/40 px-3 py-2 text-[16px] leading-relaxed" />
                 )}
@@ -335,7 +335,7 @@ export function Cockpit({ pairs }: { pairs: LangPair[] }) {
                       value={errors}
                       onChange={setErrors}
                       getSpan={() => mt.current?.selectionSpan() ?? null}
-                      excerptFor={(span) => task.target_tagged.slice(span[0], span[1])}
+                      excerptFor={(span) => (task.target_tagged ?? "").slice(span[0], span[1])}
                     />
                   </div>
                 </section>
@@ -398,7 +398,7 @@ export function Cockpit({ pairs }: { pairs: LangPair[] }) {
                   <Button variant="ghost" onClick={cancel}>
                     Cancel <Kbd>Esc</Kbd>
                   </Button>
-                  {mode === "edit" && !editValid && target === task.target_tagged && (
+                  {mode === "edit" && !editValid && target === (task.target_tagged ?? "") && (
                     <span className="text-[12.5px] text-muted">Change the target to submit an edit, or cancel and accept.</span>
                   )}
                 </>

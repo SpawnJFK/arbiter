@@ -6,16 +6,24 @@ import { Card } from "@/components/ui/card";
 import { EmptyState, PageHeader } from "@/components/ui/misc";
 import { Time } from "@/components/ui/time";
 import { humanize } from "@/lib/format";
+import { reasonText } from "@/lib/reasons";
 import { getMe, withAuth } from "@/lib/server-api";
 
 export const metadata: Metadata = { title: "Exceptions" };
 
+// routes/jobs.py /exceptions kinds
 const KIND_TONE: Record<string, Tone> = {
-  no_reviewer: "warn",
   job_failed: "danger",
-  blocked_segment: "danger",
+  segment_blocked: "danger",
   term_question: "info",
-  threshold_suspended: "warn",
+  overdue: "warn",
+};
+
+const KIND_ACTION: Record<string, string> = {
+  job_failed: "Open the job",
+  segment_blocked: "Fix or approve the segment",
+  term_question: "Answer the question",
+  overdue: "Open the job",
 };
 
 export default async function ExceptionsPage() {
@@ -39,12 +47,18 @@ export default async function ExceptionsPage() {
                   <Badge tone={KIND_TONE[x.kind] ?? "neutral"}>{humanize(x.kind)}</Badge>
                 </div>
                 <div className="min-w-0 flex-1 text-[13.5px]">
-                  <p>{x.reason}</p>
-                  <p className="mt-1 font-mono text-[12px] text-faint">
-                    <Link href={`/app/jobs/${x.job_id}`} className="hover:text-accent hover:underline">
-                      {x.job_id}
+                  <p>{reasonText(x.reason)}</p>
+                  <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[12.5px]">
+                    <Link
+                      href={x.kind === "term_question" ? "/app/term-questions" : `/app/jobs/${x.job_id}${x.kind === "segment_blocked" ? "?decision=blocked" : ""}`}
+                      className="font-medium text-accent hover:underline"
+                    >
+                      {KIND_ACTION[x.kind] ?? "Open"}
                     </Link>
-                    {x.segment_id && <> · {x.segment_id}</>}
+                    <span className="font-mono text-[12px] text-faint">
+                      {x.job_id}
+                      {x.segment_id && <> · {x.segment_id}</>}
+                    </span>
                   </p>
                 </div>
                 <div className="shrink-0 text-[12.5px] text-muted">

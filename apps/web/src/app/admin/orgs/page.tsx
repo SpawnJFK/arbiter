@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState, PageHeader } from "@/components/ui/misc";
 import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
-import { humanize, money, num, TIER_LABEL } from "@/lib/format";
+import { humanize, num, TIER_LABEL } from "@/lib/format";
 import { withAuth } from "@/lib/server-api";
 
 export const metadata: Metadata = { title: "Organisations" };
@@ -12,7 +12,7 @@ export default async function OrgsPage() {
   const { items } = await withAuth((api) => api.adminOrgs({ limit: 200 }), "/admin/orgs");
   return (
     <>
-      <PageHeader title="Organisations" description="Customer organisations, their policies and usage this period." />
+      <PageHeader title="Organisations" description="Customer organisations, their policies, and words and jobs this calendar month." />
       <Card>
         {items.length === 0 ? (
           <EmptyState title="No organisations" />
@@ -26,7 +26,7 @@ export default async function OrgsPage() {
                 <Th className="hidden lg:table-cell">No-reviewer policy</Th>
                 <Th className="hidden lg:table-cell">Flags</Th>
                 <Th className="text-right">Words</Th>
-                <Th className="text-right">Amount</Th>
+                <Th className="text-right">Jobs</Th>
               </tr>
             </THead>
             <TBody>
@@ -47,7 +47,7 @@ export default async function OrgsPage() {
                     </div>
                   </Td>
                   <Td className="tabular text-right">{num(o.usage?.words ?? null)}</Td>
-                  <Td className="tabular text-right font-medium">{money(o.usage?.amount ?? null)}</Td>
+                  <Td className="tabular text-right font-medium">{num(o.usage?.jobs ?? null)}</Td>
                 </Tr>
               ))}
             </TBody>

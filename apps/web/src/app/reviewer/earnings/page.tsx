@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Badge, StatusBadge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, Stat } from "@/components/ui/card";
 import { EmptyState, PageHeader } from "@/components/ui/misc";
 import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
@@ -17,7 +17,7 @@ export default async function EarningsPage() {
       <PageHeader title="Earnings & payouts" description="Every decision you submit is a ledger entry. Disputed entries are adjusted, never deleted." />
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         <Stat tone="ok" label="Available" value={money(earnings.balance)} hint={`Paid out from ${money(me.payout_threshold)}`} />
-        <Stat tone="warn" label="Pending" value={money(earnings.pending)} hint="Not yet available for payout" />
+        <Stat tone="warn" label="In payout" value={money(earnings.pending)} hint="Accrued or sent, not yet settled" />
         <Stat label="Paid to date" value={money(earnings.paid)} />
       </div>
       <div className="grid gap-4 xl:grid-cols-[1.3fr_1fr]">
@@ -30,10 +30,8 @@ export default async function EarningsPage() {
               <THead>
                 <tr>
                   <Th>Date</Th>
-                  <Th>Description</Th>
-                  <Th className="hidden sm:table-cell">Kind</Th>
+                  <Th>Entry</Th>
                   <Th className="text-right">Amount</Th>
-                  <Th className="hidden md:table-cell">State</Th>
                 </tr>
               </THead>
               <TBody>
@@ -43,21 +41,19 @@ export default async function EarningsPage() {
                       <Time iso={e.created_at} />
                     </Td>
                     <Td>
-                      {e.description ?? humanize(e.kind)}
-                      {e.task_id && <div className="font-mono text-[11.5px] text-faint">{e.task_id}</div>}
-                    </Td>
-                    <Td className="hidden sm:table-cell">
                       <Badge>{humanize(e.kind)}</Badge>
+                      {e.ref && <div className="font-mono text-[11.5px] text-faint">{e.ref}</div>}
                     </Td>
-                    <Td className={`tabular whitespace-nowrap text-right font-medium ${Number(e.amount) < 0 ? "text-danger" : ""}`}>{money(e.amount)}</Td>
-                    <Td className="hidden md:table-cell">{e.state ? <StatusBadge status={e.state} /> : null}</Td>
+                    <Td className={`tabular whitespace-nowrap text-right font-medium ${Number(e.amount) < 0 ? "text-danger" : ""}`}>
+                      {money(e.amount, e.currency ?? earnings.currency ?? "EUR")}
+                    </Td>
                   </Tr>
                 ))}
               </TBody>
             </Table>
           )}
         </Card>
-        <PayoutForm complete={me.tax_info_complete} />
+        <PayoutForm complete={me.tax_info_complete} country={me.country ?? ""} />
       </div>
     </>
   );

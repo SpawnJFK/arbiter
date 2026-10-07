@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import { Icons } from "@/components/icons";
 import { TagEditor, TagStatus, tagsValid, type TagEditorHandle } from "@/components/tag-editor";
 import { TaggedText } from "@/components/tagged-text";
-import { Badge, DecisionBadge, QeBadge, SegmentStateBadge } from "@/components/ui/badge";
+import { Badge, DecisionBadge, decisionLabel, QeBadge, SegmentStateBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
@@ -14,24 +14,39 @@ import { useToast } from "@/components/ui/toast";
 import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { humanize } from "@/lib/format";
+import { reasonLabel, violationMessages } from "@/lib/reasons";
 import { tagsOf } from "@/lib/tags";
 import { DECISIONS, SEGMENT_STATES, type Decision, type Job, type ListResponse, type Segment, type SegmentState } from "@/lib/types";
 
 const PAGE = 50;
-const APPROVABLE: SegmentState[] = ["translated", "scored", "needs_review", "in_review", "ai_reviewed", "reviewed", "blocked"];
+// routes/jobs.py: only needs_review can be approved; pending/translated/in_review cannot be edited.
+const APPROVABLE: SegmentState[] = ["needs_review"];
+const NOT_EDITABLE: SegmentState[] = ["pending", "translated", "in_review"];
+/** Segments are 0-based in the API; people count from 1. */
+const num1 = (seq: number) => seq + 1;
 
-export function SegmentTable({ job, initial }: { job: Job; initial: ListResponse<Segment> }) {
+export function SegmentTable({
+  job,
+  initial,
+  initialDecision = "",
+  initialState = "",
+}: {
+  job: Job;
+  initial: ListResponse<Segment>;
+  initialDecision?: Decision | "";
+  initialState?: SegmentState | "";
+}) {
   const toast = useToast();
   const [rows, setRows] = useState(initial.items);
   const [nextOffset, setNextOffset] = useState(initial.next_offset);
   const [offset, setOffset] = useState(0);
-  const [state, setState] = useState<SegmentState | "">("");
-  const [decision, setDecision] = useState<Decision | "">("");
+  const [state, setState] = useState<SegmentState | "">(initialState);
+  const [decision, setDecision] = useState<Decision | "">(initialDecision);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [reporting, setReporting] = useState<Segment | null>(null);
   const delivered = job.state === "delivered";
-  const editable = !["delivered", "cancelled", "failed"].includes(job.state);
+  const editable = !["cancelled", "failed", "merging"].includes(job.state);
 
   const load = useCallback(
     async (q: { state: SegmentState | ""; decision: Decision | ""; offset: number }) => {
@@ -55,7 +70,7 @@ export function SegmentTable({ job, initial }: { job: Job; initial: ListResponse
   async function approve(seg: Segment) {
     try {
       replace(await api.approveSegment(job.id, seg.id));
-      toast.success(`Segment ${seg.seq} approved`);
+      toast.success(`Segment ${num1(seg.seq)} approved`);
     } catch (e) {
       toast.error("Approve failed", errorMessage(e));
     }
@@ -95,7 +110,7 @@ export function SegmentTable({ job, initial }: { job: Job; initial: ListResponse
           <option value="">All decisions</option>
           {DECISIONS.map((d) => (
             <option key={d} value={d}>
-              {humanize(d)}
+              {decisionLabel(d)}
             </option>
           ))}
         </Select>
@@ -135,7 +150,7 @@ export function SegmentTable({ job, initial }: { job: Job; initial: ListResponse
                   seg={s}
                   job={job}
                   editing={editing === s.id}
-                  canEdit={editable}
+                  canEdit={editable && !NOT_EDITABLE.includes(s.state)}
                   canReport={delivered || s.state === "delivered"}
                   onEdit={() => setEditing(s.id)}
                   onDone={(updated) => {
@@ -156,7 +171,7 @@ export function SegmentTable({ job, initial }: { job: Job; initial: ListResponse
               seg={s}
               job={job}
               editing={editing === s.id}
-              canEdit={editable}
+              canEdit={editable && !NOT_EDITABLE.includes(s.state)}
               canReport={delivered || s.state === "delivered"}
               onEdit={() => setEditing(s.id)}
               onDone={(updated) => {
@@ -214,7 +229,7 @@ function SegmentRow({
   return (
     <tr className={cn("align-top", editing ? "bg-accent-subtle/40" : "hover:bg-subtle/50")}>
       <td className="py-3 pl-4">
-        <span className="tabular text-[12.5px] text-faint">{seg.seq}</span>
+        <span className="tabular text-[12.5px] text-faint">{num1(seg.seq)}</span>
       </td>
       <td className="px-3 py-3 leading-relaxed">
         <TaggedText value={seg.source_tagged} />
@@ -225,16 +240,7 @@ function SegmentRow({
         ) : (
           <>
             <TaggedText value={seg.target_tagged} />
-            {seg.reasons.length > 0 && (
-              <ul className="mt-1.5 space-y-0.5 text-[12px] text-muted">
-                {seg.reasons.map((r, i) => (
-                  <li key={i} className="flex gap-1.5">
-                    <span className="mt-[7px] size-1 shrink-0 rounded-full bg-faint" aria-hidden="true" />
-                    {r}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <Reasons seg={seg} className="mt-1.5" />
           </>
         )}
       </td>
@@ -244,7 +250,7 @@ function SegmentRow({
       <td className="px-3 py-3">
         <div className="flex flex-col items-start gap-1">
           <DecisionBadge decision={seg.decision} />
-          <SegmentStateBadge state={seg.state} />
+          <SegmentStateBadge state={seg.state} decision={seg.decision} origin={seg.origin} />
           {seg.is_control_sample && (
             <Badge tone="info" title="Sampled blind for human control review">
               Control sample
@@ -256,17 +262,17 @@ function SegmentRow({
         {!editing && (
           <div className="flex justify-end gap-1">
             {canEdit && (
-              <Button size="sm" variant="ghost" onClick={onEdit} aria-label={`Edit segment ${seg.seq}`} title="Edit target">
+              <Button size="sm" variant="ghost" onClick={onEdit} aria-label={`Edit segment ${num1(seg.seq)}`} title="Edit target">
                 <Icons.edit className="size-3.5" />
               </Button>
             )}
             {canEdit && APPROVABLE.includes(seg.state) && (
-              <Button size="sm" variant="ghost" onClick={onApprove} aria-label={`Approve segment ${seg.seq}`} title="Approve">
+              <Button size="sm" variant="ghost" onClick={onApprove} aria-label={`Approve segment ${num1(seg.seq)}`} title="Approve">
                 <Icons.check className="size-3.5" />
               </Button>
             )}
             {canReport && (
-              <Button size="sm" variant="ghost" onClick={onReport} aria-label={`Report an error in segment ${seg.seq}`} title="Report an error">
+              <Button size="sm" variant="ghost" onClick={onReport} aria-label={`Report an error in segment ${num1(seg.seq)}`} title="Report an error">
                 <Icons.flag className="size-3.5" />
               </Button>
             )}
@@ -274,6 +280,22 @@ function SegmentRow({
         )}
       </td>
     </tr>
+  );
+}
+
+function Reasons({ seg, className }: { seg: Segment; className?: string }) {
+  const lines = [...seg.reasons.map(reasonLabel), ...violationMessages(seg.signals)];
+  const unique = lines.filter((l, i) => lines.indexOf(l) === i);
+  if (unique.length === 0) return null;
+  return (
+    <ul className={cn("space-y-0.5 text-[12px] text-muted", className)}>
+      {unique.map((r, i) => (
+        <li key={i} className="flex gap-1.5">
+          <span className="mt-[7px] size-1 shrink-0 rounded-full bg-faint" aria-hidden="true" />
+          {r}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -294,10 +316,10 @@ function SegmentCard({ seg, job, editing, canEdit, canReport, onEdit, onDone, on
   return (
     <li className={cn("space-y-2 px-4 py-3 text-[14px]", editing && "bg-accent-subtle/40")}>
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="tabular mr-1 text-[12.5px] text-faint">#{seg.seq}</span>
+        <span className="tabular mr-1 text-[12.5px] text-faint">#{num1(seg.seq)}</span>
         <QeBadge value={seg.qe_score} threshold={job.threshold} />
         <DecisionBadge decision={seg.decision} />
-        <SegmentStateBadge state={seg.state} />
+        <SegmentStateBadge state={seg.state} decision={seg.decision} origin={seg.origin} />
         {seg.is_control_sample && <Badge tone="info">Control</Badge>}
       </div>
       <TaggedText value={seg.source_tagged} className="block text-muted" />
@@ -306,13 +328,7 @@ function SegmentCard({ seg, job, editing, canEdit, canReport, onEdit, onDone, on
       ) : (
         <>
           <TaggedText value={seg.target_tagged} className="block" />
-          {seg.reasons.length > 0 && (
-            <ul className="space-y-0.5 text-[12px] text-muted">
-              {seg.reasons.map((r, i) => (
-                <li key={i}>· {r}</li>
-              ))}
-            </ul>
-          )}
+          <Reasons seg={seg} />
           <div className="flex gap-1.5">
             {canEdit && (
               <Button size="sm" onClick={onEdit}>
@@ -339,18 +355,18 @@ function SegmentCard({ seg, job, editing, canEdit, canReport, onEdit, onDone, on
 function InlineEditor({ seg, job, onDone }: { seg: Segment; job: Job; onDone: (s?: Segment) => void }) {
   const toast = useToast();
   const editor = useRef<TagEditorHandle>(null);
-  const [value, setValue] = useState(seg.target_tagged);
+  const [value, setValue] = useState(seg.target_tagged ?? "");
   const [busy, setBusy] = useState(false);
   const required = tagsOf(seg.source_tagged);
   const valid = tagsValid(required, value);
-  const changed = value !== seg.target_tagged;
+  const changed = value !== (seg.target_tagged ?? "");
 
   async function save() {
     if (!valid || !changed) return;
     setBusy(true);
     try {
       const updated = await api.editSegment(job.id, seg.id, value);
-      toast.success(`Segment ${seg.seq} saved`, "Your edit counts as a human review.");
+      toast.success(`Segment ${num1(seg.seq)} saved`, "Your edit counts as a human review.");
       onDone(updated);
     } catch (e) {
       toast.error("Save failed", errorMessage(e));
@@ -366,7 +382,7 @@ function InlineEditor({ seg, job, onDone }: { seg: Segment; job: Job; onDone: (s
         onChange={setValue}
         requiredTags={required}
         autoFocus
-        ariaLabel={`Target for segment ${seg.seq}`}
+        ariaLabel={`Target for segment ${num1(seg.seq)}`}
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
@@ -420,7 +436,7 @@ function ReportDialog({ job, seg, onClose }: { job: Job; seg: Segment | null; on
     <Dialog
       open={seg !== null}
       onClose={onClose}
-      title={seg ? `Report an error in segment ${seg.seq}` : "Report an error"}
+      title={seg ? `Report an error in segment ${num1(seg.seq)}` : "Report an error"}
       description="Tell us what is wrong with the delivered translation. Reported errors are tracked as escaped errors."
       footer={
         <>

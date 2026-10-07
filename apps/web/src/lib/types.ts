@@ -48,9 +48,11 @@ export interface Org {
   data_retention_days: number;
 }
 
-/** `GET /admin/orgs` returns "Org with usage"; the usage shape is not pinned in the contract. */
+/** `GET /admin/orgs` (routes/admin.py). */
 export interface OrgWithUsage extends Org {
-  usage?: Partial<Usage> | null;
+  kind?: string;
+  created_at?: ISODate | null;
+  usage?: { period: string; words: number; jobs: number } | null;
 }
 
 export type OrgPatch = Partial<
@@ -112,6 +114,8 @@ export interface UploadedFile {
   id: string;
   filename: string;
   format: string;
+  source_lang?: string;
+  size?: number;
   segment_count: number;
   word_count: number;
   warnings: string[];
@@ -156,18 +160,24 @@ export interface Project {
   jobs?: Job[];
 }
 
+/** Authority: services/api/arbiter/domain/states.py */
 export type JobState =
   | "draft"
-  | "queued"
-  | "preparing"
-  | "translating"
-  | "scoring"
+  | "quoted"
+  | "running"
   | "review"
+  | "ready"
   | "merging"
   | "delivered"
+  | "settled"
   | "failed"
   | "cancelled"
   | "disputed";
+
+/** States in which the translated file exists and can be downloaded. */
+export const OUTPUT_STATES: JobState[] = ["delivered", "settled", "disputed"];
+/** States in which nothing changes without a human (no polling needed). */
+export const TERMINAL_JOB_STATES: JobState[] = ["delivered", "settled", "failed", "cancelled", "disputed"];
 
 export interface Job {
   id: string;
@@ -194,43 +204,55 @@ export interface Job {
   due_at: ISODate | null;
   delivered_at: ISODate | null;
   created_at: ISODate;
+  est_auto_rate?: number | null;
+  no_reviewer_fallback_used?: boolean;
+  started_at?: ISODate | null;
 }
 
-export type SegmentState =
-  | "pending"
-  | "translated"
-  | "scored"
-  | "auto_approved"
-  | "in_review"
-  | "reviewed"
-  | "ai_reviewed"
-  | "approved"
-  | "delivered"
-  | "needs_review"
-  | "blocked";
+/**
+ * Authority: states.py. Blocked = needs_review with decision "blocked";
+ * AI reviewed = reviewed with origin "editor".
+ */
+export type SegmentState = "pending" | "translated" | "auto_approved" | "needs_review" | "in_review" | "reviewed" | "delivered";
 
 export const SEGMENT_STATES: SegmentState[] = [
   "pending",
   "translated",
-  "scored",
   "auto_approved",
+  "needs_review",
   "in_review",
   "reviewed",
-  "ai_reviewed",
-  "approved",
   "delivered",
-  "needs_review",
-  "blocked",
 ];
 
-export type Decision = "auto_approve" | "senate" | "review" | "blocked";
-export const DECISIONS: Decision[] = ["auto_approve", "senate", "review", "blocked"];
+export type Decision =
+  | "auto_approve"
+  | "senate"
+  | "review"
+  | "blocked"
+  | "ai_edit"
+  | "ai_reviewed"
+  | "ai_fallback"
+  | "unreviewed"
+  | "reviewed";
+export const DECISIONS: Decision[] = [
+  "auto_approve",
+  "senate",
+  "review",
+  "blocked",
+  "ai_edit",
+  "ai_reviewed",
+  "ai_fallback",
+  "unreviewed",
+  "reviewed",
+];
 
 export interface Segment {
   id: string;
   seq: number;
   source_tagged: string;
-  target_tagged: string;
+  /** null until the engine has produced a translation. */
+  target_tagged: string | null;
   state: SegmentState;
   origin: string | null;
   engine: string | null;
@@ -241,6 +263,9 @@ export interface Segment {
   signals: Record<string, unknown>;
   reviewer_id: string | null;
   is_control_sample: boolean;
+  context?: string | null;
+  max_length?: number | null;
+  updated_at?: ISODate | null;
 }
 
 export interface SegmentQuery extends ListParams {
@@ -249,7 +274,9 @@ export interface SegmentQuery extends ListParams {
 }
 
 export interface ExceptionItem {
+  /** job_failed | segment_blocked | term_question | overdue */
   kind: string;
+  term_question_id?: string;
   job_id: string;
   segment_id?: string | null;
   reason: string;
@@ -302,6 +329,7 @@ export interface ImportResult {
 export interface TmHit {
   entry_id: string;
   kind: string;
+  /** 0..101 (101 = context match, 100 = exact). */
   score: number;
   source_tagged: string;
   target_tagged: string;
@@ -314,6 +342,10 @@ export interface TermQuestion {
   target_lang: string;
   options: string[];
   status: string;
+  answer?: string | null;
+  job_id?: string | null;
+  segment_id?: string | null;
+  created_at?: ISODate;
 }
 
 // ---------- Quality ----------
@@ -327,22 +359,31 @@ export interface Threshold {
   safety_offset: number;
   auto_approval_suspended: boolean;
   suspended_reason: string | null;
+  last_calibrated_at?: ISODate | null;
 }
 
-/** Engine rows are not pinned in the contract; fields are read defensively. */
+/** Engine scoreboard row (routes/quality.py). */
 export interface EngineScore {
   engine: string;
-  segments?: number;
-  avg_qe?: number;
-  auto_rate?: number;
-  escaped_rate?: number;
-  win_rate?: number;
+  source_lang: string;
+  target_lang: string;
+  domain: string | null;
+  segments_measured: number;
+  mean_qe: number | null;
+  mean_edit_distance: number | null;
+  term_adherence: number | null;
+  updated_at?: ISODate | null;
 }
 
 export interface QualityDashboard {
-  auto_rate: number;
-  escaped_rate: number;
-  control_samples: number;
+  window_days?: number;
+  segments?: number;
+  auto_approved?: number;
+  /** null when there is nothing to divide by. */
+  auto_rate: number | null;
+  escaped_errors?: number;
+  escaped_rate: number | null;
+  control_samples: { total: number; pending: number; ok: number; escaped: number };
   thresholds: Threshold[];
   engines: EngineScore[];
 }
@@ -359,21 +400,29 @@ export interface ReviewerPair extends LangPair {
   score: number | null;
 }
 
+export const REVIEWER_LEVELS = ["candidate", "reviewer", "senior", "domain_expert"] as const;
+export type ReviewerLevel = (typeof REVIEWER_LEVELS)[number];
+export const REVIEWER_STATUSES = ["applied", "active", "suspended", "banned"] as const;
+
 export interface ReviewerProfile {
   id: string;
-  /** Not pinned in the contract; displayed as-is, admin sets it 1..4. */
-  level: number | string;
+  user_id?: string;
+  level: ReviewerLevel | string;
   status: string;
+  /** 0..100 */
   score: number | null;
   pairs: ReviewerPair[];
   domains: string[];
   balance: Money;
   payout_threshold: Money;
   tax_info_complete: boolean;
-  // Admin listings may include identity fields; optional.
   name?: string;
   email?: string;
   country?: string;
+  payout_method?: string | null;
+  decisions_total?: number;
+  fraud_flags?: unknown;
+  created_at?: ISODate | null;
 }
 
 export interface ReviewerApplyBody {
@@ -391,15 +440,17 @@ export interface ReviewerApplyResponse {
   profile: ReviewerProfile;
 }
 
-export type PayoutMethod = "bank_transfer" | "paypal" | "wise";
+export type PayoutMethod = "sepa" | "wise" | "paypal";
 
 export interface PayoutInfo {
   legal_name?: string;
   tax_id?: string;
   address?: string;
+  /** YYYY-MM-DD */
   date_of_birth?: string;
+  country?: string;
   payout_method?: PayoutMethod;
-  payout_details?: string;
+  payout_details?: Record<string, string>;
 }
 
 export interface ReviewerTest {
@@ -410,35 +461,47 @@ export interface ReviewerTest {
   domain: string;
   time_limit_min: number;
   status: "available" | "passed" | "failed" | "locked";
+  pass_mark?: number;
+  item_count?: number;
+  retest_after?: ISODate | null;
 }
 
 export interface TestAttempt {
   attempt_id: string;
+  test_id?: string;
+  kind?: string;
   items: { index: number; source: string; target: string }[];
   time_limit_min: number;
+  /** Server deadline; the timer uses it when present. */
+  expires_at?: ISODate;
 }
 
 export type Severity = "minor" | "major" | "critical";
 export const SEVERITIES: Severity[] = ["minor", "major", "critical"];
 
-/** Error dimensions follow MQM top-level categories (the contract does not enumerate them). */
+/** MQM-Core dimensions, exactly as services/api/arbiter/contracts.py MQM_DIMENSIONS. */
 export const ERROR_DIMENSIONS = [
   "accuracy",
-  "fluency",
+  "linguistic_conventions",
   "terminology",
   "style",
-  "locale_convention",
-  "markup",
+  "locale_conventions",
+  "audience_appropriateness",
+  "design_and_markup",
 ] as const;
 export type ErrorDimension = (typeof ERROR_DIMENSIONS)[number];
 
-/** Character offsets [start, end) into the submitted target string, tags included. */
+/** Character offsets [start, end) of a selection; used in the UI only. */
 export type Span = [number, number];
 
+/**
+ * The API identifies an error by the erroneous TEXT (`span: string`), matched by overlap
+ * (community/testing.py `_overlaps`, review.py `_spans_overlap`).
+ */
 export interface TestAnswer {
   index: number;
   target: string;
-  errors: { span: Span; category: ErrorDimension; severity: Severity }[];
+  errors: { span: string; category: ErrorDimension; severity: Severity }[];
 }
 
 export interface Task {
@@ -448,9 +511,11 @@ export interface Task {
   target_lang: string;
   domain: string;
   source_tagged: string;
-  target_tagged: string;
+  target_tagged: string | null;
   context_before: string[] | string | null;
   context_after: string[] | string | null;
+  word_count?: number;
+  pay_estimate_edit?: Money;
   terms: { source_term: string; target_term: string | null; kind: TermKind }[];
   qe_score: number | null;
   flagged_errors: FlaggedError[];
@@ -465,7 +530,9 @@ export type FlaggedError =
       dimension?: string;
       category?: string;
       severity?: string;
-      span?: Span | string;
+      span?: string;
+      role?: string;
+      fix?: string | null;
       explanation?: string;
       message?: string;
     };
@@ -475,7 +542,8 @@ export type TaskDecision = "accept" | "edit" | "escalate" | "skip";
 export interface TaskError {
   dimension: ErrorDimension;
   severity: Severity;
-  span: Span;
+  /** The erroneous text. */
+  span: string;
   explanation: string;
 }
 
@@ -491,17 +559,20 @@ export interface LedgerEntry {
   id: string;
   kind: string;
   amount: Money;
+  currency?: string;
+  /** Reference to what caused the entry (task id, payout id, ...). */
+  ref?: string | null;
   created_at: ISODate;
-  description?: string | null;
-  task_id?: string | null;
-  state?: string | null;
 }
 
 export interface Earnings {
+  currency?: string;
   balance: Money;
   pending: Money;
   paid: Money;
+  payout_threshold?: Money;
   entries: LedgerEntry[];
+  rejected_tasks?: { task_id: string; state: string; submitted_at: ISODate | null }[];
 }
 
 // ---------- Admin ----------
@@ -511,19 +582,36 @@ export interface Dispute {
   task_id: string;
   reviewer_id?: string;
   reason: string;
+  /** open | upheld | overturned | expired */
   status: string;
-  outcome?: "upheld" | "overturned" | null;
-  note?: string | null;
+  decided_by?: string | null;
+  decision_note?: string | null;
   due_at: ISODate;
-  created_at?: ISODate;
+  created_at?: ISODate | null;
+  decided_at?: ISODate | null;
 }
 
 export interface Payout {
   id: string;
   reviewer_id: string;
   amount: Money;
+  currency?: string;
+  /** accrued | blocked | sent | settled | failed */
   state: string;
+  method?: string | null;
+  provider_ref?: string | null;
+  failure_reason?: string | null;
   created_at: ISODate;
+  sent_at?: ISODate | null;
+}
+
+export interface PayoutRun {
+  created: number;
+  total: Money;
+  blocked?: number;
+  retried?: number;
+  provider?: string | null;
+  note?: string;
 }
 
 // ---------- Integrations and billing ----------
@@ -548,18 +636,22 @@ export interface Webhook {
 export interface Usage {
   period: string;
   words: number;
-  ai_units: number;
+  /** Decimal string. */
+  ai_units: string | number;
   review_decisions: number;
+  storage_gb?: string;
   amount: Money;
 }
 
 export interface Invoice {
   id: string;
-  period?: string;
   number?: string;
-  amount: Money;
+  period?: string;
+  subtotal?: Money;
+  tax?: Money;
+  total: Money;
   currency?: string;
   status: string;
-  issued_at?: ISODate;
-  pdf_url?: string | null;
+  issued_at?: ISODate | null;
+  created_at?: ISODate | null;
 }

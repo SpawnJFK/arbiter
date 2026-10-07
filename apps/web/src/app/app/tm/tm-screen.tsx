@@ -131,8 +131,8 @@ export function TmScreen() {
                 <TaggedText value={h.source_tagged} />
                 <TaggedText value={h.target_tagged} />
                 <div className="flex items-start gap-1.5 sm:flex-col sm:items-end">
-                  <Badge tone={h.score >= 0.995 ? "ok" : h.score >= 0.75 ? "info" : "neutral"} className="tabular">
-                    {Math.round(h.score * 100)}%
+                  <Badge tone={(h.score <= 1 ? h.score * 100 : h.score) >= 100 ? "ok" : (h.score <= 1 ? h.score * 100 : h.score) >= 75 ? "info" : "neutral"} className="tabular">
+                    {Math.round(h.score <= 1 ? h.score * 100 : Math.min(h.score, 100))}%
                   </Badge>
                   <span className="text-[12px] text-faint">{h.kind}</span>
                 </div>

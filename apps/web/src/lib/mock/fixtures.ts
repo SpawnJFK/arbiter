@@ -176,7 +176,7 @@ function profileFor(i: number, delivered: boolean): SegProfile {
     },
     {
       state: "needs_review",
-      decision: "review",
+      decision: "blocked",
       qe_score: 41,
       engine: "llm-primary",
       origin: "mt",
@@ -184,11 +184,11 @@ function profileFor(i: number, delivered: boolean): SegProfile {
       reasons: ["Number mismatch: source 0.5 mL/h, target 5 mL/h", "Safety-critical sentence (dosage)", "Senate escalated to human"],
     },
     {
-      state: "ai_reviewed",
-      decision: "senate",
+      state: "reviewed",
+      decision: "ai_reviewed",
       qe_score: 81.5,
       engine: "llm-primary",
-      origin: "mt",
+      origin: "editor",
       tm_match: null,
       reasons: ["QE 81.5 inside the senate band (72 to 88)", "Senate 3/3 approve after one revision", "Reviewer agent fixed term order"],
     },
@@ -213,7 +213,7 @@ function profileFor(i: number, delivered: boolean): SegProfile {
     },
     {
       state: "reviewed",
-      decision: "review",
+      decision: "reviewed",
       qe_score: 69,
       engine: "llm-challenger",
       origin: "human",
@@ -221,7 +221,7 @@ function profileFor(i: number, delivered: boolean): SegProfile {
       reasons: ["Regulatory boilerplate requires human sign-off", "Edited by reviewer (2 minor errors annotated)"],
     },
     {
-      state: "ai_reviewed",
+      state: "auto_approved",
       decision: "senate",
       qe_score: 84,
       engine: "llm-primary",
@@ -243,7 +243,7 @@ export function makeSegments(lang: "de" | "fr" | "other", count: number, deliver
     const target = lang === "fr" ? seed.fr : lang === "de" ? seed.de : seed.de;
     out.push({
       id: `seg_01J${lang.toUpperCase()}${String(i + 1).padStart(4, "0")}`,
-      seq: i + 1,
+      seq: i,
       source_tagged: seed.src,
       target_tagged: target,
       state: p.state,
@@ -346,7 +346,7 @@ export function makeProjectsAndJobs(now = Date.now()): { projects: Project[]; jo
       id: "job_01JIFUJA",
       project_id: "prj_01JIFU42",
       target_lang: "ja",
-      state: "translating",
+      state: "running",
       progress: 0.35,
       revenue: "734.40",
       cost: "312.10",
@@ -356,7 +356,7 @@ export function makeProjectsAndJobs(now = Date.now()): { projects: Project[]; jo
       id: "job_01JRELDE",
       project_id: "prj_01JREL10",
       target_lang: "de",
-      state: "scoring",
+      state: "running",
       tier: "full",
       content_type: "software_ui",
       filename: "release-notes-2026.10.md",
@@ -530,7 +530,7 @@ export const TERM_QUESTIONS: TermQuestion[] = [
 
 export const EXCEPTIONS: ExceptionItem[] = [
   {
-    kind: "no_reviewer",
+    kind: "overdue",
     job_id: "job_01JIFUJA",
     segment_id: null,
     reason: "No active en>ja reviewer with regulatory domain. Policy is wait: the job will not fall back to AI review.",
@@ -544,7 +544,7 @@ export const EXCEPTIONS: ExceptionItem[] = [
     created_at: iso(-5 * HOUR),
   },
   {
-    kind: "blocked_segment",
+    kind: "segment_blocked",
     job_id: "job_01JIFUDE",
     segment_id: "seg_01JDE0003",
     reason: "Dosage number mismatch (0.5 vs 5 mL/h) persisted after review; needs PM sign-off.",
@@ -558,7 +558,7 @@ export const EXCEPTIONS: ExceptionItem[] = [
     created_at: iso(-1 * HOUR),
   },
   {
-    kind: "threshold_suspended",
+    kind: "term_question",
     job_id: "job_01JRELDE",
     segment_id: null,
     reason: "Auto-approval suspended for software_ui > de after 2 escaped errors in control samples.",
@@ -599,21 +599,21 @@ function th(
 }
 
 export const ENGINES: EngineScore[] = [
-  { engine: "llm-primary", segments: 18420, avg_qe: 82.4, auto_rate: 0.71, escaped_rate: 0.0031, win_rate: 0.58 },
-  { engine: "llm-challenger", segments: 6110, avg_qe: 80.9, auto_rate: 0.66, escaped_rate: 0.0042, win_rate: 0.29 },
-  { engine: "nmt-fallback", segments: 2380, avg_qe: 74.2, auto_rate: 0.48, escaped_rate: 0.0067, win_rate: 0.13 },
+  { engine: "llm-primary", source_lang: "en", target_lang: "de", domain: "regulatory", segments_measured: 18420, mean_qe: 82.4, mean_edit_distance: 0.12, term_adherence: 0.97 },
+  { engine: "llm-challenger", source_lang: "en", target_lang: "de", domain: "regulatory", segments_measured: 6110, mean_qe: 80.9, mean_edit_distance: 0.12, term_adherence: 0.97 },
+  { engine: "nmt-fallback", source_lang: "en", target_lang: "de", domain: "regulatory", segments_measured: 2380, mean_qe: 74.2, mean_edit_distance: 0.12, term_adherence: 0.97 },
 ];
 
 // ---- Reviewer --------------------------------------------------------------
 
 export const REVIEWER_PROFILE: ReviewerProfile = {
   id: "rev_01JLEA",
-  level: 3,
+  level: "senior",
   status: "active",
-  score: 0.93,
+  score: 93,
   pairs: [
-    { source_lang: "en", target_lang: "de", status: "active", score: 0.94 },
-    { source_lang: "en", target_lang: "fr", status: "active", score: 0.91 },
+    { source_lang: "en", target_lang: "de", status: "active", score: 94 },
+    { source_lang: "en", target_lang: "fr", status: "active", score: 91 },
     { source_lang: "de", target_lang: "fr", status: "testing", score: null },
   ],
   domains: ["regulatory", "software_ui"],
@@ -685,12 +685,12 @@ export function makeTasks(now = Date.now()): Task[] {
 
 export function makeLedger(now = Date.now()): LedgerEntry[] {
   return [
-    { id: "led_01JA", kind: "task", amount: "0.42", created_at: iso(-20 * 60_000, now), description: "Edit · en>de · regulatory", task_id: "tsk_01J0A1", state: "pending" },
-    { id: "led_01JB", kind: "task", amount: "0.31", created_at: iso(-50 * 60_000, now), description: "Accept · en>de · regulatory", task_id: "tsk_01J0A2", state: "pending" },
-    { id: "led_01JC", kind: "control_bonus", amount: "1.50", created_at: iso(-1 * DAY, now), description: "Control sample agreement bonus", task_id: null, state: "available" },
-    { id: "led_01JD", kind: "task", amount: "0.55", created_at: iso(-1 * DAY - 3 * HOUR, now), description: "Edit · en>fr · regulatory", task_id: "tsk_01J0A3", state: "available" },
-    { id: "led_01JE", kind: "adjustment", amount: "-0.40", created_at: iso(-2 * DAY, now), description: "Dispute overturned: accepted segment with number error", task_id: "tsk_01J0A4", state: "available" },
-    { id: "led_01JF", kind: "payout", amount: "-120.00", created_at: iso(-14 * DAY, now), description: "Payout to bank account ending 4471", task_id: null, state: "paid" },
+    { id: "led_01JA", kind: "task", amount: "0.42", created_at: iso(-20 * 60_000, now), ref: "tsk_01J0A1" },
+    { id: "led_01JB", kind: "task", amount: "0.31", created_at: iso(-50 * 60_000, now), ref: "tsk_01J0A2" },
+    { id: "led_01JC", kind: "control_bonus", amount: "1.50", created_at: iso(-1 * DAY, now), ref: null },
+    { id: "led_01JD", kind: "task", amount: "0.55", created_at: iso(-1 * DAY - 3 * HOUR, now), ref: "tsk_01J0A3" },
+    { id: "led_01JE", kind: "adjustment", amount: "-0.40", created_at: iso(-2 * DAY, now), ref: "tsk_01J0A4" },
+    { id: "led_01JF", kind: "payout", amount: "-120.00", created_at: iso(-14 * DAY, now), ref: null },
   ];
 }
 
@@ -698,18 +698,18 @@ export function makeLedger(now = Date.now()): LedgerEntry[] {
 
 export const ADMIN_REVIEWERS: ReviewerProfile[] = [
   REVIEWER_PROFILE,
-  rp("rev_01JTOM", "Tomasz Wójcik", "PL", 2, "active", 0.88, [["en", "pl", "active"]], ["general"]),
-  rp("rev_01JAIKO", "Aiko Tanaka", "JP", 1, "testing", null, [["en", "ja", "testing"]], ["regulatory"]),
-  rp("rev_01JMATEO", "Mateo Ruiz", "ES", 0, "applied", null, [["en", "es", "testing"], ["en", "pt-BR", "testing"]], ["software_ui", "support"]),
-  rp("rev_01JHANNA", "Hanna Lind", "SE", 2, "suspended", 0.71, [["en", "sv", "suspended"]], ["general"]),
-  rp("rev_01JKWAME", "Kwame Mensah", "GH", 0, "applied", null, [["en", "fr", "testing"]], ["legal"]),
+  rp("rev_01JTOM", "Tomasz Wójcik", "PL", "reviewer", "active", 88, [["en", "pl", "active"]], ["general"]),
+  rp("rev_01JAIKO", "Aiko Tanaka", "JP", "candidate", "applied", null, [["en", "ja", "testing"]], ["regulatory"]),
+  rp("rev_01JMATEO", "Mateo Ruiz", "ES", "candidate", "applied", null, [["en", "es", "testing"], ["en", "pt-BR", "testing"]], ["software_ui", "support"]),
+  rp("rev_01JHANNA", "Hanna Lind", "SE", "reviewer", "suspended", 71, [["en", "sv", "suspended"]], ["general"]),
+  rp("rev_01JKWAME", "Kwame Mensah", "GH", "candidate", "applied", null, [["en", "fr", "testing"]], ["legal"]),
 ];
 
 function rp(
   id: string,
   name: string,
   country: string,
-  level: number,
+  level: string,
   status: string,
   score: number | null,
   pairs: [string, string, string][],
@@ -739,8 +739,7 @@ export function makeDisputes(now = Date.now()): Dispute[] {
       reviewer_id: "rev_01JLEA",
       reason: "The number in the source was ambiguous (0,5 in the PDF). I followed the source layout.",
       status: "open",
-      outcome: null,
-      note: null,
+      decision_note: null,
       due_at: iso(2 * DAY, now),
       created_at: iso(-1 * DAY, now),
     },
@@ -750,8 +749,7 @@ export function makeDisputes(now = Date.now()): Dispute[] {
       reviewer_id: "rev_01JTOM",
       reason: "Control sample marked my edit as wrong but the glossary entry was retired the day before.",
       status: "open",
-      outcome: null,
-      note: null,
+      decision_note: null,
       due_at: iso(4 * DAY, now),
       created_at: iso(-6 * HOUR, now),
     },
@@ -760,9 +758,8 @@ export function makeDisputes(now = Date.now()): Dispute[] {
       task_id: "tsk_01J0C2",
       reviewer_id: "rev_01JHANNA",
       reason: "Skipped task was counted as a timeout.",
-      status: "decided",
-      outcome: "upheld",
-      note: "Client-side timer bug confirmed; penalty reversed.",
+      status: "upheld",
+      decision_note: "Client-side timer bug confirmed; penalty reversed.",
       due_at: iso(-3 * DAY, now),
       created_at: iso(-7 * DAY, now),
     },
@@ -773,12 +770,12 @@ export function makePayouts(now = Date.now()): Payout[] {
   return [
     { id: "pay_01JA", reviewer_id: "rev_01JLEA", amount: "120.00", state: "paid", created_at: iso(-14 * DAY, now) },
     { id: "pay_01JB", reviewer_id: "rev_01JTOM", amount: "86.40", state: "paid", created_at: iso(-14 * DAY, now) },
-    { id: "pay_01JC", reviewer_id: "rev_01JHANNA", amount: "52.10", state: "held", created_at: iso(-14 * DAY, now) },
+    { id: "pay_01JC", reviewer_id: "rev_01JHANNA", amount: "52.10", state: "blocked", created_at: iso(-14 * DAY, now) },
   ];
 }
 
 export const ADMIN_ORGS: OrgWithUsage[] = [
-  { ...ORG, usage: { period: "2026-10", words: 17360, ai_units: 52080, review_decisions: 214, amount: "1726.20" } },
+  { ...ORG, usage: { period: "2026-10", words: 17360, jobs: 4 } },
   {
     id: "org_01JFJORD",
     name: "Fjordline Software",
@@ -790,7 +787,7 @@ export const ADMIN_ORGS: OrgWithUsage[] = [
     regulated: false,
     vertical: "software",
     data_retention_days: 90,
-    usage: { period: "2026-10", words: 42100, ai_units: 126300, review_decisions: 38, amount: "2104.00" },
+    usage: { period: "2026-10", words: 42100, jobs: 4 },
   },
   {
     id: "org_01JCAPRI",
@@ -803,7 +800,7 @@ export const ADMIN_ORGS: OrgWithUsage[] = [
     regulated: true,
     vertical: "legal",
     data_retention_days: 30,
-    usage: { period: "2026-10", words: 5300, ai_units: 15900, review_decisions: 412, amount: "1007.00" },
+    usage: { period: "2026-10", words: 5300, jobs: 4 },
   },
 ];
 
@@ -818,7 +815,7 @@ export const WEBHOOKS: Webhook[] = [
 ];
 
 export const INVOICES: Invoice[] = [
-  { id: "inv_01J09", number: "ARB-2026-0918", period: "2026-09", amount: "2210.40", currency: "EUR", status: "paid", issued_at: "2026-10-01T00:00:00Z" },
-  { id: "inv_01J08", number: "ARB-2026-0812", period: "2026-08", amount: "1874.90", currency: "EUR", status: "paid", issued_at: "2026-09-01T00:00:00Z" },
-  { id: "inv_01J07", number: "ARB-2026-0704", period: "2026-07", amount: "960.00", currency: "EUR", status: "paid", issued_at: "2026-08-01T00:00:00Z" },
+  { id: "inv_01J09", number: "ARB-2026-0918", period: "2026-09", total: "2210.40", currency: "EUR", status: "paid", issued_at: "2026-10-01T00:00:00Z" },
+  { id: "inv_01J08", number: "ARB-2026-0812", period: "2026-08", total: "1874.90", currency: "EUR", status: "paid", issued_at: "2026-09-01T00:00:00Z" },
+  { id: "inv_01J07", number: "ARB-2026-0704", period: "2026-07", total: "960.00", currency: "EUR", status: "paid", issued_at: "2026-08-01T00:00:00Z" },
 ];

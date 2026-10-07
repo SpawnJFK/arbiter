@@ -106,3 +106,72 @@ Decisions: `auto_approve, senate, review, blocked`.
 | GET | /healthz | | `{ok: true}` (no /v1 prefix) |
 
 Webhook events: `job.delivered, job.failed, job.needs_attention, quote.expired`. Signature header `Arbiter-Signature: t=<unix>,v1=<hex hmac sha256 of "t.body">`.
+
+---
+
+# Agency OS (PM / CRM / workflows / dashboards / AI assistant) — v1 addendum
+
+The business layer an agency or a localization team runs on (the part Plunet-like systems
+cover), plus an AI assistant that configures it from a plain-language description.
+All endpoints: roles pm or api key unless stated; `client` role may read dashboards.
+Money = decimal strings. Lists = `{items, next_offset}`.
+
+## CRM
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET/POST | /crm/accounts | `{name, kind: client\|prospect, industry?, country?, vat_id?, currency?, default_tier?, workflow_template_id?, price_list_id?, notes?}` | `Account` |
+| GET/PATCH/DELETE | /crm/accounts/{id} | | `Account` with `contacts[]`, `deals[]`, `recent_activities[]`, `stats {projects, jobs_active, revenue_total, revenue_90d, margin_90d}` (DELETE archives: status archived) |
+| GET/POST | /crm/accounts/{id}/contacts | `{name, email?, phone?, role?, is_primary?}` | `Contact` |
+| PATCH/DELETE | /crm/contacts/{id} | | `Contact` / 204 |
+| GET/POST | /crm/deals | `?stage=&account_id=` ; `{account_id, title, value, currency?, stage?, expected_close?, quote_id?}` | `Deal` |
+| PATCH/DELETE | /crm/deals/{id} | `{stage?, value?, title?, expected_close?, lost_reason?}` | `Deal` |
+| GET/POST | /crm/activities | `?account_id=&deal_id=&open=true` ; `{account_id, deal_id?, kind: note\|call\|email\|meeting\|task, body, due_at?}` | `Activity` |
+| PATCH | /crm/activities/{id} | `{done?, body?, due_at?}` | `Activity` |
+
+`Account`: `{id, name, kind, status: active|archived, industry, country, vat_id, currency, default_tier, workflow_template_id, price_list_id, owner_user_id, notes, created_at}`.
+`Deal`: `{id, account_id, account_name, title, value, currency, stage: lead|qualified|proposal|negotiation|won|lost, expected_close, quote_id, lost_reason, owner_user_id, created_at, updated_at}`.
+`Activity`: `{id, account_id, deal_id, kind, body, due_at, done, user_id, created_at}`.
+
+## Price lists
+| GET/POST | /price-lists | `{name, currency, rates: [{source_lang?, target_lang?, tier, per_word}], tm_weights?: {context, exact, fuzzy_95, fuzzy_85, fuzzy_75, new, repetition}, minimum_charge?}` | `PriceList` |
+| GET/PATCH/DELETE | /price-lists/{id} | | `PriceList` |
+
+Quotes use the account's price list when `POST /quotes` carries `account_id`; rate lookup: exact pair+tier, then target-only, then tier-only, then org default.
+
+## Workflow templates
+| GET/POST | /workflows | `{name, description?, content_type?, tier, steps: Step[], is_default?}` | `Workflow` |
+| GET/PATCH/DELETE | /workflows/{id} | | `Workflow` |
+
+`Step`: `{kind, params?}` with kind ∈
+`tm` (TM pre-translation), `mt` (`params.engine?`), `translation_senate` (best-of-N), `qe` (`params.threshold?`),
+`senate` (band review), `ai_review` (senate + editor), `human_review` (`params.min_level?`),
+`second_review` (a second human, senior), `client_review` (job waits for the client's approval before delivery),
+`delivery`. Validation: must contain `mt` or `tm`; `qe` before any review step; `delivery` last; tier must be
+consistent (full ⇒ human_review; auto ⇒ no human_review). Regulated orgs: tier auto/ai_review rejected.
+A job freezes a snapshot of its workflow at creation (`job.workflow`).
+`POST /projects` accepts `account_id?` and `workflow_template_id?` (tier comes from the template when given).
+`POST /jobs/{id}/client-approve` — client/pm approves a job waiting in `client_review` → delivery.
+
+## Dashboards
+| GET/POST | /dashboards | `{name, widgets: Widget[]}` | `Dashboard` |
+| GET/PATCH/DELETE | /dashboards/{id} | | `Dashboard` |
+| GET | /dashboards/{id}/data | `?period=30d\|90d\|365d` | `{widgets: [{id, type, title, data}]}` |
+
+`Widget`: `{id, type: kpi|bar|line|table|pipeline, metric, title?, size?: s|m|l}`. Metrics:
+kpi — `revenue`, `margin`, `margin_pct`, `jobs_active`, `jobs_overdue`, `auto_rate`, `escaped_rate`, `open_deals_value`, `words_delivered`, `reviewer_cost`;
+bar/line — `revenue_by_month`, `jobs_by_state`, `revenue_by_account`, `words_by_pair`, `auto_rate_by_month`;
+pipeline — `deals_by_stage`; table — `overdue_jobs`, `top_accounts`, `open_activities`, `recent_deliveries`.
+`GET /dashboards/default` returns (and creates on first call) the org's default dashboard.
+
+## AI assistant
+| POST | /assistant/threads | `{title?}` | `Thread` |
+| GET | /assistant/threads | | list |
+| GET | /assistant/threads/{id} | | `Thread` with `messages[]` |
+| POST | /assistant/threads/{id}/messages | `{content}` | `{user_message, assistant_message}` |
+| POST | /assistant/messages/{id}/apply | `{actions?: int[]}` (indices; default all) | `{results: [{index, type, ok, id?, error?}]}` |
+
+`Message`: `{id, role: user|assistant, content, plan: Action[] | null, applied: int[] , created_at}`.
+`Action`: `{type, summary, data}` with type ∈ `create_workflow, create_price_list, create_account, create_contact,
+create_deal, create_activity, create_dashboard, update_org, create_glossary, add_terms, create_webhook`.
+The assistant never changes anything by itself: it proposes a plan; a human applies all or selected actions.
+It also answers questions about the org's data (jobs, revenue, deals) from a context summary it is given.

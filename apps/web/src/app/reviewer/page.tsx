@@ -6,7 +6,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { Card, CardHeader, Stat } from "@/components/ui/card";
 import { Callout, EmptyState, PageHeader } from "@/components/ui/misc";
 import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
-import { humanize, langName, money, pct } from "@/lib/format";
+import { humanize, langName, money } from "@/lib/format";
 import { contentTypeLabel } from "@/lib/langs";
 import { withAuth } from "@/lib/server-api";
 
@@ -44,8 +44,8 @@ export default async function ReviewerDashboard() {
         </Callout>
       )}
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat tone="accent" label="Level" value={String(me.level)} hint="Raised by the platform as your record grows" />
-        <Stat tone="ok" label="Quality score" value={me.score === null ? "–" : pct(me.score)} hint="From blind control samples" />
+        <Stat tone="accent" label="Level" value={humanize(String(me.level))} hint="Raised by the platform as your record grows" />
+        <Stat tone="ok" label="Quality score" value={me.score === null ? "–" : `${me.score.toFixed(0)} / 100`} hint="From blind control samples" />
         <Stat label="Active pairs" value={`${activePairs} of ${me.pairs.length}`} />
         <Stat
           tone={belowThreshold ? undefined : "ok"}
@@ -77,7 +77,7 @@ export default async function ReviewerDashboard() {
                   <Td>
                     <StatusBadge status={p.status} />
                   </Td>
-                  <Td className="tabular text-right">{p.score === null ? "–" : pct(p.score)}</Td>
+                  <Td className="tabular text-right">{p.score === null || p.status !== "active" ? "–" : p.score.toFixed(0)}</Td>
                 </Tr>
               ))}
             </TBody>

@@ -31,6 +31,32 @@ Screenshots (server must be running in mock mode on port 3100; uses the Playwrig
 already on the machine): `BASE_URL=http://localhost:3100 npm run screenshots` writes to
 `screenshots/`. `EXTRA=1` also captures every other screen, dark mode and mobile.
 
+## End-to-end test (real backend)
+
+`e2e/real-flow.mjs` drives the whole product in Chromium against a running API and worker:
+register a company, upload a `.md` and a `.docx` (generated with python-docx from the API
+venv), check the quote shows 4 tiers, order Auto (delivered, download, evidence PDF), order
+Full (the demo reviewer clears the queue in the cockpit with `A` and `E` + `Ctrl+Enter`, the job
+gets delivered), add glossary terms and see a blocked segment in Exceptions, check the admin
+screens, and let a new applicant take a qualification test. Screenshots go to
+`screenshots/real-*.png`.
+
+```bash
+# backend (from services/api), demo data seeded with `python -m arbiter.cli seed-demo`
+ARBITER_ENV=dev ARBITER_DATABASE_URL=postgresql+psycopg://arbiter:arbiter@localhost:5432/arbiter \
+  .venv/bin/uvicorn arbiter.api.app:app --port 8000 &
+ARBITER_ENV=dev ARBITER_DATABASE_URL=... .venv/bin/python -m arbiter.pipeline.worker &
+
+# web (from apps/web), NOT in mock mode
+NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build && npm start -- -p 3000 &
+npm run e2e        # BASE_URL, PYTHON, SHOTS_DIR, DEMO_PASSWORD can be overridden
+```
+
+The script exits non-zero on any failed step, uncaught page error or HTTP 5xx.
+
+`npm start` works with `output: "standalone"` but Next prints a warning; production (and the
+Dockerfile) runs `node .next/standalone/server.js`.
+
 ## Environment
 
 | Variable | Where | Purpose |

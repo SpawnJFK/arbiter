@@ -36,8 +36,8 @@ export function DisputesList({ initial }: { initial: Dispute[] }) {
     }
   }
 
-  const open = rows.filter((r) => !r.outcome);
-  const closed = rows.filter((r) => r.outcome);
+  const open = rows.filter((r) => r.status === "open");
+  const closed = rows.filter((r) => r.status !== "open");
 
   return (
     <div className="space-y-4">
@@ -82,10 +82,10 @@ export function DisputesList({ initial }: { initial: Dispute[] }) {
             {closed.map((d) => (
               <li key={d.id} className="px-4 py-2.5 text-[13.5px]">
                 <div className="flex flex-wrap items-center gap-2">
-                  <StatusBadge status={d.outcome ?? d.status} />
+                  <StatusBadge status={d.status} />
                   <span className="font-mono text-[12.5px] text-muted">{d.task_id}</span>
                 </div>
-                {d.note && <p className="mt-1 text-muted">{d.note}</p>}
+                {d.decision_note && <p className="mt-1 text-muted">{d.decision_note}</p>}
               </li>
             ))}
           </ul>

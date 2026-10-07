@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/ui/badge";
-import { AnchorButton } from "@/components/ui/button";
 import { Card, CardHeader, Stat } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/misc";
@@ -29,7 +28,7 @@ export function Billing({ usage, invoices, period }: { usage: Usage; invoices: I
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Words" value={num(usage.words)} />
-        <Stat label="AI units" value={num(usage.ai_units)} hint="Engine, QE and senate calls" />
+        <Stat label="AI units" value={num(Number(usage.ai_units))} hint="Engine, QE and senate calls" />
         <Stat label="Review decisions" value={num(usage.review_decisions)} hint="Human decisions billed" />
         <Stat tone="accent" label="Amount" value={money(usage.amount)} hint={`Period ${usage.period}`} />
       </div>
@@ -47,7 +46,7 @@ export function Billing({ usage, invoices, period }: { usage: Usage; invoices: I
                 <Th className="text-right">Amount</Th>
                 <Th>Status</Th>
                 <Th className="text-right">
-                  <span className="sr-only">Download</span>
+                  <span className="sr-only">Breakdown</span>
                 </Th>
               </tr>
             </THead>
@@ -59,15 +58,15 @@ export function Billing({ usage, invoices, period }: { usage: Usage; invoices: I
                   <Td className="hidden text-muted sm:table-cell">
                     <Time iso={i.issued_at} />
                   </Td>
-                  <Td className="tabular text-right font-medium">{money(i.amount, i.currency ?? "EUR")}</Td>
+                  <Td className="tabular text-right font-medium">{money(i.total, i.currency ?? "EUR")}</Td>
                   <Td>
                     <StatusBadge status={i.status} />
                   </Td>
                   <Td className="text-right">
-                    {i.pdf_url && (
-                      <AnchorButton size="sm" variant="ghost" href={i.pdf_url}>
-                        PDF
-                      </AnchorButton>
+                    {i.subtotal && i.tax && Number(i.tax) > 0 && (
+                      <span className="text-[12px] text-faint">
+                        {money(i.subtotal, i.currency ?? "EUR")} + tax {money(i.tax, i.currency ?? "EUR")}
+                      </span>
                     )}
                   </Td>
                 </Tr>

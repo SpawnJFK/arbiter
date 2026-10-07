@@ -11,7 +11,8 @@ import { Callout, EmptyState } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/toast";
 import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { pct } from "@/lib/format";
+/** Test scores are 0..100 (community/testing.py). */
+const fmtScore = (s: number) => `${(s <= 1 ? s * 100 : s).toFixed(0)} / 100`;
 import { tagsOf } from "@/lib/tags";
 import type { ReviewerTest, TestAttempt } from "@/lib/types";
 import { formatClock, useCountdown } from "@/lib/use-countdown";
@@ -37,7 +38,7 @@ export function TestRunner({ test }: { test: ReviewerTest }) {
       const a = await api.startTest(test.id);
       setAttempt(a);
       setItems(Object.fromEntries(a.items.map((it) => [it.index, { target: it.target, errors: [] }])));
-      setDeadline(Date.now() + a.time_limit_min * 60_000);
+      setDeadline(a.expires_at ? new Date(a.expires_at).getTime() : Date.now() + a.time_limit_min * 60_000);
     } catch (e) {
       toast.error("Could not start the test", errorMessage(e));
     } finally {
@@ -53,7 +54,7 @@ export function TestRunner({ test }: { test: ReviewerTest }) {
       const answers = attempt.items.map((it) => ({
         index: it.index,
         target: items[it.index]?.target ?? it.target,
-        errors: (items[it.index]?.errors ?? []).map((e) => ({ span: e.span, category: e.dimension, severity: e.severity })),
+        errors: (items[it.index]?.errors ?? []).map((e) => ({ span: e.excerpt, category: e.dimension, severity: e.severity })),
       }));
       setResult(await api.submitAttempt(attempt.attempt_id, answers));
       setDeadline(null);
@@ -79,8 +80,8 @@ export function TestRunner({ test }: { test: ReviewerTest }) {
           title={result.passed ? "Passed" : "Not passed this time"}
           description={
             result.passed
-              ? `Score ${pct(result.score)}. The pair is now active; tasks will start arriving in the cockpit.`
-              : `Score ${pct(result.score)}. The tests list shows when you can retake it.`
+              ? `Score ${fmtScore(result.score)}. Once every test for the pair is passed, the pair turns active and tasks arrive in the cockpit.`
+              : `Score ${fmtScore(result.score)}. The tests list shows when you can retake it.`
           }
           action={<ButtonLink href="/reviewer" variant="primary">Back to dashboard</ButtonLink>}
         />

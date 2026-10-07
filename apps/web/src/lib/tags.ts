@@ -6,7 +6,8 @@ export const TOKEN_RE = /⟦⟦|⟧⟧|⟦\/?\d+\/?⟧/g;
 export type Piece = { type: "text"; value: string } | { type: "tag"; value: string };
 
 /** Split tagged text into text pieces (with escapes resolved) and tag tokens. */
-export function tokenize(s: string): Piece[] {
+export function tokenize(input: string | null | undefined): Piece[] {
+  const s = input ?? "";
   const out: Piece[] = [];
   let last = 0;
   let buf = "";

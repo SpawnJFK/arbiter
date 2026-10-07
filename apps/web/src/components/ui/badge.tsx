@@ -45,13 +45,13 @@ export function Badge({
 
 const JOB_TONE: Record<JobState, Tone> = {
   draft: "neutral",
-  queued: "neutral",
-  preparing: "info",
-  translating: "info",
-  scoring: "info",
+  quoted: "neutral",
+  running: "info",
   review: "violet",
+  ready: "info",
   merging: "info",
   delivered: "ok",
+  settled: "ok",
   failed: "danger",
   cancelled: "neutral",
   disputed: "warn",
@@ -68,32 +68,51 @@ export function JobStateBadge({ state }: { state: JobState }) {
 const SEG_TONE: Record<SegmentState, Tone> = {
   pending: "neutral",
   translated: "neutral",
-  scored: "info",
   auto_approved: "ok",
+  needs_review: "warn",
   in_review: "violet",
   reviewed: "ok",
-  ai_reviewed: "accent",
-  approved: "ok",
   delivered: "ok",
-  needs_review: "warn",
-  blocked: "danger",
 };
 
-export function SegmentStateBadge({ state }: { state: SegmentState }) {
+/** Segment state; "reviewed" with origin "editor" is shown as AI reviewed (contract). Blocked shows via DecisionBadge. */
+export function SegmentStateBadge({
+  state,
+  origin,
+}: {
+  state: SegmentState;
+  /** Accepted for call-site symmetry; blocked is rendered by DecisionBadge. */
+  decision?: string | null;
+  origin?: string | null;
+}) {
+  if (state === "reviewed" && origin === "editor") return <Badge tone="accent">AI reviewed</Badge>;
   return <Badge tone={SEG_TONE[state] ?? "neutral"}>{humanize(state)}</Badge>;
 }
 
-const DECISION: Record<Decision, { tone: Tone; label: string }> = {
-  auto_approve: { tone: "ok", label: "Auto" },
-  senate: { tone: "accent", label: "Senate" },
-  review: { tone: "violet", label: "Human" },
-  blocked: { tone: "danger", label: "Blocked" },
+const DECISION: Record<Decision, { tone: Tone; label: string; title: string }> = {
+  auto_approve: { tone: "ok", label: "Auto", title: "Cleared the threshold, shipped without a human" },
+  senate: { tone: "accent", label: "Senate", title: "Decided by the AI senate" },
+  review: { tone: "violet", label: "Human", title: "Routed to a human reviewer" },
+  blocked: { tone: "danger", label: "Blocked", title: "A hard check failed; needs a domain expert or your team" },
+  ai_edit: { tone: "accent", label: "AI edit", title: "Queued for the AI editor" },
+  ai_reviewed: { tone: "accent", label: "AI reviewed", title: "Revised by the AI editor" },
+  ai_fallback: { tone: "warn", label: "AI fallback", title: "No reviewer was available; AI review per your policy (disclosed)" },
+  unreviewed: { tone: "warn", label: "Unreviewed", title: "Delivered without the planned review per your policy (disclosed)" },
+  reviewed: { tone: "ok", label: "Reviewed", title: "A human decided" },
 };
 
-export function DecisionBadge({ decision }: { decision: Decision | null }) {
+export function DecisionBadge({ decision }: { decision: Decision | string | null }) {
   if (!decision) return <span className="text-faint">–</span>;
-  const d = DECISION[decision] ?? { tone: "neutral" as Tone, label: humanize(decision) };
-  return <Badge tone={d.tone}>{d.label}</Badge>;
+  const d = DECISION[decision as Decision] ?? { tone: "neutral" as Tone, label: humanize(decision), title: decision };
+  return (
+    <Badge tone={d.tone} title={d.title}>
+      {d.label}
+    </Badge>
+  );
+}
+
+export function decisionLabel(d: string): string {
+  return DECISION[d as Decision]?.label ?? humanize(d);
 }
 
 /**
@@ -131,11 +150,11 @@ export function TermKindBadge({ kind }: { kind: TermKind }) {
 
 export function StatusBadge({ status }: { status: string }) {
   const s = status.toLowerCase();
-  const tone: Tone = ["active", "passed", "paid", "answered", "decided", "upheld", "available"].includes(s)
+  const tone: Tone = ["active", "passed", "paid", "answered", "decided", "upheld", "available", "settled", "sent"].includes(s)
     ? "ok"
-    : ["suspended", "failed", "rejected", "overturned"].includes(s)
+    : ["suspended", "failed", "rejected", "overturned", "banned", "blocked", "expired"].includes(s)
       ? "danger"
-      : ["testing", "pending", "open", "applied", "held"].includes(s)
+      : ["testing", "pending", "open", "applied", "held", "accrued", "demoted"].includes(s)
         ? "warn"
         : "neutral";
   return <Badge tone={tone}>{humanize(status)}</Badge>;

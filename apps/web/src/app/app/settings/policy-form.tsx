@@ -111,6 +111,9 @@ export function PolicyForm({ org, canEdit }: { org: Org; canEdit: boolean }) {
             description="Applies to Hybrid and Full tiers when a segment needs a human and no qualified reviewer can take it in time."
           />
           <CardBody className="space-y-3">
+            {v.regulated && (
+              <Callout tone="warn">Regulated organisations always wait for a qualified human reviewer.</Callout>
+            )}
             <Callout tone="info">
               We never silently substitute AI for a paid human review. Whatever you choose here is recorded per segment in the
               evidence pack, and any fallback is shown on the invoice.
@@ -129,6 +132,7 @@ export function PolicyForm({ org, canEdit }: { org: Org; canEdit: boolean }) {
                     name="no_reviewer_policy"
                     className="mt-0.5 accent-[var(--accent)]"
                     checked={v.no_reviewer_policy === p.value}
+                    disabled={Boolean(v.regulated) && p.value !== "wait"}
                     onChange={() => setV({ ...v, no_reviewer_policy: p.value })}
                   />
                   <span>
@@ -157,10 +161,11 @@ export function PolicyForm({ org, canEdit }: { org: Org; canEdit: boolean }) {
                   onChange={(e) => {
                     const regulated = e.target.checked;
                     const dt = regulated && (v.default_tier === "auto" || v.default_tier === "ai_review") ? "hybrid" : v.default_tier;
-                    setV({ ...v, regulated, default_tier: dt });
+                    // Regulated organisations must wait for a human (routes/auth.py PATCH /org).
+                    setV({ ...v, regulated, default_tier: dt, no_reviewer_policy: regulated ? "wait" : v.no_reviewer_policy });
                   }}
                   label="Regulated organisation"
-                  hint="Machine-only tiers (Auto, AI review) are never offered; every shipped segment gets a human decision."
+                  hint="Machine-only tiers (Auto, AI review) are never offered and jobs always wait for a human reviewer."
                 />
                 <Field label="Vertical">
                   {(id) => (

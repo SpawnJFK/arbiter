@@ -141,7 +141,7 @@ export function mockApply(body: { name: string; email: string; pairs: { source_l
   s.extraUsers[body.email.toLowerCase()] = { ...user, email: `reviewer+${body.email}` };
   const profile: ReviewerProfile = {
     ...s.reviewer,
-    level: 0,
+    level: "candidate",
     status: "applied",
     score: null,
     pairs: body.pairs.map((p) => ({ ...p, status: "testing", score: null })),
@@ -209,7 +209,7 @@ function xliffFor(job: Job, segs: Segment[]): string {
   const units = segs
     .map(
       (s) =>
-        `    <unit id="${s.id}">\n      <segment state="${s.state === "delivered" ? "final" : "translated"}">\n        <source>${esc(s.source_tagged)}</source>\n        <target>${esc(s.target_tagged)}</target>\n      </segment>\n    </unit>`,
+        `    <unit id="${s.id}">\n      <segment state="${s.state === "delivered" ? "final" : "translated"}">\n        <source>${esc(s.source_tagged)}</source>\n        <target>${esc(s.target_tagged ?? "")}</target>\n      </segment>\n    </unit>`,
     )
     .join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>\n<xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.1" srcLang="${job.source_lang}" trgLang="${job.target_lang}">\n  <file id="${job.file_id}" original="${esc(job.filename)}">\n${units}\n  </file>\n</xliff>\n`;
@@ -399,7 +399,7 @@ async function route(c: Ctx): Promise<Response | null> {
           target_lang: lang,
           tier,
           content_type: qt.content_type,
-          state: "queued",
+          state: "running",
           segment_count: f.segment_count,
           word_count: f.word_count,
           auto_approved_count: 0,
@@ -457,7 +457,7 @@ async function route(c: Ctx): Promise<Response | null> {
         return json(seg);
       }
       if (e === "approve" && m === "POST") {
-        seg.state = job.state === "delivered" ? "delivered" : "approved";
+        if (seg.state === "needs_review") seg.state = "reviewed";
         return json(seg);
       }
     }
@@ -468,7 +468,7 @@ async function route(c: Ctx): Promise<Response | null> {
     }
     if (cc === "download" && m === "GET") {
       if (job.state !== "delivered") return err(409, "not_delivered", "The translated file is available once the job is delivered.");
-      const text = segs.map((x) => x.target_tagged.replace(/⟦\/?\d+\/?⟧/g, "")).join("\n");
+      const text = segs.map((x) => (x.target_tagged ?? "").replace(/⟦\/?\d+\/?⟧/g, "")).join("\n");
       const base = job.filename.replace(/\.[^.]+$/, "");
       return file(text || "(empty)", "text/plain; charset=utf-8", `${base}.${job.target_lang}.txt`);
     }
@@ -622,7 +622,7 @@ async function route(c: Ctx): Promise<Response | null> {
 
   // --- quality
   if (a === "quality") {
-    if (b === "dashboard") return json({ auto_rate: 0.684, escaped_rate: 0.0034, control_samples: 1260, thresholds: F.THRESHOLDS, engines: F.ENGINES });
+    if (b === "dashboard") return json({ window_days: 30, segments: 1840, auto_approved: 1259, auto_rate: 0.684, escaped_errors: 4, escaped_rate: 0.0032, control_samples: { total: 26, pending: 3, ok: 21, escaped: 2 }, thresholds: F.THRESHOLDS, engines: F.ENGINES });
     if (b === "thresholds") return list(F.THRESHOLDS, c.q);
   }
 
@@ -667,15 +667,7 @@ async function route(c: Ctx): Promise<Response | null> {
       const decision = String(c.body.decision);
       const pay = decision === "skip" ? "0.00" : s.heldTask?.pay_estimate ?? "0.30";
       if (decision !== "skip") {
-        s.ledger.unshift({
-          id: F.newId("led"),
-          kind: "task",
-          amount: pay,
-          created_at: new Date().toISOString(),
-          description: `${decision[0].toUpperCase()}${decision.slice(1)} · ${s.heldTask?.source_lang ?? "en"}>${s.heldTask?.target_lang ?? "de"}`,
-          task_id: cc,
-          state: "pending",
-        });
+        s.ledger.unshift({ id: F.newId("led"), kind: "task_pay", amount: pay, created_at: new Date().toISOString(), ref: cc });
       }
       s.heldTask = null;
       return json({ ok: true, pay_amount: pay });
@@ -688,9 +680,11 @@ async function route(c: Ctx): Promise<Response | null> {
     if (b === "earnings" && m === "GET") {
       const sum = (f: (x: LedgerEntry) => boolean) => s.ledger.filter(f).reduce((n, x) => n + Number(x.amount), 0).toFixed(2);
       return json({
-        balance: sum((x) => x.state === "available"),
-        pending: sum((x) => x.state === "pending"),
+        currency: "EUR",
+        balance: sum((x) => x.kind !== "payout"),
+        pending: "0.00",
         paid: (-Number(sum((x) => x.kind === "payout"))).toFixed(2),
+        payout_threshold: s.reviewer.payout_threshold,
         entries: s.ledger,
       });
     }
@@ -708,16 +702,15 @@ async function route(c: Ctx): Promise<Response | null> {
       const r = s.adminReviewers.find((x) => x.id === cc);
       if (!r) return err(404, "not_found", "Reviewer not found.");
       r.status = String(c.body.status);
-      if (c.body.level !== undefined) r.level = Number(c.body.level);
+      if (c.body.level !== undefined) r.level = String(c.body.level);
       return json(r);
     }
     if (b === "disputes" && !cc && m === "GET") return list(s.disputes, c.q);
     if (b === "disputes" && cc && d === "decide" && m === "POST") {
       const dp = s.disputes.find((x) => x.id === cc);
       if (!dp) return err(404, "not_found", "Dispute not found.");
-      dp.status = "decided";
-      dp.outcome = c.body.outcome as Dispute["outcome"];
-      dp.note = String(c.body.note ?? "");
+      dp.status = String(c.body.outcome);
+      dp.decision_note = String(c.body.note ?? "");
       return json(dp);
     }
     if (b === "payouts" && !cc && m === "GET") return list(s.payouts, c.q);
@@ -750,7 +743,7 @@ async function route(c: Ctx): Promise<Response | null> {
   if (a === "usage" && m === "GET") {
     const period = c.q.get("period") ?? new Date().toISOString().slice(0, 7);
     const seed = Number(period.replace("-", "")) % 97;
-    return json({ period, words: 12000 + seed * 130, ai_units: 36000 + seed * 390, review_decisions: 150 + seed, amount: (980 + seed * 11.3).toFixed(2) });
+    return json({ period, words: 12000 + seed * 130, ai_units: String(36000 + seed * 390), review_decisions: 150 + seed, amount: (980 + seed * 11.3).toFixed(2) });
   }
   if (a === "invoices" && m === "GET") return list(F.INVOICES, c.q);
 

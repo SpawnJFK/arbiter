@@ -5,7 +5,7 @@ import { ReviewersTable } from "./reviewers-table";
 
 export const metadata: Metadata = { title: "Reviewers" };
 
-const STATUSES = ["applied", "testing", "active", "suspended", "rejected"];
+const STATUSES = ["applied", "active", "suspended", "banned"];
 
 export default async function AdminReviewersPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
   const { status } = await searchParams;
@@ -13,7 +13,7 @@ export default async function AdminReviewersPage({ searchParams }: { searchParam
   const { items } = await withAuth((api) => api.adminReviewers({ status: s || undefined, limit: 200 }), "/admin");
   return (
     <>
-      <PageHeader title="Reviewers" description="Approve applicants after their tests, set levels, and suspend reviewers whose control-sample agreement drops." />
+      <PageHeader title="Reviewers" description="Applicants become active when they pass the tests for a pair. Approve manually, set levels, suspend or ban." />
       <ReviewersTable key={s} initial={items} status={s} statuses={STATUSES} />
     </>
   );

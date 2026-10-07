@@ -27,6 +27,7 @@ import type {
   OrgPatch,
   OrgWithUsage,
   Payout,
+  PayoutRun,
   PayoutInfo,
   Project,
   QualityDashboard,
@@ -255,13 +256,13 @@ export function createApi(t: Transport) {
     // Admin
     adminReviewers: (q: { status?: string } & ListParams = {}) =>
       get<ListResponse<ReviewerProfile>>("/admin/reviewers", { ...q }),
-    setReviewerStatus: (id: string, body: { status: string; level?: number }) =>
+    setReviewerStatus: (id: string, body: { status: string; level?: string }) =>
       post<ReviewerProfile>(`/admin/reviewers/${enc(id)}/status`, body),
     adminDisputes: (p?: ListParams) => get<ListResponse<Dispute>>("/admin/disputes", page(p)),
     decideDispute: (id: string, body: { outcome: "upheld" | "overturned"; note: string }) =>
       post<Dispute>(`/admin/disputes/${enc(id)}/decide`, body),
     adminPayouts: (p?: ListParams) => get<ListResponse<Payout>>("/admin/payouts", page(p)),
-    runPayouts: () => post<{ created: number; total: string }>("/admin/payouts/run", undefined, true),
+    runPayouts: () => post<PayoutRun>("/admin/payouts/run", undefined, true),
     adminOrgs: (p?: ListParams) => get<ListResponse<OrgWithUsage>>("/admin/orgs", page(p)),
 
     // Integrations and billing

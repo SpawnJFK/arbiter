@@ -9,21 +9,20 @@ import { Time } from "@/components/ui/time";
 import { langName, num, TIER_LABEL } from "@/lib/format";
 import { contentTypeLabel } from "@/lib/langs";
 import { withAuth } from "@/lib/server-api";
-import type { JobState } from "@/lib/types";
+import { OUTPUT_STATES, TERMINAL_JOB_STATES } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Project" };
 
-const TERMINAL: JobState[] = ["delivered", "failed", "cancelled"];
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const project = await withAuth((api) => api.project(id), `/app/projects/${id}`);
   const jobs = project.jobs ?? [];
-  const running = jobs.some((j) => !TERMINAL.includes(j.state));
+  const running = jobs.some((j) => !TERMINAL_JOB_STATES.includes(j.state));
 
   return (
     <>
-      <AutoRefresh active={running} />
+      <AutoRefresh active={running} intervalMs={5_000} />
       <PageHeader
         eyebrow={
           <Link href="/app" className="hover:text-fg">
@@ -79,7 +78,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                   </Td>
                   <Td>
                     <div className="flex items-center gap-2">
-                      <Progress value={j.progress} tone={j.state === "failed" ? "danger" : j.state === "delivered" ? "ok" : "accent"} />
+                      <Progress value={j.progress} tone={j.state === "failed" ? "danger" : OUTPUT_STATES.includes(j.state) ? "ok" : "accent"} />
                       <span className="tabular w-9 text-right text-[12px] text-muted">{Math.round(j.progress * 100)}%</span>
                     </div>
                   </Td>

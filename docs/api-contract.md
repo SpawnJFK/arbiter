@@ -45,9 +45,9 @@ Roles: `admin` (platform operator), `pm` and `client` (customer org users), `rev
 `Quote`: `{id, file_id, source_lang, target_langs, content_type, word_count, currency, valid_until, analysis: {tm_context, tm_exact, tm_fuzzy, new, repetitions}, tiers: {auto|ai_review|hybrid|full: {price, est_auto_rate, eta_hours, available, blocked_reason?}}}`.
 `Project`: `{id, name, source_lang, target_langs, tier, content_type, due_at, created_at, jobs?: Job[]}`.
 `Job`: `{id, project_id, file_id, filename, source_lang, target_lang, tier, content_type, state, segment_count, word_count, auto_approved_count, review_count, ai_reviewed_count, progress (0..1), threshold, revenue, cost, margin, failure_reason, due_at, delivered_at, created_at}`.
-Job states: `draft, queued, preparing, translating, scoring, review, merging, delivered, failed, cancelled, disputed`.
+Job states (authority: `services/api/arbiter/domain/states.py`): `draft, quoted, running, review, ready, merging, delivered, settled, failed, cancelled, disputed`. `running` covers extraction, TM, MT, QA, QE and senate; `review` = waiting for humans; `ready` = every segment approved, about to merge.
 `Segment`: `{id, seq, source_tagged, target_tagged, state, origin, engine, tm_match, qe_score, decision, reasons[], signals{}, reviewer_id, is_control_sample}`.
-Segment states: `pending, translated, scored, auto_approved, in_review, reviewed, ai_reviewed, approved, delivered, needs_review, blocked`.
+Segment states (authority: states.py): `pending, translated, auto_approved, needs_review, in_review, reviewed, delivered`. Blocked segments are `needs_review` with decision `blocked`; AI-reviewed segments are `reviewed` with origin `editor`.
 Decisions: `auto_approve, senate, review, blocked`.
 
 ## Linguistic assets

@@ -1,0 +1,40 @@
+# TLS certificates are issued automatically (Let's Encrypt) for both hosts.
+# DNS: A/AAAA records for app.<DOMAIN> and api.<DOMAIN> must point at this server first.
+{
+	email {$ACME_EMAIL}
+}
+
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		-Server
+	}
+}
+
+app.{$DOMAIN} {
+	import security_headers
+	encode zstd gzip
+	reverse_proxy web:3000
+}
+
+api.{$DOMAIN} {
+	import security_headers
+	header Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+	encode zstd gzip
+	# Uploads: keep in line with the largest file the API accepts.
+	request_body {
+		max_size 200MB
+	}
+	reverse_proxy api:8000
+}
+
+# Bare domain goes to the app.
+{$DOMAIN} {
+	import security_headers
+	redir https://app.{$DOMAIN}{uri} permanent
+}

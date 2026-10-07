@@ -1,0 +1,25 @@
+# Local development: Postgres 16 + pgvector only. API, worker and web run on the host.
+#   docker compose -f deploy/docker-compose.dev.yml up -d
+# Databases: arbiter (dev) and arbiter_test (pytest), user/password arbiter/arbiter.
+name: arbiter-dev
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: arbiter
+      POSTGRES_PASSWORD: arbiter
+      POSTGRES_DB: arbiter
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arbiter -d arbiter"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata-dev:

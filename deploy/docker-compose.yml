@@ -1,0 +1,119 @@
+# Production stack for a single Hetzner host (EU data residency).
+#   cd deploy && cp ../.env.example .env  (fill it in)
+#   docker compose up -d --build
+# Only Caddy publishes ports. Postgres, api, worker and web are on the internal network.
+name: arbiter
+
+x-api-env: &api-env
+  ARBITER_ENV: ${ARBITER_ENV:-prod}
+  ARBITER_DATABASE_URL: postgresql+psycopg://arbiter:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/arbiter
+  ARBITER_STORAGE_DIR: /var/lib/arbiter/storage
+  ARBITER_PUBLIC_BASE_URL: https://api.${DOMAIN:?set DOMAIN}
+  ARBITER_JWT_SECRET: ${ARBITER_JWT_SECRET:?set ARBITER_JWT_SECRET}
+  ARBITER_JWT_TTL_MINUTES: ${ARBITER_JWT_TTL_MINUTES:-720}
+  ARBITER_ANTHROPIC_API_KEY: ${ARBITER_ANTHROPIC_API_KEY:-}
+  ARBITER_ANTHROPIC_MODEL: ${ARBITER_ANTHROPIC_MODEL:-claude-opus-5-5}
+  ARBITER_OPENAI_API_KEY: ${ARBITER_OPENAI_API_KEY:-}
+  ARBITER_OPENAI_MODEL: ${ARBITER_OPENAI_MODEL:-gpt-5}
+  ARBITER_DEEPL_API_KEY: ${ARBITER_DEEPL_API_KEY:-}
+  ARBITER_GOOGLE_API_KEY: ${ARBITER_GOOGLE_API_KEY:-}
+  ARBITER_EMBEDDING_PROVIDER: ${ARBITER_EMBEDDING_PROVIDER:-mock}
+  ARBITER_DEFAULT_MT_ENGINE: ${ARBITER_DEFAULT_MT_ENGINE:-mock-mt}
+  ARBITER_DEFAULT_JUDGE_ENGINE: ${ARBITER_DEFAULT_JUDGE_ENGINE:-mock-llm}
+  ARBITER_DEFAULT_THRESHOLD: ${ARBITER_DEFAULT_THRESHOLD:-78.0}
+  ARBITER_BAND_WIDTH: ${ARBITER_BAND_WIDTH:-8.0}
+  ARBITER_CONTROL_SAMPLE_RATE: ${ARBITER_CONTROL_SAMPLE_RATE:-0.02}
+  ARBITER_MAX_THRESHOLD_STEP_PER_WEEK: ${ARBITER_MAX_THRESHOLD_STEP_PER_WEEK:-3.0}
+  ARBITER_ESCAPED_ERROR_TARGET: ${ARBITER_ESCAPED_ERROR_TARGET:-0.005}
+  ARBITER_DRIFT_ALARM_RATIO: ${ARBITER_DRIFT_ALARM_RATIO:-0.30}
+  ARBITER_CURRENCY: ${ARBITER_CURRENCY:-EUR}
+  ARBITER_QUOTE_VALIDITY_DAYS: ${ARBITER_QUOTE_VALIDITY_DAYS:-14}
+  ARBITER_WEBHOOK_MAX_ATTEMPTS: ${ARBITER_WEBHOOK_MAX_ATTEMPTS:-10}
+  ARBITER_WEBHOOK_DISABLE_AFTER_CONSECUTIVE_FAILURES: ${ARBITER_WEBHOOK_DISABLE_AFTER_CONSECUTIVE_FAILURES:-500}
+  ARBITER_RATE_LIMIT_PER_MINUTE: ${ARBITER_RATE_LIMIT_PER_MINUTE:-6000}
+  ARBITER_PAGE_SIZE_MAX: ${ARBITER_PAGE_SIZE_MAX:-200}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: arbiter
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: arbiter
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arbiter -d arbiter"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    shm_size: 256mb
+
+  api:
+    build:
+      context: ../services/api
+    image: arbiter-api:${ARBITER_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+      ARBITER_MIGRATE_ON_START: ${ARBITER_MIGRATE_ON_START:-1}
+    volumes:
+      - storage:/var/lib/arbiter/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    image: arbiter-api:${ARBITER_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: ["python", "-m", "arbiter.pipeline.worker"]
+    environment:
+      <<: *api-env
+      ARBITER_MIGRATE_ON_START: "0"
+    volumes:
+      - storage:/var/lib/arbiter/storage
+    healthcheck:
+      disable: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../apps/web
+      dockerfile: ../../deploy/web.Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.${DOMAIN}}
+    image: arbiter-web:${ARBITER_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.${DOMAIN}}
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+
+volumes:
+  pgdata:
+  storage:
+  caddy_data:
+  caddy_config:

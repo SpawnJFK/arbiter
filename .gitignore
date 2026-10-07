@@ -24,3 +24,4 @@ apps/web/.env*.local
 !.vscode/extensions.json
 # local tooling
 .claude/settings.local.json
+*.tsbuildinfo

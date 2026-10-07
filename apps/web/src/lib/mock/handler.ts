@@ -25,6 +25,7 @@ import type {
   UploadedFile,
 } from "../types";
 import * as F from "./fixtures";
+import { agencyRoute, agencyStore, snapshotFor } from "./agency";
 
 interface Store {
   org: Org;
@@ -53,6 +54,47 @@ interface Store {
 function createStore(): Store {
   const now = Date.now();
   const { projects, jobs, segments } = F.makeProjectsAndJobs(now);
+  const ag = agencyStore();
+  const ifuWf = ag.workflows.find((w) => w.id === "wfl_01JHALDENIFU") ?? null;
+  for (const p of projects) p.account_id = p.id === "prj_01JSUPQ4" ? "acc_01JPIXELWAY" : "acc_01JNORDLAB";
+  for (const j of jobs) {
+    j.account_id = projects.find((p) => p.id === j.project_id)?.account_id ?? null;
+    j.workflow = snapshotFor(j.project_id === "prj_01JIFU42" ? ifuWf : null, j.tier);
+    j.senate_count = j.state === "delivered" || j.state === "review" ? 6 : 0;
+    j.awaiting_client_approval = false;
+  }
+  projects.unshift({
+    id: "prj_01JLEAFLET",
+    name: "Patient leaflet PL-7",
+    source_lang: "en",
+    target_langs: ["sv"],
+    tier: "full",
+    content_type: "regulatory",
+    due_at: F.iso(2 * 86_400_000, now),
+    created_at: F.iso(-3 * 86_400_000, now),
+    account_id: "acc_01JNORDLAB",
+    workflow_template_id: "wfl_01JHALDENIFU",
+  });
+  jobs.unshift({
+    ...jobs[1],
+    id: "job_01JLEAFSV",
+    project_id: "prj_01JLEAFLET",
+    filename: "PL-7_leaflet.docx",
+    target_lang: "sv",
+    state: "ready",
+    tier: "full",
+    progress: 1,
+    segment_count: 48,
+    auto_approved_count: 0,
+    review_count: 48,
+    delivered_at: null,
+    senate_count: 0,
+    account_id: "acc_01JNORDLAB",
+    workflow: { ...snapshotFor(ifuWf, "full"), client_review_requested_at: F.iso(-2 * 3600_000, now) },
+    awaiting_client_approval: true,
+    created_at: F.iso(-3 * 86_400_000, now),
+  });
+  segments.job_01JLEAFSV = F.makeSegments("other", 12).map((x) => ({ ...x, state: "reviewed", decision: "reviewed", origin: "human" }));
   return {
     org: { ...F.ORG },
     projects,
@@ -374,7 +416,11 @@ async function route(c: Ctx): Promise<Response | null> {
     if (!b && m === "POST") {
       const qt = s.quotes[String(c.body.quote_id)];
       if (!qt) return err(404, "not_found", "Quote not found or expired.");
-      const tier = c.body.tier as Tier;
+      const ag = agencyStore();
+      const acc = c.body.account_id ? ag.accounts.find((a) => a.id === c.body.account_id) : undefined;
+      const wfId = (c.body.workflow_template_id as string | undefined) ?? (c.body.tier ? undefined : acc?.workflow_template_id ?? undefined);
+      const wfT = wfId ? ag.workflows.find((w) => w.id === wfId) ?? null : null;
+      const tier = (wfT?.tier ?? (c.body.tier as Tier | undefined) ?? acc?.default_tier ?? s.org.default_tier) as Tier;
       if (!qt.tiers[tier]?.available) return err(422, "tier_blocked", qt.tiers[tier]?.blocked_reason ?? "Tier not available.");
       const f = s.files[qt.file_id];
       const project: Project = {
@@ -386,6 +432,8 @@ async function route(c: Ctx): Promise<Response | null> {
         content_type: qt.content_type,
         due_at: (c.body.due_at as string) ?? null,
         created_at: new Date().toISOString(),
+        account_id: acc?.id ?? null,
+        workflow_template_id: wfT?.id ?? null,
       };
       s.projects.unshift(project);
       const perLang = Number(qt.tiers[tier].price) / Math.max(1, qt.target_langs.length);
@@ -414,6 +462,10 @@ async function route(c: Ctx): Promise<Response | null> {
           due_at: project.due_at,
           delivered_at: null,
           created_at: project.created_at,
+          account_id: acc?.id ?? null,
+          workflow: snapshotFor(wfT, tier),
+          senate_count: 0,
+          awaiting_client_approval: false,
         };
         s.jobs.unshift(job);
         s.segments[job.id] = [];
@@ -461,6 +513,15 @@ async function route(c: Ctx): Promise<Response | null> {
         return json(seg);
       }
     }
+    if (cc === "client-approve" && m === "POST") {
+      if (!job.awaiting_client_approval) return err(409, "not_awaiting_client", "This job is not waiting for client approval.");
+      job.awaiting_client_approval = false;
+      job.client_approved_at = new Date().toISOString();
+      job.state = "delivered";
+      job.delivered_at = new Date().toISOString();
+      for (const x of segs) x.state = "delivered";
+      return json(hideMoney(job));
+    }
     if (cc === "cancel" && m === "POST") {
       if (["delivered", "cancelled", "failed"].includes(job.state)) return err(409, "invalid_state", `Job is ${job.state}.`);
       job.state = "cancelled";
@@ -491,7 +552,12 @@ async function route(c: Ctx): Promise<Response | null> {
     }
     if (cc === "report-error" && m === "POST") return json({ id: F.newId("esc") }, 201);
   }
-  if (a === "exceptions" && m === "GET") return list(F.EXCEPTIONS, c.q);
+  if (a === "exceptions" && m === "GET") {
+    const waiting = s.jobs
+      .filter((j) => j.awaiting_client_approval)
+      .map((j) => ({ kind: "client_review", job_id: j.id, segment_id: null, reason: "Waiting for the client's approval before delivery", created_at: j.workflow?.client_review_requested_at ?? j.created_at }));
+    return list([...waiting, ...F.EXCEPTIONS], c.q);
+  }
 
   // --- linguistic assets
   if (a === "glossaries") {
@@ -747,5 +813,5 @@ async function route(c: Ctx): Promise<Response | null> {
   }
   if (a === "invoices" && m === "GET") return list(F.INVOICES, c.q);
 
-  return null;
+  return agencyRoute({ method: m, parts: p, q: c.q, body: c.body, role: c.role, org: s.org, jobs: s.jobs, projects: s.projects });
 }

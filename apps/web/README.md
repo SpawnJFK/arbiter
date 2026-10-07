@@ -52,7 +52,14 @@ NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build && npm start -- -p 3000 
 npm run e2e        # BASE_URL, PYTHON, SHOTS_DIR, DEMO_PASSWORD can be overridden
 ```
 
-The script exits non-zero on any failed step, uncaught page error or HTTP 5xx.
+It then runs the Agency OS flow: the Serbian assistant prompt is applied in full, the accounts,
+pharma workflow and dashboard are checked, a deal is dragged across the board, and a project
+for "Beta Pharma" runs through two human reviews and client approval to delivery.
+`e2e/ensure_reviewer.py` creates the second (senior) demo reviewer that `second_review` needs,
+through the backend's own service functions (the seed has only one reviewer).
+
+The script exits non-zero on any failed step, uncaught page error or HTTP 5xx; on failure it
+saves `screenshots/failure-*.png`.
 
 `npm start` works with `output: "standalone"` but Next prints a warning; production (and the
 Dockerfile) runs `node .next/standalone/server.js`.
@@ -85,7 +92,8 @@ Dockerfile) runs `node .next/standalone/server.js`.
 
 ```
 src/app/(public)/        landing, /login, /register, /reviewers/apply
-src/app/app/             customer app (projects, wizard, jobs, assets, quality, settings)
+src/app/app/             customer app: dashboard (home), projects, wizard, jobs, assets, quality, settings,
+                         Agency OS: crm (accounts, deals board, tasks), price-lists, workflows, assistant
 src/app/reviewer/        dashboard, tests, cockpit, earnings, disputes
 src/app/admin/           reviewers, disputes, payouts, orgs
 src/app/api/             session + proxy route handlers
@@ -96,6 +104,18 @@ src/lib/types.ts         contract types
 src/lib/tags.ts          tagged-text model (⟦1⟧…⟦/1⟧, ⟦2/⟧, escaped ⟦⟦ ⟧⟧)
 src/lib/mock/            fixtures and in-memory mock API
 ```
+
+## Agency OS
+
+PM-only business layer (contract addendum "Agency OS"): `/app` is the dashboard (KPIs, SVG
+charts, deal pipeline, tables, 30/90/365-day periods, editable widget list from the metric
+catalogue; projects moved to `/app/projects`), `/app/crm` accounts with contacts, deals,
+activity timeline, projects and defaults, `/app/crm/deals` kanban (HTML5 drag and drop plus a
+stage select per card), `/app/crm/tasks`, `/app/price-lists`, `/app/workflows` (step editor
+with live validation mirroring `agency/workflows.py`, boxes-and-arrows pipeline) and
+`/app/assistant` (chat; the assistant answers with a plan that is applied all at once or per
+action; nothing changes before that). The project wizard takes an account and a workflow; the
+job page shows the workflow position, the senate count and the client-approval step.
 
 ## Tag-aware editing
 

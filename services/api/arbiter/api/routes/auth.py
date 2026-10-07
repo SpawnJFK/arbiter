@@ -9,6 +9,7 @@ from fastapi import APIRouter, Response
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 
+from arbiter.agency.org import update_org
 from arbiter.api import security
 from arbiter.api.deps import DB, PM, Auth, Customer, Unauthorized
 from arbiter.errors import Conflict, Invalid, NotFound
@@ -118,20 +119,7 @@ class OrgPatch(BaseModel):
 def patch_org(body: OrgPatch, p: PM) -> dict[str, Any]:
     org = p.org
     assert org is not None
-    data = body.model_dump(exclude_none=True)
-    # R-SEG-12: a regulated org cannot default to a tier without a human reviewer.
-    regulated = data.get("regulated", org.regulated)
-    tier = data.get("default_tier", org.default_tier)
-    if regulated and tier in ("auto", "ai_review"):
-        if "default_tier" in data:
-            raise Invalid("regulated organizations cannot use the auto or ai_review tier")
-        data["default_tier"] = "hybrid"
-    if regulated and data.get("no_reviewer_policy", org.no_reviewer_policy) != "wait":
-        if "no_reviewer_policy" in data:
-            raise Invalid("regulated organizations must wait for a human reviewer")
-        data["no_reviewer_policy"] = "wait"
-    for k, v in data.items():
-        setattr(org, k, v)
+    update_org(org, body.model_dump(exclude_none=True))  # R-SEG-12 rules live in agency.org
     return org_view(org)
 
 

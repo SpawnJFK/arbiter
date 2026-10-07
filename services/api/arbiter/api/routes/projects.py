@@ -8,6 +8,7 @@ body is a 409, never a silent second order.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from decimal import ROUND_DOWN, Decimal
 from typing import Annotated, Any, Literal
@@ -19,11 +20,23 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from arbiter.agency import crm
+from arbiter.agency import workflows as wfl
 from arbiter.api.deps import DB, PM, Customer, Paging, Principal, listing
 from arbiter.api.routes.jobs import jobs_view
 from arbiter.billing.quotes import tier_allowed
 from arbiter.errors import Conflict, Invalid, NotFound
-from arbiter.models import FileAsset, IdempotencyRecord, Job, Project, Quote, utcnow
+from arbiter.models import (
+    CrmAccount,
+    FileAsset,
+    IdempotencyRecord,
+    Job,
+    Organization,
+    Project,
+    Quote,
+    WorkflowTemplate,
+    utcnow,
+)
 from arbiter.pipeline import orchestrator
 
 router = APIRouter(tags=["projects"])
@@ -92,6 +105,24 @@ def idempotent_store(
     db.flush()
 
 
+def idempotent_post(
+    db: Session,
+    p: Principal,
+    scope: str,
+    header: str | None,
+    payload: Any,
+    make: Callable[[], dict[str, Any]],
+    status: int = 201,
+) -> Any:
+    """Create-once wrapper for POST endpoints: replay, or run `make` and store its response."""
+    replay = idempotent_replay(db, p, scope, header, payload)
+    if replay is not None:
+        return replay
+    out = make()
+    idempotent_store(db, p, scope, header, payload, status, out)
+    return JSONResponse(out, status_code=status)
+
+
 # --------------------------------------------------------------------------- views
 
 
@@ -109,6 +140,8 @@ def project_view(prj: Project, jobs: list[dict[str, Any]] | None = None) -> dict
         "tier": prj.tier,
         "content_type": prj.content_type,
         "due_at": _iso(prj.due_at),
+        "account_id": prj.account_id,
+        "workflow_template_id": prj.workflow_template_id,
         "created_at": _iso(prj.created_at),
     }
     if jobs is not None:
@@ -143,8 +176,45 @@ class QuoteNotOpen(Conflict):
 class ProjectIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     quote_id: str = Field(min_length=1, max_length=40)
-    tier: Literal["auto", "ai_review", "hybrid", "full"]
+    # Optional when a workflow template decides the tier (Agency OS).
+    tier: Literal["auto", "ai_review", "hybrid", "full"] | None = None
     due_at: datetime | None = None
+    account_id: str | None = Field(default=None, min_length=1, max_length=40)
+    workflow_template_id: str | None = Field(default=None, min_length=1, max_length=40)
+
+
+def _resolve_workflow(
+    db: Session, org: Organization, body: ProjectIn, acc: CrmAccount | None
+) -> tuple[WorkflowTemplate | None, str]:
+    """Which template and tier the jobs run with, most explicit first:
+    1. body.workflow_template_id (its tier wins over body.tier)
+    2. the account's workflow template, when body.tier is not given
+    3. the org's default workflow template, when body.tier is not given
+    4. no template: body.tier, else the account's default tier, else the org's default tier
+    """
+    if body.workflow_template_id:
+        wf = wfl.get_workflow(db, org.id, body.workflow_template_id)
+        return wf, wf.tier
+    if body.tier is None:
+        if acc is not None and acc.workflow_template_id:
+            wf = db.get(WorkflowTemplate, acc.workflow_template_id)
+            if wf is not None and wf.org_id == org.id and wf.archived_at is None:
+                return wf, wf.tier
+        default = (
+            db.execute(
+                select(WorkflowTemplate).where(
+                    WorkflowTemplate.org_id == org.id,
+                    WorkflowTemplate.is_default.is_(True),
+                    WorkflowTemplate.archived_at.is_(None),
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if default is not None:
+            return default, default.tier
+    tier = body.tier or (acc.default_tier if acc is not None else None) or org.default_tier
+    return None, tier
 
 
 def _split(total: Decimal, n: int) -> list[Decimal]:
@@ -166,6 +236,7 @@ def create_project(
 
     R-SEG-12: regulated organizations never get `auto` or `ai_review`; checked against the
     quote and against the org as it is now (it may have become regulated after quoting).
+    Every job freezes its workflow snapshot (template or tier default) here.
     """
     payload = body.model_dump(mode="json")
     replay = idempotent_replay(db, p, "projects", idempotency_key, payload)
@@ -180,11 +251,17 @@ def create_project(
         raise QuoteNotOpen(f"this quote is {quote.status}; request a new quote")
     if quote.valid_until < utcnow():
         raise QuoteExpired("this quote has expired; request a new quote")
-    if not tier_allowed(quote, body.tier) or (org.regulated and body.tier in ("auto", "ai_review")):
-        reason = (quote.tiers or {}).get(body.tier, {}).get("blocked_reason") or (
+    account_id = body.account_id or (quote.analysis or {}).get("account_id")
+    acc = crm.get_account(db, org.id, account_id) if account_id else None
+    if acc is not None and acc.status != "active":
+        raise Invalid("this account is archived")
+    template, tier = _resolve_workflow(db, org, body, acc)
+    if not tier_allowed(quote, tier) or (org.regulated and tier in ("auto", "ai_review")):
+        reason = (quote.tiers or {}).get(tier, {}).get("blocked_reason") or (
             "Regulated vertical: every segment needs a human reviewer (R-SEG-12)."
         )
-        raise TierNotAllowed(f"the {body.tier} tier is not available for this order: {reason}")
+        raise TierNotAllowed(f"the {tier} tier is not available for this order: {reason}")
+    workflow = wfl.snapshot(template, tier)
     if body.due_at is not None and body.due_at.tzinfo is None:
         raise Invalid("due_at must include a time zone (ISO 8601, e.g. 2026-10-09T12:00:00Z)")
     fa = db.get(FileAsset, quote.file_id) if quote.file_id else None
@@ -194,7 +271,7 @@ def create_project(
     langs = list(quote.target_langs or [])
     if not langs:
         raise Invalid("the quote has no target languages")
-    tier_entry = (quote.tiers or {})[body.tier]
+    tier_entry = (quote.tiers or {})[tier]
     price = Decimal(str(tier_entry["price"]))
     by_lang = (quote.analysis or {}).get("by_lang", {})
 
@@ -203,31 +280,31 @@ def create_project(
         name=body.name,
         source_lang=quote.source_lang,
         target_langs=langs,
-        tier=body.tier,
+        tier=tier,
         content_type=quote.content_type,
         due_at=body.due_at,
         quote_id=quote.id,
         created_by=p.user.id if p.user else None,
+        account_id=acc.id if acc is not None else None,
+        workflow_template_id=template.id if template is not None else None,
     )
     db.add(prj)
     db.flush()
     jobs: list[Job] = []
     for lang, revenue in zip(langs, _split(price, len(langs)), strict=True):
         info = by_lang.get(lang, {})
-        est = (
-            0.0
-            if body.tier == "full"
-            else float(info.get("est_auto_rate", tier_entry.get("est_auto_rate", 0)))
-        )
+        est = 0.0 if tier == "full" else float(info.get("est_auto_rate", tier_entry.get("est_auto_rate", 0)))
         job = Job(
             project_id=prj.id,
             org_id=org.id,
             file_id=fa.id,
             source_lang=quote.source_lang,
             target_lang=lang,
-            tier=body.tier,
+            tier=tier,
             content_type=quote.content_type,
             state="quoted",
+            account_id=acc.id if acc is not None else None,
+            workflow=dict(workflow),
             due_at=body.due_at,
             revenue=revenue,
             est_auto_rate=est,
@@ -246,14 +323,13 @@ def create_project(
 
 
 @router.get("/projects")
-def list_projects(p: Customer, db: DB, pg: Paging) -> dict[str, Any]:
+def list_projects(p: Customer, db: DB, pg: Paging, account_id: str | None = None) -> dict[str, Any]:
+    q = select(Project).where(Project.org_id == p.org_id)
+    if account_id:
+        q = q.where(Project.account_id == account_id)
     rows = list(
         db.execute(
-            select(Project)
-            .where(Project.org_id == p.org_id)
-            .order_by(Project.created_at.desc(), Project.id.desc())
-            .offset(pg.offset)
-            .limit(pg.limit + 1)
+            q.order_by(Project.created_at.desc(), Project.id.desc()).offset(pg.offset).limit(pg.limit + 1)
         ).scalars()
     )
     return listing([project_view(r) for r in rows], pg)

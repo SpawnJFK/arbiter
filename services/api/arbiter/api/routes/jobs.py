@@ -20,6 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from arbiter import storage
+from arbiter.agency import workflows as wfl
 from arbiter.api.deps import DB, PM, Customer, Paging, Principal, listing
 from arbiter.billing.ledger import money
 from arbiter.domain.states import transition
@@ -114,11 +115,25 @@ def _job_dict(job: Job, filename: str | None, done: int, hide_money: bool) -> di
         "margin": None if hide_money else money(revenue - cost),
         "no_reviewer_fallback_used": job.no_reviewer_fallback_used,
         "failure_reason": job.failure_reason,
+        "account_id": job.account_id,
+        "senate_count": job.senate_count or 0,
+        "workflow": job.workflow,
+        "client_approved_at": _iso(job.client_approved_at),
+        "awaiting_client_approval": awaiting_client_approval(job),
         "due_at": _iso(job.due_at),
         "started_at": _iso(job.started_at),
         "delivered_at": _iso(job.delivered_at),
         "created_at": _iso(job.created_at),
     }
+
+
+def awaiting_client_approval(job: Job) -> bool:
+    """client_review step: every segment is done and the job waits for the client's approval."""
+    return (
+        job.state == "review"
+        and orchestrator.awaiting_client(job)
+        and bool((job.workflow or {}).get("client_review_requested_at"))
+    )
 
 
 def jobs_view(db: Session, p: Principal, jobs: Sequence[Job]) -> list[dict[str, Any]]:
@@ -204,10 +219,13 @@ def list_jobs(
     pg: Paging,
     state: str | None = None,
     project_id: str | None = None,
+    account_id: str | None = None,
 ) -> dict[str, Any]:
     q = select(Job).where(Job.org_id == p.org_id)
     if state:
         q = q.where(Job.state == state)
+    if account_id:
+        q = q.where(Job.account_id == account_id)
     if project_id:
         q = q.where(Job.project_id == project_id)
     rows = list(
@@ -308,6 +326,26 @@ def cancel(job_id: str, p: PM, db: DB) -> dict[str, Any]:
     return job_view(db, p, job)
 
 
+class NotAwaitingClient(Conflict):
+    code = "not_awaiting_client"
+
+
+@router.post("/jobs/{job_id}/client-approve")
+def client_approve(job_id: str, p: Customer, db: DB) -> dict[str, Any]:
+    """client_review step: the client (or PM) approves a finished job; it goes ready -> delivery.
+    Approving again is a no-op; a job that is not waiting for approval is a 409."""
+    job = get_job(db, p, job_id, lock=True)
+    if job.client_approved_at is not None:
+        return job_view(db, p, job)
+    if not wfl.has(job.workflow, "client_review"):
+        raise NotAwaitingClient("this job's workflow has no client review step")
+    if not awaiting_client_approval(job):
+        raise NotAwaitingClient(f"the job is not waiting for client approval (state {job.state})")
+    orchestrator.client_approve(db, job, actor_of(p))
+    db.flush()
+    return job_view(db, p, job)
+
+
 class NotDelivered(Conflict):
     code = "not_delivered"
 
@@ -382,7 +420,7 @@ def get_evidence(
         pack = evidence.build(db, job)
         data = evidence.to_pdf(pack) if format == "pdf" else evidence.to_json(pack)
     media = "application/pdf" if format == "pdf" else "application/json"
-    headers = {"Content-Disposition": attachment(f"evidence-{job.id}.{format}")} if format == "pdf" else {}
+    headers = {"Content-Disposition": attachment(f"evidence-{job.id}.{format}")}
     return Response(data, media_type=media, headers=headers)
 
 
@@ -471,6 +509,17 @@ def exceptions(p: PM, db: DB, pg: Paging) -> dict[str, Any]:
         )
         .group_by(Job.id)
     ).all()
+    for job in db.execute(select(Job).where(Job.org_id == org_id, Job.state == "review")).scalars():
+        if awaiting_client_approval(job):
+            out.append(
+                {
+                    "kind": "client_review",
+                    "job_id": job.id,
+                    "segment_id": None,
+                    "reason": "waiting for the client's approval before delivery",
+                    "created_at": (job.workflow or {}).get("client_review_requested_at"),
+                }
+            )
     for job, n in overdue:
         out.append(
             {

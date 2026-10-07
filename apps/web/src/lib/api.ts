@@ -9,6 +9,24 @@
 // transports see the same fixture data.
 
 import type {
+  Account,
+  AccountDetail,
+  AccountInput,
+  Activity,
+  ApplyResult,
+  AssistantMessage,
+  AssistantThread,
+  Contact,
+  Dashboard,
+  DashboardData,
+  DashboardPeriod,
+  Deal,
+  DealStage,
+  PriceList,
+  PriceListInput,
+  Widget,
+  Workflow,
+  WorkflowInput,
   ApiErrorBody,
   ApiKey,
   ApiKeyCreated,
@@ -175,10 +193,17 @@ export function createApi(t: Transport) {
       form.set("source_lang", sourceLang);
       return t.request<UploadedFile>("POST", "/files", { form, idempotencyKey: newIdempotencyKey() });
     },
-    createQuote: (body: { file_id: string; target_langs: string[]; content_type: string }) =>
+    createQuote: (body: { file_id: string; target_langs: string[]; content_type: string; account_id?: string }) =>
       post<Quote>("/quotes", body, true),
     quote: (id: string) => get<Quote>(`/quotes/${enc(id)}`),
-    createProject: (body: { name: string; quote_id: string; tier: Tier; due_at?: string }) =>
+    createProject: (body: {
+      name: string;
+      quote_id: string;
+      tier?: Tier;
+      due_at?: string;
+      account_id?: string;
+      workflow_template_id?: string;
+    }) =>
       post<Project>("/projects", body, true),
     projects: (p?: ListParams) => get<ListResponse<Project>>("/projects", page(p)),
     project: (id: string) => get<Project>(`/projects/${enc(id)}`),
@@ -192,6 +217,7 @@ export function createApi(t: Transport) {
     approveSegment: (jobId: string, segId: string) =>
       post<Segment>(`/jobs/${enc(jobId)}/segments/${enc(segId)}/approve`),
     cancelJob: (jobId: string) => post<Job>(`/jobs/${enc(jobId)}/cancel`),
+    clientApprove: (jobId: string) => post<Job>(`/jobs/${enc(jobId)}/client-approve`),
     reportError: (jobId: string, body: { segment_id: string; note: string }) =>
       post<{ id: string }>(`/jobs/${enc(jobId)}/report-error`, body, true),
     jobDownloadUrl: (jobId: string) => t.downloadUrl(`/jobs/${enc(jobId)}/download`),
@@ -264,6 +290,70 @@ export function createApi(t: Transport) {
     adminPayouts: (p?: ListParams) => get<ListResponse<Payout>>("/admin/payouts", page(p)),
     runPayouts: () => post<PayoutRun>("/admin/payouts/run", undefined, true),
     adminOrgs: (p?: ListParams) => get<ListResponse<OrgWithUsage>>("/admin/orgs", page(p)),
+
+    // Agency OS: CRM
+    accounts: (q: { q?: string; kind?: string; status?: string } & ListParams = {}) =>
+      get<ListResponse<Account>>("/crm/accounts", { ...q }),
+    account: (id: string) => get<AccountDetail>(`/crm/accounts/${enc(id)}`),
+    createAccount: (body: AccountInput) => post<AccountDetail>("/crm/accounts", body, true),
+    updateAccount: (id: string, body: Partial<AccountInput> & { status?: "active" | "archived" }) =>
+      patch<AccountDetail>(`/crm/accounts/${enc(id)}`, body),
+    archiveAccount: (id: string) => t.request<AccountDetail>("DELETE", `/crm/accounts/${enc(id)}`),
+    contacts: (accountId: string) => get<ListResponse<Contact>>(`/crm/accounts/${enc(accountId)}/contacts`),
+    createContact: (accountId: string, body: Omit<Contact, "id" | "account_id" | "created_at">) =>
+      post<Contact>(`/crm/accounts/${enc(accountId)}/contacts`, body, true),
+    updateContact: (id: string, body: Partial<Omit<Contact, "id" | "account_id">>) =>
+      patch<Contact>(`/crm/contacts/${enc(id)}`, body),
+    deleteContact: (id: string) => del(`/crm/contacts/${enc(id)}`),
+    deals: (q: { stage?: DealStage; account_id?: string } & ListParams = {}) =>
+      get<ListResponse<Deal>>("/crm/deals", { ...q }),
+    createDeal: (body: { account_id: string; title: string; value: string; currency?: string; stage?: DealStage; expected_close?: string }) =>
+      post<Deal>("/crm/deals", body, true),
+    updateDeal: (id: string, body: { stage?: DealStage; value?: string; title?: string; expected_close?: string | null; lost_reason?: string }) =>
+      patch<Deal>(`/crm/deals/${enc(id)}`, body),
+    deleteDeal: (id: string) => t.request<Deal>("DELETE", `/crm/deals/${enc(id)}`),
+    activities: (q: { account_id?: string; deal_id?: string; open?: boolean } & ListParams = {}) =>
+      get<ListResponse<Activity>>("/crm/activities", { ...q }),
+    createActivity: (body: { account_id: string; deal_id?: string; kind: Activity["kind"]; body: string; due_at?: string }) =>
+      post<Activity>("/crm/activities", body, true),
+    updateActivity: (id: string, body: { done?: boolean; body?: string; due_at?: string | null }) =>
+      patch<Activity>(`/crm/activities/${enc(id)}`, body),
+
+    // Agency OS: price lists, workflows
+    priceLists: (p?: ListParams) => get<ListResponse<PriceList>>("/price-lists", page(p)),
+    priceList: (id: string) => get<PriceList>(`/price-lists/${enc(id)}`),
+    createPriceList: (body: PriceListInput) => post<PriceList>("/price-lists", body, true),
+    updatePriceList: (id: string, body: Partial<PriceListInput>) => patch<PriceList>(`/price-lists/${enc(id)}`, body),
+    archivePriceList: (id: string) => t.request<PriceList>("DELETE", `/price-lists/${enc(id)}`),
+    workflows: (p?: ListParams) => get<ListResponse<Workflow>>("/workflows", page(p)),
+    workflow: (id: string) => get<Workflow>(`/workflows/${enc(id)}`),
+    createWorkflow: (body: WorkflowInput) => post<Workflow>("/workflows", body, true),
+    updateWorkflow: (id: string, body: Partial<WorkflowInput>) => patch<Workflow>(`/workflows/${enc(id)}`, body),
+    archiveWorkflow: (id: string) => t.request<Workflow>("DELETE", `/workflows/${enc(id)}`),
+
+    // Agency OS: dashboards
+    defaultDashboard: () => get<Dashboard>("/dashboards/default"),
+    dashboards: () => get<ListResponse<Dashboard>>("/dashboards"),
+    dashboard: (id: string) => get<Dashboard>(`/dashboards/${enc(id)}`),
+    updateDashboard: (id: string, body: { name?: string; widgets?: Omit<Widget, "id">[] | Widget[] }) =>
+      patch<Dashboard>(`/dashboards/${enc(id)}`, body),
+    dashboardData: (id: string, period: DashboardPeriod) =>
+      get<DashboardData>(`/dashboards/${enc(id)}/data`, { period }),
+
+    // Agency OS: assistant
+    threads: () => get<ListResponse<AssistantThread>>("/assistant/threads"),
+    thread: (id: string) => get<AssistantThread>(`/assistant/threads/${enc(id)}`),
+    createThread: (title?: string) => post<AssistantThread>("/assistant/threads", { title }, true),
+    sendMessage: (threadId: string, content: string) =>
+      post<{ user_message: AssistantMessage; assistant_message: AssistantMessage }>(
+        `/assistant/threads/${enc(threadId)}/messages`,
+        { content },
+        true,
+      ),
+    applyPlan: (messageId: string, actions?: number[]) =>
+      post<{ results: ApplyResult[]; message?: AssistantMessage }>(`/assistant/messages/${enc(messageId)}/apply`, {
+        actions,
+      }),
 
     // Integrations and billing
     webhooks: () => get<ListResponse<Webhook>>("/webhooks"),

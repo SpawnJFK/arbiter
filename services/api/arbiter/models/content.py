@@ -30,6 +30,11 @@ class Project(Base):
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     quote_id: Mapped[str | None] = mapped_column(ForeignKey("quotes.id"), nullable=True)
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # Agency OS (migration 0002): the CRM account ordering and the workflow template used.
+    account_id: Mapped[str | None] = mapped_column(ForeignKey("crm_accounts.id"), nullable=True, index=True)
+    workflow_template_id: Mapped[str | None] = mapped_column(
+        ForeignKey("workflow_templates.id"), nullable=True
+    )
     created_at: Mapped[datetime] = created_at_column()
 
 
@@ -84,6 +89,12 @@ class Job(Base):
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     output_storage_key: Mapped[str | None] = mapped_column(String(400), nullable=True)
     evidence_storage_key: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    # Agency OS (migration 0002). workflow: snapshot frozen at project creation
+    # {template_id, name, tier, source: template|tier, steps: [{kind, params}]}.
+    account_id: Mapped[str | None] = mapped_column(ForeignKey("crm_accounts.id"), nullable=True, index=True)
+    workflow: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    client_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    senate_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = created_at_column()
 
 

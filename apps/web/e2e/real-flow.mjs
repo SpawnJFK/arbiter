@@ -22,6 +22,9 @@ const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const SHOTS = path.resolve(process.env.SHOTS_DIR ?? path.join(here, "..", "screenshots"));
 const PYTHON = process.env.PYTHON ?? path.resolve(here, "../../../services/api/.venv/bin/python");
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "demo-password-123";
+const SECOND_REVIEWER = process.env.SECOND_REVIEWER ?? "reviewer2@demo.test";
+const SERBIAN_PROMPT =
+  "Mi smo agencija Lingua Pro. Naši klijenti su Acme d.o.o., Beta Pharma i Gamma Soft. Workflow: MT, pa QE, pa revizija, pa druga revizija za farmaciju, i odobrenje klijenta. Cena 0.08 EUR po reči. Hoću dashboard sa prihodom, maržom i poslovima koji kasne.";
 const T = 90_000; // generous timeout for pipeline work
 mkdirSync(SHOTS, { recursive: true });
 
@@ -46,6 +49,10 @@ d.add_paragraph("Your changes are saved automatically.")
 d.save(sys.argv[1])`,
   docxPath,
 ]);
+const leafletPath = path.join(work, "patient-leaflet.md");
+writeFileSync(leafletPath, "# Patient leaflet\n\nTake one tablet twice a day with water.\n\nKeep out of the reach of children.\n");
+// workflows with second_review need a second, senior reviewer; the seed has only one reviewer.
+execFileSync(PYTHON, [path.join(here, "ensure_reviewer.py"), SECOND_REVIEWER, DEMO_PASSWORD], { stdio: ["ignore", "ignore", "inherit"] });
 const glossaryMdPath = path.join(work, "billing-faq.md");
 writeFileSync(glossaryMdPath, "# Billing\n\nYou can download every invoice from the billing page.\n");
 
@@ -68,9 +75,11 @@ function watch(page, who) {
     if (r.status() >= 500) errors.push(`[${who}] ${r.status()} ${r.request().method()} ${r.url()}`);
   });
 }
+const openPages = [];
 async function newUser(browser, who) {
   const ctx = await browser.newContext({ baseURL: BASE, viewport: { width: 1440, height: 900 }, acceptDownloads: true });
   const page = await ctx.newPage();
+  openPages.push([who, page]);
   watch(page, who);
   return { ctx, page };
 }
@@ -115,6 +124,33 @@ async function firstJobUrl(page) {
   return new URL(href, BASE).toString();
 }
 const stateBadge = (page, label) => page.locator("h1").getByText(label, { exact: true });
+
+/** Accept every task in the cockpit until the queue is empty. Returns how many were accepted. */
+async function clearQueue(page) {
+  await page.goto("/reviewer/cockpit");
+  let n = 0;
+  for (let i = 0; i < 80; i++) {
+    const source = page.getByRole("region", { name: "Source" });
+    const empty = page.getByText("Queue empty", { exact: true });
+    await Promise.race([source.waitFor({ timeout: 30_000 }), empty.waitFor({ timeout: 30_000 })]);
+    if (await empty.isVisible()) return n;
+    const text = await source.innerText();
+    await page.keyboard.press("a");
+    n++;
+    await page
+      .waitForFunction(
+        (prev) => {
+          const r = document.querySelector('section[aria-label="Source"]');
+          return !r || r.textContent !== prev || document.body.innerText.includes("Queue empty");
+        },
+        text,
+        { timeout: 20_000 },
+      )
+      .catch(() => null);
+    await page.waitForTimeout(250);
+  }
+  throw new Error("queue did not empty");
+}
 
 // ---------------------------------------------------------------- run
 const browser = await chromium.launch();
@@ -299,6 +335,97 @@ try {
   await shot(nr.page, "test-result", false);
   step(`applicant took a test: ${await nr.page.getByText(/^(Passed|Not passed this time)$/).innerText()}`);
 
+  // 10. Agency OS: the assistant sets up the workspace from a Serbian description
+  await page.goto("/app/assistant");
+  await page.waitForLoadState("networkidle");
+  await page.getByLabel("Message the assistant").fill(SERBIAN_PROMPT);
+  await page.keyboard.press("Enter");
+  const planCard = page.getByRole("group", { name: "Proposed plan" });
+  await planCard.waitFor({ timeout: 60_000 });
+  const actionCount = await planCard.getByRole("checkbox").count();
+  if (actionCount < 5) throw new Error(`plan has only ${actionCount} actions`);
+  await planCard.getByRole("button", { name: "Apply all" }).click();
+  await planCard.getByText("All applied").waitFor({ timeout: 30_000 });
+  const failedChips = await planCard.getByText(/^Failed:/).count();
+  if (failedChips) throw new Error(`${failedChips} plan actions failed`);
+  await shot(page, "assistant-applied", false);
+  step(`assistant plan applied (${actionCount} actions)`);
+
+  await page.goto("/app/crm");
+  for (const name of ["Acme d.o.o.", "Beta Pharma", "Gamma Soft"]) await page.getByRole("link", { name, exact: true }).waitFor();
+  await page.goto("/app/workflows");
+  const pharmaLink = page.getByRole("link", { name: /farmacij|pharma/i }).first();
+  await pharmaLink.waitFor();
+  await pharmaLink.click();
+  await page.getByRole("heading", { name: "Steps" }).waitFor();
+  await shot(page, "workflow-editor", true);
+  await page.goto("/app");
+  const dashSelect = page.getByLabel("Dashboard");
+  await dashSelect.waitFor();
+  const dashOption = await dashSelect.locator("option").filter({ hasNotText: "(default)" }).first().getAttribute("value");
+  await dashSelect.selectOption(dashOption);
+  await page.waitForURL(/dashboard=/);
+  await shot(page, "dashboard", true);
+  step("accounts, the pharma workflow and the new dashboard exist");
+
+  // 11. CRM: deal + task on Beta Pharma, drag the deal on the board
+  await page.goto("/app/crm");
+  await page.getByRole("link", { name: "Beta Pharma", exact: true }).click();
+  await page.waitForURL(/\/app\/crm\/acc_/);
+  const accountUrl = page.url();
+  await page.getByRole("tab", { name: /Deals/ }).click();
+  await page.getByRole("button", { name: "New deal" }).click();
+  let dlg = page.getByRole("dialog");
+  await dlg.getByLabel("Title").fill("Clinical trial documents, 4 languages");
+  await dlg.getByLabel(/^Value/).fill("8400");
+  await dlg.getByRole("button", { name: "Create deal" }).click();
+  await dlg.waitFor({ state: "hidden" });
+  await page.getByRole("tab", { name: /Activities/ }).click();
+  await page.getByRole("button", { name: "Task", exact: true }).click();
+  await page.getByLabel("Activity text").fill("Send the signed MSA to Beta Pharma procurement");
+  await page.getByRole("button", { name: "Add task" }).click();
+  await page.getByText("Send the signed MSA").waitFor();
+  await shot(page, "crm-account", true);
+  await page.goto("/app/crm/deals");
+  const card = page.locator("li[draggable]").filter({ hasText: "Clinical trial documents" });
+  await card.dragTo(page.getByRole("region", { name: "Proposal column" }));
+  await page.getByRole("region", { name: "Proposal column" }).getByText("Clinical trial documents, 4 languages", { exact: true }).waitFor({ timeout: 10_000 });
+  await shot(page, "deals-kanban", false);
+  step("deal created and dragged to Proposal; task added");
+
+  // 12. Project for Beta Pharma with the 2-review + client approval workflow
+  await page.goto(accountUrl);
+  await page.locator("main").getByRole("link", { name: "New project" }).click();
+  await page.waitForURL(/projects\/new\?account=/);
+  await page.waitForLoadState("networkidle");
+  await page.setInputFiles('input[type="file"]', leafletPath);
+  await page.getByLabel("Project name").fill("Patient leaflet (pharma)");
+  await page.getByRole("button", { name: "Upload and continue" }).click();
+  await page.getByRole("checkbox", { name: /^German/ }).check();
+  await page.getByRole("button", { name: "Get quote" }).click();
+  await page.getByRole("radiogroup", { name: "Service tier" }).waitFor();
+  const wfValue = await page.getByLabel("Workflow", { exact: true }).inputValue();
+  if (!wfValue) throw new Error("account workflow was not prefilled");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: /^Start project/ }).click();
+  await page.waitForURL(/\/app\/projects\/prj_/, { timeout: 20_000 });
+  const pharmaJob = await firstJobUrl(page);
+  await pollPage(page, pharmaJob, async () => (await stateBadge(page, "Review").count()) > 0, { what: "pharma job in review" });
+  step("pharma project started with the account's workflow");
+
+  const r1 = await clearQueue(rev.page);
+  const r2user = await newUser(browser, "reviewer2");
+  await login(r2user.page, SECOND_REVIEWER, DEMO_PASSWORD);
+  const r2 = await clearQueue(r2user.page);
+  step(`first review by reviewer@demo.test (${r1} tasks), second review by ${SECOND_REVIEWER} (${r2} tasks)`);
+
+  await pollPage(page, pharmaJob, async () => (await page.getByRole("region", { name: "Client approval" }).count()) > 0, { what: "client approval banner" });
+  await shot(page, "job-client-approval", false);
+  await page.getByRole("button", { name: "Approve and deliver" }).click();
+  await pollPage(page, pharmaJob, async () => (await stateBadge(page, "Delivered").count()) > 0, { what: "pharma job delivered" });
+  await shot(page, "job-pharma-delivered", false);
+  step("client approved, job delivered");
+
   // Extra screens worth a look in real mode
   for (const [route, name] of [
     ["/app/quality", "quality"],
@@ -313,6 +440,7 @@ try {
   await shot(rev.page, "reviewer-earnings");
 } catch (e) {
   failed = e;
+  for (const [who, p] of openPages) await p.screenshot({ path: path.join(SHOTS, `failure-${who}.png`), fullPage: true }).catch(() => null);
 } finally {
   await browser.close();
 }

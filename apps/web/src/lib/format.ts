@@ -103,3 +103,8 @@ export const TIER_BLURB: Record<string, string> = {
   hybrid: "Confident segments ship automatically; the rest go to a vetted human reviewer.",
   full: "Every segment is reviewed by a qualified human, with AI checks as a second pair of eyes.",
 };
+
+/** True when the ISO time is in the past (evaluated now; relative-time UI tolerates drift). */
+export function isPast(iso: string | null | undefined): boolean {
+  return Boolean(iso) && new Date(iso as string).getTime() < Date.now();
+}

@@ -102,6 +102,48 @@ def _user(session: Session, email: str, **fields: Any) -> tuple[User, bool]:
     return user, True
 
 
+def _demo_reviewer(
+    session: Session, email: str, name: str, level: str, password: str, created: list[str]
+) -> Any:
+    """Active demo reviewer for both demo pairs with fictional tax info (skips the tests)."""
+    user = session.execute(select(User).where(User.email == email)).scalar_one_or_none()
+    if user is None:
+        user, profile = profiles.apply(
+            session,
+            name=name,
+            email=email,
+            password=password,
+            country="RS",
+            pairs=list(DEMO_PAIRS),
+            domains=["software", "pharma"],
+        )
+        created.append(f"reviewer {email}")
+    else:
+        profile = profiles.profile_for_user(session, user.id)
+    profile.status = "active"
+    if profile.level in ("candidate", "reviewer") and level != profile.level:
+        profile.level = level
+    if not profile.score:
+        profile.score = scoring.compute([])
+    for pair in session.execute(select(ReviewerPair).where(ReviewerPair.reviewer_id == profile.id)).scalars():
+        if pair.status != "active":
+            pair.status = "active"
+            pair.retest_after = None
+            pair.score = pair.score or scoring.compute([])
+    if not profiles.tax_info_complete(profile):
+        profiles.update_tax_info(
+            session,
+            profile,
+            legal_name=name,
+            tax_id="DEMO-0000",
+            address="1 Demo Street, Demo City",
+            date_of_birth="1990-01-01",
+            payout_method="sepa",
+            payout_details={"iban": "DEMO-NOT-A-REAL-ACCOUNT"},
+        )
+    return profile
+
+
 def seed_demo(session: Session, password: str = DEMO_PASSWORD) -> dict[str, Any]:
     """Create the DEMO dataset. Idempotent: existing rows are found by email/slug/name and kept."""
     if len(password) < 8:
@@ -140,44 +182,9 @@ def seed_demo(session: Session, password: str = DEMO_PASSWORD) -> dict[str, Any]
         f"test {t.kind} {t.source_lang}->{t.target_lang}" for t in testing.seed_default_tests(session)
     ]
 
-    reviewer_user = session.execute(
-        select(User).where(User.email == "reviewer@demo.test")
-    ).scalar_one_or_none()
-    if reviewer_user is None:
-        reviewer_user, profile = profiles.apply(
-            session,
-            name="Demo Reviewer",
-            email="reviewer@demo.test",
-            password=password,
-            country="RS",
-            pairs=list(DEMO_PAIRS),
-            domains=["software"],
-        )
-        created.append("reviewer reviewer@demo.test")
-    else:
-        profile = profiles.profile_for_user(session, reviewer_user.id)
-    # Demo reviewer skips the tests: active for both pairs, fictional tax info.
-    profile.status = "active"
-    if profile.level == "candidate":
-        profile.level = "reviewer"
-    if not profile.score:
-        profile.score = scoring.compute([])
-    for pair in session.execute(select(ReviewerPair).where(ReviewerPair.reviewer_id == profile.id)).scalars():
-        if pair.status != "active":
-            pair.status = "active"
-            pair.retest_after = None
-            pair.score = pair.score or scoring.compute([])
-    if not profiles.tax_info_complete(profile):
-        profiles.update_tax_info(
-            session,
-            profile,
-            legal_name="Demo Reviewer",
-            tax_id="DEMO-0000",
-            address="1 Demo Street, Demo City",
-            date_of_birth="1990-01-01",
-            payout_method="sepa",
-            payout_details={"iban": "DEMO-NOT-A-REAL-ACCOUNT"},
-        )
+    # Two demo reviewers: second_review workflows need a different, senior reviewer.
+    profile = _demo_reviewer(session, "reviewer@demo.test", "Demo Reviewer", "reviewer", password, created)
+    _demo_reviewer(session, "reviewer2@demo.test", "Demo Senior Reviewer", "senior", password, created)
 
     gl = session.execute(
         select(Glossary).where(Glossary.org_id == org.id, Glossary.name == DEMO_GLOSSARY)
@@ -203,7 +210,13 @@ def seed_demo(session: Session, password: str = DEMO_PASSWORD) -> dict[str, Any]
         "reviewer_id": profile.id,
         "glossary_id": gl.id,
         "created": created,
-        "logins": ["pm@demo.test", "client@demo.test", "reviewer@demo.test", "admin@demo.test"],
+        "logins": [
+            "pm@demo.test",
+            "client@demo.test",
+            "reviewer@demo.test",
+            "reviewer2@demo.test",
+            "admin@demo.test",
+        ],
     }
 
 

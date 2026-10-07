@@ -25,7 +25,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       <AutoRefresh active={running} intervalMs={5_000} />
       <PageHeader
         eyebrow={
-          <Link href="/app" className="hover:text-fg">
+          <Link href="/app/projects" className="hover:text-fg">
             Projects
           </Link>
         }

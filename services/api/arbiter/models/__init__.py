@@ -1,5 +1,16 @@
 """SQLAlchemy models. Importing this package registers every table on Base.metadata."""
 
+from arbiter.models.agency import (
+    AssistantMessage,
+    AssistantThread,
+    CrmAccount,
+    CrmActivity,
+    CrmContact,
+    CrmDeal,
+    Dashboard,
+    PriceList,
+    WorkflowTemplate,
+)
 from arbiter.models.assets import Glossary, StyleCard, Term, TermQuestion, TmEntry
 from arbiter.models.common import new_id, utcnow
 from arbiter.models.content import FileAsset, Job, Project, Segment
@@ -27,6 +38,15 @@ from arbiter.models.tenancy import ApiKey, Organization, User
 
 __all__ = [
     "ApiKey",
+    "AssistantMessage",
+    "AssistantThread",
+    "CrmAccount",
+    "CrmActivity",
+    "CrmContact",
+    "CrmDeal",
+    "Dashboard",
+    "PriceList",
+    "WorkflowTemplate",
     "ControlSample",
     "Dispute",
     "EngineScore",

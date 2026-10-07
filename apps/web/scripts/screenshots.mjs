@@ -94,6 +94,47 @@ function watch(page) {
   await c.close();
 }
 
+// Agency OS (pm)
+{
+  const c = await ctx();
+  await login(c, "pm@demo.test");
+  const p = await c.newPage();
+  watch(p);
+  await p.goto("/app");
+  await p.getByRole("heading", { name: "Overview" }).waitFor();
+  await shot(p, "dashboard", true);
+  await p.goto("/app/crm/acc_01JNORDLAB");
+  await p.getByRole("tab", { name: /Activities/ }).waitFor();
+  await shot(p, "crm-account", true);
+  await p.goto("/app/crm/deals");
+  await p.getByRole("region", { name: "Lead column" }).waitFor();
+  await shot(p, "deals-kanban", false);
+  await p.goto("/app/workflows/wfl_01JHALDENIFU");
+  await p.getByRole("heading", { name: "Steps" }).waitFor();
+  await shot(p, "workflow-editor", true);
+  await p.goto("/app/assistant");
+  await p.waitForLoadState("networkidle");
+  await p.getByRole("button", { name: /Set up an agency \(Serbian\)/ }).click();
+  await p.keyboard.press("Enter");
+  await p.getByRole("group", { name: "Proposed plan" }).waitFor();
+  await p.getByRole("button", { name: "Apply all" }).click();
+  await p.getByText("All applied").waitFor();
+  await shot(p, "assistant-applied", false);
+  if (EXTRA) {
+    await p.goto("/app/price-lists/prl_01JSTANDARD");
+    await p.waitForLoadState("networkidle");
+    await shot(p, "x-price-list", true);
+    await p.goto("/app/workflows");
+    await shot(p, "x-workflows", true);
+    await p.goto("/app/jobs/job_01JLEAFSV");
+    await p.getByRole("heading", { name: "Segments" }).waitFor();
+    await shot(p, "x-job-client-approval", false);
+    await p.goto("/app/crm/tasks");
+    await shot(p, "x-tasks", true);
+  }
+  await c.close();
+}
+
 // Reviewer cockpit
 {
   const c = await ctx();

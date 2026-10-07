@@ -13,7 +13,8 @@ import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { dateTime, hours, langName, money, num, pct, TIER_BLURB, TIER_LABEL } from "@/lib/format";
 import { CONTENT_TYPES, contentTypeLabel, LANGS } from "@/lib/langs";
-import { TIERS, type Quote, type Tier, type UploadedFile } from "@/lib/types";
+import { TIERS, type Account, type Quote, type Tier, type UploadedFile, type Workflow } from "@/lib/types";
+import { WorkflowPipeline } from "@/components/workflow-pipeline";
 
 const STEPS = ["File", "Languages", "Quote", "Confirm"] as const;
 
@@ -21,10 +22,16 @@ export function NewProjectWizard({
   defaultTier,
   regulated,
   vertical,
+  accounts = [],
+  workflows = [],
+  initialAccountId = "",
 }: {
   defaultTier: Tier;
   regulated: boolean;
   vertical: string | null;
+  accounts?: Account[];
+  workflows?: Workflow[];
+  initialAccountId?: string;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -40,6 +47,17 @@ export function NewProjectWizard({
   const [targets, setTargets] = useState<string[]>([]);
   const [contentType, setContentType] = useState(regulated ? "regulatory" : "general");
   const [langFilter, setLangFilter] = useState("");
+
+  const initialAccount = accounts.find((a) => a.id === initialAccountId);
+  const [accountId, setAccountId] = useState(initialAccountId);
+  const [workflowId, setWorkflowId] = useState(initialAccount?.workflow_template_id ?? "");
+  const account = accounts.find((a) => a.id === accountId);
+  const workflow = workflows.find((w) => w.id === workflowId);
+  function chooseAccount(id: string) {
+    setAccountId(id);
+    const a = accounts.find((x) => x.id === id);
+    setWorkflowId(a?.workflow_template_id ?? "");
+  }
 
   const [quote, setQuote] = useState<Quote | null>(null);
   const [tier, setTier] = useState<Tier | null>(null);
@@ -71,9 +89,10 @@ export function NewProjectWizard({
     run(async () => {
       if (!uploaded) return;
       if (targets.length === 0) throw new Error("Pick at least one target language.");
-      const q = await api.createQuote({ file_id: uploaded.id, target_langs: targets, content_type: contentType });
+      const q = await api.createQuote({ file_id: uploaded.id, target_langs: targets, content_type: contentType, account_id: accountId || undefined });
       setQuote(q);
-      const preferred = q.tiers[defaultTier]?.available ? defaultTier : TIERS.find((t) => q.tiers[t]?.available) ?? null;
+      const wanted = workflow?.tier ?? account?.default_tier ?? defaultTier;
+      const preferred = q.tiers[wanted]?.available ? wanted : TIERS.find((t) => q.tiers[t]?.available) ?? null;
       setTier(preferred);
       setStep(2);
     });
@@ -84,7 +103,9 @@ export function NewProjectWizard({
       const project = await api.createProject({
         name: name.trim() || uploaded?.filename || "Untitled project",
         quote_id: quote.id,
-        tier,
+        // A workflow template sets the tier itself (routes/projects.py _resolve_workflow).
+        ...(workflow ? { workflow_template_id: workflow.id } : { tier }),
+        account_id: accountId || undefined,
         due_at: dueAt ? new Date(dueAt).toISOString() : undefined,
       });
       toast.success("Project started", `${project.target_langs.length} job(s) queued.`);
@@ -105,6 +126,20 @@ export function NewProjectWizard({
               <Field label="Project name" hint="Defaults to the file name.">
                 {(id, d) => <Input id={id} aria-describedby={d} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. IFU v4.3" />}
               </Field>
+              {accounts.length > 0 && (
+                <Field label="Account" hint={account ? accountHint(account, workflows) : "Optional. Sets workflow, tier and price list."}>
+                  {(id, d) => (
+                    <Select id={id} aria-describedby={d} value={accountId} onChange={(e) => chooseAccount(e.target.value)}>
+                      <option value="">No account</option>
+                      {accounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+              )}
               <Field label="Source language">
                 {(id) => (
                   <Select id={id} value={sourceLang} onChange={(e) => setSourceLang(e.target.value)}>
@@ -203,8 +238,16 @@ export function NewProjectWizard({
       {step === 2 && quote && (
         <QuoteStep
           quote={quote}
-          tier={tier}
+          tier={workflow ? workflow.tier : tier}
           onTier={setTier}
+          workflows={workflows}
+          workflowId={workflowId}
+          onWorkflow={(id) => {
+            setWorkflowId(id);
+            const w = workflows.find((x) => x.id === id);
+            if (w) setTier(w.tier);
+          }}
+          accountName={account?.name}
           onBack={() => setStep(1)}
           onNext={() => setStep(3)}
         />
@@ -218,6 +261,8 @@ export function NewProjectWizard({
             <Row k="File" v={`${uploaded.filename} · ${num(uploaded.word_count)} words`} />
             <Row k="Languages" v={`${quote.source_lang} → ${quote.target_langs.join(", ")}`} />
             <Row k="Content type" v={contentTypeLabel(quote.content_type)} />
+            {account && <Row k="Account" v={account.name} />}
+            <Row k="Workflow" v={workflow ? workflow.name : `${TIER_LABEL[tier]} (tier default)`} />
             <Row k="Tier" v={TIER_LABEL[tier]} />
             <Row k="Price" v={money(quote.tiers[tier].price, quote.currency)} />
             <Row k="Expected auto-approval" v={pct(quote.tiers[tier].est_auto_rate)} />
@@ -372,19 +417,34 @@ function FileSummary({ f, sourceLang }: { f: UploadedFile; sourceLang: string })
   );
 }
 
+function accountHint(a: Account, workflows: Workflow[]): string {
+  const w = workflows.find((x) => x.id === a.workflow_template_id);
+  const parts = [w ? `Workflow: ${w.name}` : a.default_tier ? `Tier: ${TIER_LABEL[a.default_tier]}` : "Org defaults", a.price_list_id ? "own price list" : null];
+  return parts.filter(Boolean).join(" · ");
+}
+
 function QuoteStep({
   quote,
   tier,
   onTier,
   onBack,
   onNext,
+  workflows,
+  workflowId,
+  onWorkflow,
+  accountName,
 }: {
   quote: Quote;
   tier: Tier | null;
   onTier: (t: Tier) => void;
   onBack: () => void;
   onNext: () => void;
+  workflows: Workflow[];
+  workflowId: string;
+  onWorkflow: (id: string) => void;
+  accountName?: string;
 }) {
+  const workflow = workflows.find((w) => w.id === workflowId);
   const a = quote.analysis;
   const parts = useMemo(
     () => [
@@ -422,6 +482,31 @@ function QuoteStep({
         </ul>
       </Card>
 
+      {workflows.length > 0 && (
+        <Card className="p-4">
+          <div className="flex flex-wrap items-end gap-4">
+            <label className="block min-w-64 flex-1 text-[13px] font-medium sm:max-w-sm">
+              Workflow
+              <Select className="mt-1" aria-label="Workflow" value={workflowId} onChange={(e) => onWorkflow(e.target.value)}>
+                <option value="">None: use the tier you pick below</option>
+                {workflows.map((w) => (
+                  <option key={w.id} value={w.id} disabled={!quote.tiers[w.tier]?.available}>
+                    {w.name} ({TIER_LABEL[w.tier]})
+                  </option>
+                ))}
+              </Select>
+            </label>
+            {accountName && <p className="pb-2 text-[12.5px] text-muted">Prices from {accountName}&apos;s price list when it has one.</p>}
+          </div>
+          {workflow && (
+            <>
+              <WorkflowPipeline steps={workflow.steps} compact className="mt-3" />
+              <p className="mt-2 text-[12.5px] text-muted">The workflow sets the tier to {TIER_LABEL[workflow.tier]}.</p>
+            </>
+          )}
+        </Card>
+      )}
+
       <div role="radiogroup" aria-label="Service tier" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {TIERS.map((t) => {
           const q = quote.tiers[t];
@@ -442,7 +527,7 @@ function QuoteStep({
                 value={t}
                 className="sr-only"
                 checked={selected}
-                disabled={!q.available}
+                disabled={!q.available || (workflow !== undefined && workflow.tier !== t)}
                 onChange={() => onTier(t)}
                 aria-describedby={`tier-${t}-desc`}
               />

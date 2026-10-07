@@ -82,6 +82,48 @@ export const Icons = {
   arrowRight: (p: P) => (
     <svg {...base} {...p}><path d="M3 8h10M9 4l4 4-4 4" /></svg>
   ),
+  grid: (p: P) => (
+    <svg {...base} {...p}><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" /><rect x="9" y="2.5" width="4.5" height="4.5" rx="1" /><rect x="2.5" y="9" width="4.5" height="4.5" rx="1" /><rect x="9" y="9" width="4.5" height="4.5" rx="1" /></svg>
+  ),
+  kanban: (p: P) => (
+    <svg {...base} {...p}><rect x="2" y="2.5" width="3.5" height="11" rx="1" /><rect x="6.25" y="2.5" width="3.5" height="7" rx="1" /><rect x="10.5" y="2.5" width="3.5" height="9" rx="1" /></svg>
+  ),
+  checklist: (p: P) => (
+    <svg {...base} {...p}><path d="M2.5 4l1.2 1.2L6 3M2.5 10l1.2 1.2L6 9M8 4.5h5.5M8 10.5h5.5" /></svg>
+  ),
+  tag: (p: P) => (
+    <svg {...base} {...p}><path d="M2.5 2.5h5l6 6-5 5-6-6v-5z" /><circle cx="5.25" cy="5.25" r="0.9" /></svg>
+  ),
+  flow: (p: P) => (
+    <svg {...base} {...p}><rect x="1.5" y="6" width="3.5" height="4" rx="1" /><rect x="11" y="2" width="3.5" height="4" rx="1" /><rect x="11" y="10" width="3.5" height="4" rx="1" /><path d="M5 8h3m0 0V4h3M8 8v4h3" /></svg>
+  ),
+  sparkle: (p: P) => (
+    <svg {...base} {...p}><path d="M8 2l1.4 3.6L13 7l-3.6 1.4L8 12l-1.4-3.6L3 7l3.6-1.4L8 2zM12.5 11.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6.6-1.4z" /></svg>
+  ),
+  send: (p: P) => (
+    <svg {...base} {...p}><path d="M2.5 8L13.5 2.5 10 13.5 7.5 8.5 2.5 8z" /></svg>
+  ),
+  trash: (p: P) => (
+    <svg {...base} {...p}><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 9h5.8l.6-9" /></svg>
+  ),
+  up: (p: P) => (
+    <svg {...base} {...p}><path d="M8 12.5v-9M4.5 7L8 3.5 11.5 7" /></svg>
+  ),
+  down: (p: P) => (
+    <svg {...base} {...p}><path d="M8 3.5v9M4.5 9L8 12.5 11.5 9" /></svg>
+  ),
+  phone: (p: P) => (
+    <svg {...base} {...p}><path d="M4 2.5h2l1 3-1.5 1a7 7 0 003 3l1-1.5 3 1v2a1 1 0 01-1 1A10.5 10.5 0 013 3.5a1 1 0 011-1z" /></svg>
+  ),
+  mail: (p: P) => (
+    <svg {...base} {...p}><rect x="2" y="3.5" width="12" height="9" rx="1.5" /><path d="M2.5 4.5L8 9l5.5-4.5" /></svg>
+  ),
+  note: (p: P) => (
+    <svg {...base} {...p}><path d="M3.5 2.5h6l3 3v8h-9v-11z" /><path d="M9.5 2.5v3h3M5.5 8.5h5M5.5 11h3" /></svg>
+  ),
+  calendar: (p: P) => (
+    <svg {...base} {...p}><rect x="2.5" y="3.5" width="11" height="10" rx="1.5" /><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" /></svg>
+  ),
   keyboard: (p: P) => (
     <svg {...base} {...p}><rect x="1.5" y="4" width="13" height="8" rx="1.5" /><path d="M4 6.5h.01M6.5 6.5h.01M9 6.5h.01M11.5 6.5h.01M5 9.5h6" /></svg>
   ),

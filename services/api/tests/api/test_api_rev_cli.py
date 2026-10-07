@@ -42,7 +42,7 @@ def test_seed_demo_is_idempotent_and_logins_work(db, monkeypatch):
     first = cli.seed_demo(db)
     db.commit()
     before = _counts(db)
-    assert before["Organization"] == 1 and before["User"] == 4
+    assert before["Organization"] == 1 and before["User"] == 5
     assert before["ReviewerTest"] == 4 and before["Term"] == len(cli.DEMO_TERMS)
 
     second = cli.seed_demo(db)

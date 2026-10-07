@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -50,7 +51,8 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def _validation(_: Request, e: RequestValidationError) -> JSONResponse:
-        return _err(422, "validation_error", "request is invalid", {"errors": e.errors()})
+        # jsonable_encoder: error contexts may hold Decimal limits (money fields) or exceptions
+        return _err(422, "validation_error", "request is invalid", {"errors": jsonable_encoder(e.errors())})
 
     @app.exception_handler(LookupError)
     async def _lookup(_: Request, e: LookupError) -> JSONResponse:

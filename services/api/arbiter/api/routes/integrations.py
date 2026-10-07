@@ -7,12 +7,10 @@ signing secret is shown once, on create.
 
 from __future__ import annotations
 
-import ipaddress
 import re
 import secrets
 from datetime import datetime
 from typing import Annotated, Any
-from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Header, Query, Response
 from fastapi.responses import JSONResponse
@@ -24,7 +22,6 @@ from arbiter.api.deps import DB, PM, Customer, Paging, listing
 from arbiter.api.routes.projects import idempotent_replay, idempotent_store
 from arbiter.billing.invoices import list_invoices
 from arbiter.billing.usage import usage_view
-from arbiter.config import get_settings
 from arbiter.errors import Invalid, NotFound
 from arbiter.models import Webhook
 
@@ -51,26 +48,7 @@ def webhook_view(h: Webhook, *, with_secret: bool = False) -> dict[str, Any]:
     return out
 
 
-def _check_url(url: str) -> str:
-    url = url.strip()
-    parts = urlsplit(url)
-    lenient = get_settings().env in ("dev", "test")
-    allowed = ("https", "http") if lenient else ("https",)
-    if parts.scheme not in allowed or not parts.hostname:
-        raise Invalid("webhook URL must be an https:// URL")
-    if parts.username or parts.password:
-        raise Invalid("webhook URL must not contain credentials")
-    if not lenient:
-        host = parts.hostname.lower()
-        if host == "localhost" or host.endswith(".localhost") or host.endswith(".internal"):
-            raise Invalid("webhook URL must be a public address")
-        try:
-            ip = ipaddress.ip_address(host)
-        except ValueError:
-            ip = None
-        if ip is not None and not ip.is_global:
-            raise Invalid("webhook URL must be a public address")
-    return url
+_check_url = webhooks.check_url
 
 
 class WebhookIn(BaseModel):

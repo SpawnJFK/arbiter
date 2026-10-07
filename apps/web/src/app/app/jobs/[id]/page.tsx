@@ -13,6 +13,9 @@ import { contentTypeLabel } from "@/lib/langs";
 import { getMe, withAuth } from "@/lib/server-api";
 import { DECISIONS, OUTPUT_STATES, SEGMENT_STATES, TERMINAL_JOB_STATES } from "@/lib/types";
 import { CancelJobButton } from "./cancel-button";
+import { ClientApproval } from "./client-approval";
+import { WorkflowPipeline } from "@/components/workflow-pipeline";
+import { stepStatuses } from "@/lib/workflow";
 import { SegmentTable } from "./segment-table";
 
 export const metadata: Metadata = { title: "Job" };
@@ -37,7 +40,10 @@ export default async function JobPage({
     // The Job object has no senate counter; count segments whose decision was the senate.
     withAuth((api) => api.segments(id, { decision: "senate", limit: 200 }), next),
   ]);
-  const senateCount = senate.next_offset === null ? num(senate.items.length) : `${num(senate.items.length)}+`;
+  // job.senate_count (Agency OS) is authoritative; older backends only allow counting segments.
+  const senateCount =
+    typeof job.senate_count === "number" ? num(job.senate_count) : senate.next_offset === null ? num(senate.items.length) : `${num(senate.items.length)}+`;
+  const wfSteps = job.workflow?.steps ?? [];
   const showMoney = user.role === "pm" || user.role === "admin";
   const delivered = OUTPUT_STATES.includes(job.state);
   const dl = (path: string) => `/api/proxy/jobs/${encodeURIComponent(job.id)}${path}`;
@@ -48,7 +54,7 @@ export default async function JobPage({
       <PageHeader
         eyebrow={
           <span className="flex items-center gap-1.5">
-            <Link href="/app" className="hover:text-fg">
+            <Link href="/app/projects" className="hover:text-fg">
               Projects
             </Link>
             <span aria-hidden="true">/</span>
@@ -102,6 +108,22 @@ export default async function JobPage({
         }
       />
 
+      {job.awaiting_client_approval && <ClientApproval jobId={job.id} />}
+      {wfSteps.length > 0 && (
+        <Card className="mb-4 px-4 py-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-[13px]">
+            <span className="font-semibold">Workflow</span>
+            <span className="text-muted">{job.workflow?.name}</span>
+            {job.workflow?.source === "tier" && <span className="text-[12px] text-faint">(tier default)</span>}
+            {job.client_approved_at && (
+              <span className="ml-auto text-[12.5px] text-ok">
+                Client approved <Time iso={job.client_approved_at} mode="relative" />
+              </span>
+            )}
+          </div>
+          <WorkflowPipeline steps={wfSteps} statuses={stepStatuses(job, wfSteps)} />
+        </Card>
+      )}
       {job.no_reviewer_fallback_used && (
         <Callout tone="warn" title="Reviewer fallback used" className="mb-4">
           No qualified reviewer was available for some segments, so your organisation&apos;s no-reviewer policy was applied.
@@ -138,7 +160,7 @@ export default async function JobPage({
 
       <div className={`mb-4 grid grid-cols-2 gap-3 ${showMoney ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
         <Stat tone="ok" label="Auto-approved" value={num(job.auto_approved_count)} hint="Cleared threshold + band" />
-        <Stat tone="accent" label="Senate" value={senateCount} hint="Decided by the AI senate" />
+        <Stat tone="accent" label="Senate" value={senateCount} hint="Segments the AI senate reviewed" />
         <Stat tone="violet" label="Routed to humans" value={num(job.review_count)} hint="Sent to a reviewer or your team" />
         <Stat label="AI reviewed" value={num(job.ai_reviewed_count)} hint="Revised by the AI editor" />
         {showMoney && (

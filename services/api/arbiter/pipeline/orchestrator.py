@@ -12,6 +12,19 @@ Routing (quality.qe.decide): auto_approve ships; senate convenes the council for
 uncertain band; review queues a human task; blocked (a deterministic failure such as a
 dropped tag or a missing mandatory term) always goes to a human, never to a model.
 On the ai_review tier, the senate + editor replace the human, and the client knows it.
+
+Workflows (Agency OS): a job may carry a frozen workflow snapshot (job.workflow, see
+arbiter.agency.workflows). Jobs without one behave exactly as before. With one:
+    tm / mt / translation_senate   which translation sources run (translation_senate forces best-of-N)
+    qe.params.threshold            overrides the job threshold frozen at prepare
+    human_review.params.min_level  minimum reviewer level of the review tasks
+    second_review                  after the first human review a second task (min_level senior,
+                                   never the first reviewer); the segment stays needs_review
+                                   until then; segment.signals["reviews"] counts the reviews
+    client_review                  when every segment is done the job waits in `review` for
+                                   POST /jobs/{id}/client-approve (webhook job.needs_attention,
+                                   reason client_review), then goes ready -> merge
+senate, ai_review and human_review follow the tier, which workflow validation keeps consistent.
 """
 
 from __future__ import annotations
@@ -26,6 +39,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from arbiter.agency import workflows as wfl
 from arbiter.community import queue as review_queue
 from arbiter.config import get_settings
 from arbiter.contracts import (
@@ -55,6 +69,7 @@ from arbiter.models import (
     SenateRun,
     StyleCard,
     Threshold,
+    new_id,
     utcnow,
 )
 from arbiter.pipeline import events
@@ -66,6 +81,7 @@ from arbiter.quality.qe import decide, score_segment
 from arbiter.quality.senate import review_senate, translation_senate
 
 log = logging.getLogger(__name__)
+LEVEL_RANK = {"candidate": 0, "reviewer": 1, "senior": 2, "domain_expert": 3}
 
 MT_BATCH = 40
 OPEN_STATES = ("pending", "translated", "needs_review", "in_review")
@@ -146,6 +162,30 @@ def _threshold(session: Session, job: Job) -> Threshold | None:
     exact = [t for t in rows if t.target_lang == job.target_lang]
     default = [t for t in rows if t.target_lang is None]
     return (exact or default or [None])[0]
+
+
+def _create_threshold(session: Session, job: Job) -> Threshold | None:
+    """First job for (org, content type, target language): store the default threshold row so
+    calibration and /quality/thresholds have something to show and tune."""
+    from sqlalchemy.dialects.postgresql import insert
+
+    settings = get_settings()
+    session.execute(
+        insert(Threshold)
+        .values(
+            id=new_id("thr"),
+            org_id=job.org_id,
+            content_type=job.content_type,
+            target_lang=job.target_lang,
+            value=settings.default_threshold,
+            band_width=settings.band_width,
+            safety_offset=0.0,
+            auto_approval_suspended=False,
+            updated_at=utcnow(),
+        )
+        .on_conflict_do_nothing(index_elements=["org_id", "content_type", "target_lang"])
+    )
+    return _threshold(session, job)
 
 
 def _engine_names(session: Session, job: Job) -> list[str]:
@@ -266,9 +306,12 @@ def prepare(session: Session, job_id: str) -> None:
 
     # R-GL-11: freeze the glossary version and the threshold the job runs with.
     job.glossary_version = gl.current_version(session, job.org_id, job.content_type)
-    thr = _threshold(session, job)
+    thr = _threshold(session, job) or _create_threshold(session, job)
     job.threshold = thr.value if thr else settings.default_threshold
     job.band_width = thr.band_width if thr else settings.band_width
+    qe_step = wfl.step(job.workflow, "qe")
+    if qe_step and (qe_step.get("params") or {}).get("threshold") is not None:
+        job.threshold = float(qe_step["params"]["threshold"])  # the workflow's own bar
 
     seq = 0
     flat: list[tuple[str, int, Any, Any]] = []
@@ -339,6 +382,9 @@ def translate(session: Session, job_id: str) -> None:
         return
     terms = _terms_for(session, job)
     style, formality = _style(session, job)
+    wf = job.workflow
+    use_tm = wf is None or wfl.has(wf, "tm")
+    use_engine = wf is None or wfl.has(wf, "mt") or wfl.has(wf, "translation_senate")
     to_engine: list[tuple[Segment, MtRequest, list[TermHit]]] = []
     for seg in pending:
         hits = _hits(seg, terms, job.source_lang)
@@ -348,13 +394,17 @@ def translate(session: Session, job_id: str) -> None:
                 {"source_term": h.source_term, "target_term": h.target_term, "kind": h.kind} for h in hits
             ],
         }
-        matches = tm.lookup(
-            session,
-            job.org_id,
-            job.source_lang,
-            job.target_lang,
-            seg.source_tagged,
-            seg.signals.get("context_hash"),
+        matches = (
+            tm.lookup(
+                session,
+                job.org_id,
+                job.source_lang,
+                job.target_lang,
+                seg.source_tagged,
+                seg.signals.get("context_hash"),
+            )
+            if use_tm
+            else []
         )
         best = matches[0] if matches else None
         if best and best.kind in ("context", "exact"):
@@ -375,6 +425,12 @@ def translate(session: Session, job_id: str) -> None:
             continue
         if best:
             seg.tm_match, seg.tm_entry_id = best.score, best.entry_id
+        if not use_engine:
+            # TM-only workflow: no engine runs; the human reviewer translates this segment.
+            seg.signals = {**seg.signals, "needs_translation": True}
+            events.record(session, job, "awaiting_translation", segment=seg, reason="no mt step")
+            transition(seg, "segment", "translated")
+            continue
         req = MtRequest(
             source_tagged=seg.source_tagged,
             source_lang=job.source_lang,
@@ -387,10 +443,23 @@ def translate(session: Session, job_id: str) -> None:
         )
         to_engine.append((seg, req, hits))
 
+    if not to_engine:
+        events.record(session, job, "translated", segments=len(pending), engines=[])
+        enqueue(session, "job.score", {"job_id": job.id}, idempotency_key=f"{job.id}:score")
+        return
     names = _engine_names(session, job)
     if not names:
         raise EngineError("no MT engine available")
-    use_senate = bool((org.settings or {}).get("translation_senate")) and len(names) >= 2
+    mt_step = wfl.step(wf, "mt")
+    preferred = (mt_step.get("params") or {}).get("engine") if mt_step else None
+    if preferred and preferred in names:
+        names = [preferred] + [n for n in names if n != preferred]
+    elif preferred:
+        events.record(session, job, "engine_unavailable", engine=preferred, used=names[0])
+    forced = wfl.has(wf, "translation_senate")
+    use_senate = (bool((org.settings or {}).get("translation_senate")) or forced) and len(names) >= 2
+    if forced and not use_senate:
+        events.record(session, job, "translation_senate_skipped", reason="fewer than two engines available")
     engines: list[MtEngine] = []
     for n in names:
         try:
@@ -489,6 +558,13 @@ def score(session: Session, job_id: str) -> None:
     segs = _segments(session, job, ["translated"])
     n_qe = n_senate = 0
     for seg in segs:
+        if (seg.signals or {}).get("needs_translation"):
+            # TM-only workflow, no TM match: nothing to score, a human translates it.
+            seg.decision, seg.reasons = "review", ["no_mt_step"]
+            transition(seg, "segment", "needs_review")
+            review_queue.create_task(session, seg, job, min_level=_level_for(org, "review", job))
+            job.review_count += 1
+            continue
         hits = _hits(seg, terms, job.source_lang)
         violations = _violations(seg.target_tagged, hits, job.target_lang)
         ctx = _ctx(session, job, seg, hits, style)
@@ -555,17 +631,20 @@ def score(session: Session, job_id: str) -> None:
         elif decision == "review" and job.tier == "ai_review":
             decision = "ai_edit"
 
+        if decision == "ai_edit":
+            # Routing label only: the segment's final decision is "ai_reviewed", never "ai_edit".
+            seg.decision = "ai_reviewed"
+            _ai_edit(session, job, seg, ctx, judge, hits)
+            continue
         seg.decision = decision
         if decision == "auto_approve":
             transition(seg, "segment", "auto_approved")
             job.auto_approved_count += 1
             if calibration.pick_control_sample(seg.id, settings.control_sample_rate):
                 _queue_control_sample(session, job, seg)
-        elif decision == "ai_edit":
-            _ai_edit(session, job, seg, ctx, judge, hits)
         else:  # review | blocked
             transition(seg, "segment", "needs_review")
-            review_queue.create_task(session, seg, job, min_level=_level_for(org, decision))
+            review_queue.create_task(session, seg, job, min_level=_level_for(org, decision, job))
             job.review_count += 1
 
     if segs:
@@ -593,10 +672,13 @@ def score(session: Session, job_id: str) -> None:
     _advance(session, job)
 
 
-def _level_for(org: Organization, decision: str) -> str:
-    if org.regulated:
-        return "domain_expert" if decision == "blocked" else "senior"
-    return "reviewer"
+def _level_for(org: Organization, decision: str, job: Job | None = None) -> str:
+    level = ("domain_expert" if decision == "blocked" else "senior") if org.regulated else "reviewer"
+    hr = wfl.step(job.workflow, "human_review") if job is not None else None
+    wanted = (hr.get("params") or {}).get("min_level") if hr else None
+    if wanted in LEVEL_RANK and LEVEL_RANK[wanted] > LEVEL_RANK[level]:
+        level = wanted
+    return level
 
 
 def _ai_edit(
@@ -628,6 +710,11 @@ def _queue_control_sample(session: Session, job: Job, seg: Segment) -> None:
 
 
 def _store_senate(session: Session, job: Job, seg: Segment, purpose: str, verdict: Any) -> None:
+    """Every convening counts in job.senate_count; the outcome stays on the segment for the UI
+    (signals["senate"] for the review senate, signals["translation_senate"] for best-of-N)."""
+    job.senate_count = (job.senate_count or 0) + 1
+    key = "senate" if purpose == "review" else "translation_senate"
+    seg.signals = {**(seg.signals or {}), key: verdict.outcome}
     session.add(
         SenateRun(
             segment_id=seg.id,
@@ -666,6 +753,9 @@ def _advance(session: Session, job: Job) -> None:
     ).scalar_one()
     if open_count == 0:
         if job.state in ("running", "review"):
+            if awaiting_client(job):
+                _request_client_review(session, job)
+                return
             transition(job, "job", "ready")
             enqueue(session, "job.merge", {"job_id": job.id}, idempotency_key=f"{job.id}:merge")
         return
@@ -681,6 +771,33 @@ def _advance(session: Session, job: Job) -> None:
         webhooks.emit(
             session, job.org_id, "job.needs_attention", {"job_id": job.id, "reason": "human_review"}
         )
+
+
+def awaiting_client(job: Job) -> bool:
+    """The workflow has client_review and the client has not approved yet."""
+    return wfl.has(job.workflow, "client_review") and job.client_approved_at is None
+
+
+def _request_client_review(session: Session, job: Job) -> None:
+    """Every segment is done; the job waits in `review` for the client (once per job)."""
+    from arbiter import webhooks
+
+    if job.state == "running":
+        transition(job, "job", "review")
+    wf = dict(job.workflow or {})
+    if wf.get("client_review_requested_at"):
+        return
+    wf["client_review_requested_at"] = utcnow().isoformat()
+    job.workflow = wf
+    events.record(session, job, "client_review_requested")
+    webhooks.emit(session, job.org_id, "job.needs_attention", {"job_id": job.id, "reason": "client_review"})
+
+
+def client_approve(session: Session, job: Job, actor: str) -> None:
+    """POST /jobs/{id}/client-approve: the client signs off; the job goes ready -> merge."""
+    job.client_approved_at = utcnow()
+    events.record(session, job, "client_approved", actor_type="human", actor_id=actor)
+    _advance(session, job)
 
 
 # --------------------------------------------------------------------------- human review callbacks
@@ -704,6 +821,34 @@ def on_segment_reviewed(
     if decision == "edit" and target_tagged and target_tagged != seg.target_tagged:
         _set_target(session, job, seg, target_tagged, origin="human", actor=reviewer_id, errors=errors)
     seg.reviewer_id = reviewer_id
+    reviews = [
+        *list((seg.signals or {}).get("reviews") or []),
+        {"reviewer_id": reviewer_id, "decision": decision, "at": utcnow().isoformat()},
+    ]
+    seg.signals = {**(seg.signals or {}), "reviews": reviews}
+    if wfl.has(job.workflow, "second_review") and len(reviews) < 2:
+        # second_review: the segment stays needs_review until a second, senior human reviews it.
+        # Listing the first reviewer under skipped_by keeps the task away from them.
+        seg.updated_at = utcnow()
+        seg.reasons = [*[r for r in (seg.reasons or []) if r != "second_review"], "second_review"]
+        events.record(
+            session,
+            job,
+            "reviewed",
+            segment=seg,
+            actor_type="human",
+            actor_id=reviewer_id,
+            decision=decision,
+            review=1,
+            awaiting="second_review",
+        )
+        sr = wfl.step(job.workflow, "second_review") or {}
+        level = (sr.get("params") or {}).get("min_level") or "senior"
+        if LEVEL_RANK.get(level, 0) < LEVEL_RANK["senior"]:
+            level = "senior"
+        review_queue.create_task(session, seg, job, min_level=level, expected={"skipped_by": [reviewer_id]})
+        job.review_count += 1
+        return
     seg.decision = "reviewed"
     if seg.engine_target_tagged and seg.target_tagged:
         from rapidfuzz.distance import Levenshtein
@@ -711,7 +856,14 @@ def on_segment_reviewed(
         seg.edit_distance = Levenshtein.normalized_distance(seg.engine_target_tagged, seg.target_tagged)
     transition(seg, "segment", "reviewed")
     events.record(
-        session, job, "reviewed", segment=seg, actor_type="human", actor_id=reviewer_id, decision=decision
+        session,
+        job,
+        "reviewed",
+        segment=seg,
+        actor_type="human",
+        actor_id=reviewer_id,
+        decision=decision,
+        review=len(reviews),
     )
     _learn(session, job, seg)
     _advance(session, job)

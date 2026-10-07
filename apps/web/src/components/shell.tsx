@@ -42,8 +42,14 @@ export function AppShell({
     router.refresh();
   }
 
-  const isActive = (item: NavItem) =>
+  // The most specific matching item wins (e.g. /app/projects/new highlights "New project" only).
+  const matches = (item: NavItem) =>
     item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const best = sections
+    .flatMap((x) => x.items)
+    .filter(matches)
+    .sort((x, y) => y.href.length - x.href.length)[0];
+  const isActive = (item: NavItem) => best?.href === item.href;
 
   const nav = (
     <nav aria-label="Main" className="flex flex-1 flex-col gap-4 overflow-y-auto px-2 py-3">

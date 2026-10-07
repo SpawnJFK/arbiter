@@ -17,6 +17,7 @@ const KIND_TONE: Record<string, Tone> = {
   segment_blocked: "danger",
   term_question: "info",
   overdue: "warn",
+  client_review: "accent",
 };
 
 const KIND_ACTION: Record<string, string> = {
@@ -24,6 +25,7 @@ const KIND_ACTION: Record<string, string> = {
   segment_blocked: "Fix or approve the segment",
   term_question: "Answer the question",
   overdue: "Open the job",
+  client_review: "Review and approve",
 };
 
 export default async function ExceptionsPage() {

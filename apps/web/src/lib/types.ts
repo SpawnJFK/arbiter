@@ -158,6 +158,9 @@ export interface Project {
   due_at: ISODate | null;
   created_at: ISODate;
   jobs?: Job[];
+  quote_id?: string;
+  account_id?: string | null;
+  workflow_template_id?: string | null;
 }
 
 /** Authority: services/api/arbiter/domain/states.py */
@@ -207,6 +210,22 @@ export interface Job {
   est_auto_rate?: number | null;
   no_reviewer_fallback_used?: boolean;
   started_at?: ISODate | null;
+  // Agency OS
+  account_id?: string | null;
+  senate_count?: number;
+  /** Frozen snapshot of the workflow the job runs (agency/workflows.py snapshot()). */
+  workflow?: JobWorkflow | null;
+  client_approved_at?: ISODate | null;
+  awaiting_client_approval?: boolean;
+}
+
+export interface JobWorkflow {
+  template_id: string | null;
+  name: string;
+  tier: Tier;
+  source: "template" | "tier";
+  steps: WorkflowStep[];
+  client_review_requested_at?: ISODate | null;
 }
 
 /**
@@ -654,4 +673,277 @@ export interface Invoice {
   status: string;
   issued_at?: ISODate | null;
   created_at?: ISODate | null;
+}
+
+// ====================================================================== Agency OS
+
+export type AccountKind = "client" | "prospect";
+
+export interface Account {
+  id: string;
+  name: string;
+  kind: AccountKind;
+  status: "active" | "archived";
+  industry: string | null;
+  country: string | null;
+  vat_id: string | null;
+  currency: string | null;
+  default_tier: Tier | null;
+  workflow_template_id: string | null;
+  price_list_id: string | null;
+  owner_user_id: string | null;
+  notes: string | null;
+  created_at: ISODate;
+}
+
+export interface AccountStats {
+  projects: number;
+  jobs_active: number;
+  revenue_total: Money | null;
+  revenue_90d: Money | null;
+  margin_90d: Money | null;
+}
+
+export interface AccountDetail extends Account {
+  contacts: Contact[];
+  deals: Deal[];
+  recent_activities: Activity[];
+  stats: AccountStats;
+}
+
+export interface AccountInput {
+  name: string;
+  kind: AccountKind;
+  industry?: string | null;
+  country?: string | null;
+  vat_id?: string | null;
+  currency?: string | null;
+  default_tier?: Tier | null;
+  workflow_template_id?: string | null;
+  price_list_id?: string | null;
+  notes?: string;
+}
+
+export interface Contact {
+  id: string;
+  account_id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  role: string | null;
+  is_primary: boolean;
+  created_at?: ISODate;
+}
+
+export const DEAL_STAGES = ["lead", "qualified", "proposal", "negotiation", "won", "lost"] as const;
+export type DealStage = (typeof DEAL_STAGES)[number];
+
+export interface Deal {
+  id: string;
+  account_id: string;
+  account_name: string | null;
+  title: string;
+  value: Money;
+  currency: string;
+  stage: DealStage;
+  expected_close: string | null;
+  quote_id: string | null;
+  lost_reason: string | null;
+  owner_user_id: string | null;
+  closed_at?: ISODate | null;
+  created_at: ISODate;
+  updated_at: ISODate;
+}
+
+export const ACTIVITY_KINDS = ["note", "call", "email", "meeting", "task"] as const;
+export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
+
+export interface Activity {
+  id: string;
+  account_id: string;
+  deal_id: string | null;
+  kind: ActivityKind;
+  body: string;
+  due_at: ISODate | null;
+  done: boolean;
+  done_at?: ISODate | null;
+  user_id: string | null;
+  created_at: ISODate;
+}
+
+export interface Rate {
+  source_lang?: string | null;
+  target_lang?: string | null;
+  tier: Tier;
+  per_word: Money;
+}
+
+export const TM_WEIGHT_KEYS = ["context", "exact", "fuzzy_95", "fuzzy_85", "fuzzy_75", "new", "repetition"] as const;
+export type TmWeightKey = (typeof TM_WEIGHT_KEYS)[number];
+
+export interface PriceList {
+  id: string;
+  name: string;
+  currency: string;
+  rates: Rate[];
+  tm_weights: Partial<Record<TmWeightKey, string | number>> | null;
+  minimum_charge: Money | null;
+  archived?: boolean;
+  created_at?: ISODate;
+  updated_at?: ISODate;
+}
+
+export interface PriceListInput {
+  name: string;
+  currency: string;
+  rates: Rate[];
+  tm_weights?: Partial<Record<TmWeightKey, string | number>> | null;
+  minimum_charge?: Money | null;
+}
+
+export const STEP_KINDS = [
+  "tm",
+  "mt",
+  "translation_senate",
+  "qe",
+  "senate",
+  "ai_review",
+  "human_review",
+  "second_review",
+  "client_review",
+  "delivery",
+] as const;
+export type StepKind = (typeof STEP_KINDS)[number];
+
+export interface WorkflowStep {
+  kind: StepKind;
+  params?: { engine?: string; threshold?: number; min_level?: "reviewer" | "senior" | "domain_expert" };
+}
+
+export interface Workflow {
+  id: string;
+  name: string;
+  description: string;
+  content_type: string | null;
+  tier: Tier;
+  steps: WorkflowStep[];
+  is_default: boolean;
+  /** Built-in preset key, null for custom templates. */
+  preset: string | null;
+  archived?: boolean;
+  available?: boolean;
+  blocked_reason?: string | null;
+  created_at?: ISODate;
+  updated_at?: ISODate;
+}
+
+export interface WorkflowInput {
+  name: string;
+  description?: string;
+  content_type?: string | null;
+  tier: Tier;
+  steps: WorkflowStep[];
+  is_default?: boolean;
+}
+
+export type WidgetType = "kpi" | "bar" | "line" | "table" | "pipeline";
+export type WidgetSize = "s" | "m" | "l";
+
+export interface Widget {
+  id: string;
+  type: WidgetType;
+  metric: string;
+  title?: string | null;
+  size?: WidgetSize;
+}
+
+export interface Dashboard {
+  id: string;
+  name: string;
+  widgets: Widget[];
+  is_default?: boolean;
+  created_at?: ISODate;
+  updated_at?: ISODate;
+}
+
+export type DashboardPeriod = "30d" | "90d" | "365d";
+
+export interface KpiData {
+  value: number | string | null;
+  /** currency code, "%", "ratio", "jobs", "words" */
+  unit: string;
+  previous?: number | string | null;
+  count?: number;
+}
+export interface SeriesData {
+  unit: string;
+  points: { label: string; value: number | string | null; id?: string }[];
+}
+export interface PipelineData {
+  currency: string;
+  stages: { stage: DealStage; count: number; value: Money | null }[];
+}
+export interface TableData {
+  columns: string[];
+  rows: Record<string, unknown>[];
+}
+
+export interface DashboardData {
+  period: DashboardPeriod;
+  currency?: string;
+  generated_at?: ISODate;
+  widgets: { id: string; type: WidgetType; title: string | null; data: KpiData | SeriesData | PipelineData | TableData }[];
+}
+
+export const ACTION_TYPES = [
+  "create_workflow",
+  "create_price_list",
+  "create_account",
+  "create_contact",
+  "create_deal",
+  "create_activity",
+  "create_dashboard",
+  "update_org",
+  "create_glossary",
+  "add_terms",
+  "create_webhook",
+] as const;
+export type ActionType = (typeof ACTION_TYPES)[number];
+
+export interface PlanAction {
+  type: ActionType | string;
+  summary: string;
+  data: Record<string, unknown>;
+}
+
+export interface AssistantMessage {
+  id: string;
+  thread_id?: string;
+  role: "user" | "assistant";
+  /** The text: the user's prompt or the assistant's reply. */
+  content: string;
+  plan: PlanAction[] | null;
+  applied: number[];
+  results?: Record<string, { id?: string }>;
+  created_at: ISODate;
+}
+
+export interface AssistantThread {
+  id: string;
+  title: string;
+  user_id?: string | null;
+  created_at: ISODate;
+  updated_at?: ISODate;
+  messages?: AssistantMessage[];
+}
+
+export interface ApplyResult {
+  index: number;
+  type: string;
+  ok: boolean;
+  id?: string | null;
+  error?: string;
+  note?: string;
+  warnings?: string[];
+  skipped?: boolean;
 }

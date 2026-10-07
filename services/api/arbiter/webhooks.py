@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import time
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 import orjson
@@ -17,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from arbiter.config import get_settings
+from arbiter.errors import Invalid
 from arbiter.models import Webhook, WebhookDelivery, new_id, utcnow
 from arbiter.pipeline.queue import enqueue
 
@@ -24,6 +27,29 @@ EVENTS = ("job.delivered", "job.failed", "job.needs_attention", "quote.expired")
 
 # Tests swap this for an httpx.MockTransport.
 transport: httpx.BaseTransport | None = None
+
+
+def check_url(url: str) -> str:
+    """Webhook URLs: https outside dev/test, never localhost or a private/link-local IP literal."""
+    url = url.strip()
+    parts = urlsplit(url)
+    lenient = get_settings().env in ("dev", "test")
+    allowed = ("https", "http") if lenient else ("https",)
+    if parts.scheme not in allowed or not parts.hostname:
+        raise Invalid("webhook URL must be an https:// URL")
+    if parts.username or parts.password:
+        raise Invalid("webhook URL must not contain credentials")
+    if not lenient:
+        host = parts.hostname.lower()
+        if host == "localhost" or host.endswith(".localhost") or host.endswith(".internal"):
+            raise Invalid("webhook URL must be a public address")
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            ip = None
+        if ip is not None and not ip.is_global:
+            raise Invalid("webhook URL must be a public address")
+    return url
 
 
 def sign(secret: str, body: bytes, ts: int | None = None) -> str:

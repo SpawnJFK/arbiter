@@ -8,7 +8,9 @@ Analysis (per target language):
   * words per band -> weighted words (billing.pricing)
 
 Price per tier = max(minimum, sum over target languages of weighted words * tier rate),
-rounded to the cent.
+rounded to the cent. With a client price list (Agency OS: POST /quotes with account_id), the
+rate per language and tier, the TM weights, the minimum and the currency come from that
+price list (lookup order in arbiter.agency.pricelists.rate_for).
 
 est_auto_rate (share of segments expected to ship without a human):
   history = jobs of this org, same content_type and pair, created in the last 90 days, with
@@ -46,7 +48,7 @@ from arbiter.config import get_settings
 from arbiter.fileproc import registry
 from arbiter.fileproc.base import FormatError, plain_text, to_tagged
 from arbiter.linguistic import tm
-from arbiter.models import FileAsset, Job, Organization, Quote, utcnow
+from arbiter.models import FileAsset, Job, Organization, PriceList, Quote, utcnow
 
 HISTORY_DAYS = 90
 AUTO_RATE_PRIOR = 0.5
@@ -152,8 +154,13 @@ def build_quote(
     file_asset: FileAsset,
     target_langs: list[str],
     content_type: str = "general",
+    *,
+    price_list: PriceList | None = None,
+    account_id: str | None = None,
 ) -> Quote:
-    """POST /quotes. Tenancy: the file must belong to the org."""
+    """POST /quotes. Tenancy: the file must belong to the org (and the price list, checked by the caller)."""
+    from arbiter.agency import pricelists
+
     if file_asset.org_id != org.id:
         raise Invalid("file not found")
     langs = list(dict.fromkeys(t.strip() for t in target_langs if t and t.strip()))
@@ -164,11 +171,23 @@ def build_quote(
     content_type = content_type or "general"
     segments = _segments(file_asset)
     word_count = sum(w for _, w in segments)
-    weights = pricing.tm_weights(org)
-    rates = pricing.tier_rates(org)
-    minimum = pricing.minimum_charge(org)
+    if price_list is not None:
+        weights = pricelists.tm_weights_for(price_list, org)
+        minimum = pricelists.minimum_for(price_list, org)
+        quote_currency = price_list.currency
+    else:
+        weights = pricing.tm_weights(org)
+        minimum = pricing.minimum_charge(org)
+        quote_currency = get_settings().currency
+    org_rates = pricing.tier_rates(org)
+
+    def rate(lang: str, tier: str) -> tuple[Decimal, str]:
+        if price_list is None:
+            return org_rates[tier], "org_default"
+        return pricelists.rate_for(price_list, file_asset.source_lang, lang, tier, org)
 
     by_lang: dict[str, Any] = {}
+    ww_by_lang: dict[str, Decimal] = {}
     total_ww = Decimal("0")
     totals = dict.fromkeys(pricing.BANDS, 0)
     rate_num = 0.0
@@ -184,6 +203,7 @@ def build_quote(
             "auto_rate_source": "prior" if hist is None else "history",
         }
         total_ww += ww
+        ww_by_lang[lang] = ww
         for b, n in bands.items():
             totals[b] += n
         rate_num += auto_rate * max(word_count, 1)
@@ -191,15 +211,23 @@ def build_quote(
 
     tiers: dict[str, Any] = {}
     for tier in pricing.TIERS:
-        price = max(minimum, (total_ww * rates[tier]).quantize(CENT, rounding=ROUND_HALF_UP))
+        lang_rates = {lang: rate(lang, tier) for lang in langs}
+        subtotal = sum((ww_by_lang[lang] * r for lang, (r, _) in lang_rates.items()), Decimal("0"))
+        price = max(minimum, subtotal.quantize(CENT, rounding=ROUND_HALF_UP))
         tier_auto = 0.0 if tier == "full" else est_auto
+        distinct = {r for r, _ in lang_rates.values()}
         entry: dict[str, Any] = {
             "price": money(price),
-            "rate_per_word": str(rates[tier]),
+            # one rate when every language costs the same, else per language below
+            "rate_per_word": str(distinct.pop()) if len(distinct) == 1 else None,
             "est_auto_rate": round(tier_auto, 3),
             "eta_hours": _eta(tier, word_count * len(langs), tier_auto),
             "available": True,
         }
+        if price_list is not None:
+            entry["rates_by_lang"] = {
+                lang: {"per_word": str(r), "rule": rule} for lang, (r, rule) in lang_rates.items()
+            }
         if org.regulated and tier in ("auto", "ai_review"):
             entry["available"] = False
             entry["blocked_reason"] = REGULATED_REASON
@@ -216,6 +244,9 @@ def build_quote(
         "by_lang": by_lang,
         "note": "Word counts are summed across target languages.",
     }
+    if price_list is not None or account_id is not None:
+        analysis["price_list_id"] = price_list.id if price_list is not None else None
+        analysis["account_id"] = account_id
     quote = Quote(
         org_id=org.id,
         file_id=file_asset.id,
@@ -225,7 +256,7 @@ def build_quote(
         word_count=word_count,
         tiers=tiers,
         analysis=analysis,
-        currency=get_settings().currency,
+        currency=quote_currency,
         status="open",
         valid_until=utcnow() + timedelta(days=get_settings().quote_validity_days),
     )
@@ -249,6 +280,8 @@ def quote_view(quote: Quote) -> dict[str, Any]:
         "created_at": quote.created_at.isoformat() if quote.created_at else None,
         "analysis": quote.analysis,
         "tiers": quote.tiers,
+        "account_id": (quote.analysis or {}).get("account_id"),
+        "price_list_id": (quote.analysis or {}).get("price_list_id"),
     }
 
 

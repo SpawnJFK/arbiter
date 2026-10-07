@@ -44,7 +44,9 @@ class RegisterIn(BaseModel):
 
 
 class LoginIn(BaseModel):
-    email: EmailStr
+    # Plain str: login must never reject an address that registration or seeding accepted
+    # (EmailStr refuses reserved domains such as the demo accounts' .test).
+    email: str = Field(min_length=3, max_length=320)
     password: str
 
 

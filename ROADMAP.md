@@ -1,5 +1,7 @@
 # Roadmap
 
+Status 2026-10-07: **P0 in progress**. Foundation is built (and many P1/P2 product features ahead of phase); no measurement on a real pair yet, nothing deployed. Details: `memory-bank/progress.md`.
+
 Phases run in order. A phase is done when every exit criterion is met and written down in `memory-bank/progress.md`. Checklists per phase: `docs/phases/`.
 
 | Phase | Goal | Exit criteria (all required) |

@@ -9,6 +9,9 @@ x-api-env: &api-env
   ARBITER_DATABASE_URL: postgresql+psycopg://arbiter:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/arbiter
   ARBITER_STORAGE_DIR: /var/lib/arbiter/storage
   ARBITER_PUBLIC_BASE_URL: https://api.${DOMAIN:?set DOMAIN}
+  ARBITER_CORS_ORIGINS: ${ARBITER_CORS_ORIGINS:-https://app.${DOMAIN}}
+  ARBITER_SELLER_COUNTRY: ${ARBITER_SELLER_COUNTRY:-}
+  ARBITER_VAT_RATE: ${ARBITER_VAT_RATE:-0}
   ARBITER_JWT_SECRET: ${ARBITER_JWT_SECRET:?set ARBITER_JWT_SECRET}
   ARBITER_JWT_TTL_MINUTES: ${ARBITER_JWT_TTL_MINUTES:-720}
   ARBITER_ANTHROPIC_API_KEY: ${ARBITER_ANTHROPIC_API_KEY:-}
@@ -84,13 +87,15 @@ services:
   web:
     build:
       context: ../apps/web
-      dockerfile: ../../deploy/web.Dockerfile
+      dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.${DOMAIN}}
     image: arbiter-web:${ARBITER_IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.${DOMAIN}}
+      # Server-side calls (route handlers, server components) go straight to the api container.
+      API_URL: http://api:8000
     depends_on:
       - api
 

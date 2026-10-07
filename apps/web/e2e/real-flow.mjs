@@ -24,7 +24,7 @@ const PYTHON = process.env.PYTHON ?? path.resolve(here, "../../../services/api/.
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "demo-password-123";
 const SECOND_REVIEWER = process.env.SECOND_REVIEWER ?? "reviewer2@demo.test";
 const SERBIAN_PROMPT =
-  "Mi smo agencija Lingua Pro. Naši klijenti su Acme d.o.o., Beta Pharma i Gamma Soft. Workflow: MT, pa QE, pa revizija, pa druga revizija za farmaciju, i odobrenje klijenta. Cena 0.08 EUR po reči. Hoću dashboard sa prihodom, maržom i poslovima koji kasne.";
+  "Mi smo agencija Primer Prevodi Demo. Naši klijenti su Acme d.o.o., Beta Pharma i Gamma Soft. Workflow: MT, pa QE, pa revizija, pa druga revizija za farmaciju, i odobrenje klijenta. Cena 0.08 EUR po reči. Hoću dashboard sa prihodom, maržom i poslovima koji kasne.";
 const T = 90_000; // generous timeout for pipeline work
 mkdirSync(SHOTS, { recursive: true });
 

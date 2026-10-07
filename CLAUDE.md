@@ -16,19 +16,28 @@ Read this whole file before writing code. Then read `memory-bank/activeContext.m
 services/api/arbiter/
   config.py          Settings, env prefix ARBITER_ (every field = ARBITER_<FIELD>)
   contracts.py       THE seam between modules: dataclasses + Protocols (TermHit, TermViolation, ...)
+  errors.py          ServiceError family (NotFound 404, Forbidden 403, Conflict 409, Invalid 422)
   domain/states.py   state machines (Segment, Job, Task, Payout); only legal path to change state
   models/            SQLAlchemy 2 models: tenancy, content, assets, quality, reviewers, money,
-                     integrations (work_items queue, webhooks, idempotency), provenance
-  dbinit.py          extensions + tables + append-only trigger (used by migration 0001 and tests)
+                     integrations (work_items queue, webhooks, idempotency), provenance, agency
+  dbinit.py          extensions + tables + append-only trigger; metadata_0001 for migration 0001 (D-037)
   fileproc/          FormatHandler per format, registry, segmenter; tagged text ⟦n⟧ model in base.py
-  linguistic/        TM (exact/fuzzy/semantic via pg_trgm + pgvector), glossary, lemma (Snowball)
-  engines/           providers: anthropic, openai, deepl, google, mock; tag handling (tags.py)
-  quality/           hard QA, QE judge, senate, calibration, thresholds
-  pipeline/          worker (python -m arbiter.pipeline.worker) + step handlers on work_items
-  community/         reviewers, tests, task routing, disputes
-  billing/           quotes, usage, invoices, payouts
-  api/               FastAPI app (arbiter.api.app:app), follows docs/api-contract.md exactly
-apps/web/            Next.js 16, App Router, standalone output for Docker
+  linguistic/        tm.py, glossary.py (org-wide versions D-016), lemma.py (Snowball), embeddings.py
+  engines/           anthropic, openai, deepl, google (Basic v2), mock, llm_mt, tags, pricing, registry
+  quality/           checks (hard QA), qe (decide), judge, senate, editor, mqm, calibration, prompts
+  pipeline/          orchestrator (steps), queue (work_items), worker, events, evidence, hooks
+  community/         profiles, testing, queue, review, pay, scoring, disputes, payouts
+  billing/           quotes, pricing, usage, invoices, ledger
+  agency/            Agency OS: crm, pricelists, workflows, dashboards, assistant (+ heuristic), schemas
+  api/               app.py (arbiter.api.app:app), deps.py (auth, roles, paging), security.py
+  api/routes/        auth, files, quotes, projects (+ idempotency helpers), jobs, assets, quality,
+                     integrations, reviewers, admin, crm, pricelists, workflows, dashboards, assistant
+  cli.py             seed-demo, create-admin, calibrate, run-worker
+  storage.py, webhooks.py
+services/api/migrations/versions/   0001_initial, 0002_agency_os (hand-written)
+apps/web/            Next.js 16 App Router: /app (customers), /reviewer, /admin; src/lib (api client,
+                     types), src/app/api/proxy (server proxy, token in httpOnly cookie, D-036), proxy.ts
+apps/web/e2e/        real-flow.mjs (npm run e2e, browser test against a real API + worker)
 deploy/              compose, Caddy, backup.sh, Hetzner guide
 ```
 

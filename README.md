@@ -2,13 +2,25 @@
 
 Arbiter (working name) is an AI-native translation platform sold globally. It merges three things translation teams usually buy separately, and adds a fourth:
 
-1. **Business system** (Plunet-like): quotes, projects, jobs, invoicing, vendor payouts.
+1. **Business system** (Plunet-like): quotes, projects, jobs, invoicing, vendor payouts, plus the Agency OS layer (CRM, client price lists, workflow templates, dashboards).
 2. **CAT/TMS** (Trados/Phrase-like): file formats, translation memory, termbase, MT, QA.
 3. **Reviewer marketplace** (Smartcat-like): reviewers sign up, pass tests, get paid per decision.
 4. **Quality estimation + senate**: independent accuracy, fluency, terminology and consistency judges, with overlap arbitration, decide which segment ships without a human.
 
-Service tiers `auto`, `ai_review`, `hybrid`, `full`; regulated verticals cannot use `auto` or `ai_review`. When no reviewer is available the org's `no_reviewer_policy` (`wait`, `ai_fallback`, `partial`) applies. AI is never silently substituted for a human.
-Every segment carries append-only provenance and an evidence pack (JSON + PDF).
+Service tiers `auto`, `ai_review`, `hybrid`, `full`; regulated verticals cannot use `auto` or `ai_review`. When no reviewer is available the org's `no_reviewer_policy` (`wait`, `ai_fallback`, `partial`) applies. AI is never silently substituted for a human. Every segment carries append-only provenance and an evidence pack (JSON + PDF).
+
+## Features
+
+- **Files**: docx, xlsx, pptx, html, md, json, po, txt, csv, xliff; inline formatting preserved as tagged text; XLIFF 2.1 export.
+- **Linguistic assets**: TM (in-context 101, exact, fuzzy, semantic), TMX import/export with rights confirmation; glossaries with mandatory / preferred / forbidden / do-not-translate terms, versioned and frozen per job; CSV/TBX import/export; term questions.
+- **Engines**: Anthropic, OpenAI, DeepL, Google, mock providers; per-pair scoreboard routing; best-of-N translation senate.
+- **Quality**: hard QA (tags, numbers, glossary), MQM-Core QE judge, review senate, AI editor, calibrated thresholds per org / content type / target language, 2% blind control samples, escaped-error reporting.
+- **Pipeline**: durable Postgres queue and worker, deadline policies, evidence packs, signed webhooks.
+- **Reviewer community**: application, qualification tests, task queue with keyboard cockpit, second review, per-decision pay, reviewer score, disputes, payouts on a double-entry ledger.
+- **Billing**: quotes with TM analysis and per-tier price/ETA, client price lists, usage, monthly invoices.
+- **Agency OS**: CRM (accounts, contacts, deals pipeline, activities), price lists, executable workflow templates (TM, MT, QE, senate, AI review, human review, second review, client approval), dashboards (KPI, charts, pipeline, tables).
+- **AI setup assistant**: describe your agency in plain language; it proposes a plan (workflows, price lists, accounts, dashboards...) that a human reviews and applies.
+- **API**: about 100 endpoints, JWT or API keys, idempotent creates. Contract: [docs/api-contract.md](docs/api-contract.md).
 
 ## Layout
 
@@ -17,16 +29,18 @@ services/api/            Python 3.13, FastAPI, SQLAlchemy 2, Alembic, Postgres 1
   arbiter/contracts.py   seams between modules (change = decision in docs/decisions.md)
   arbiter/domain/        state machines (states.py is the only way to change state)
   arbiter/models/        SQLAlchemy models
-  arbiter/fileproc/      FormatHandler per format: docx xlsx pptx html md json po txt/csv xliff
-  arbiter/linguistic/    TM, glossary, segmentation helpers
-  arbiter/engines/       MT + LLM providers (Anthropic, OpenAI, DeepL, Google, mock)
-  arbiter/quality/       hard QA, QE judge, senate, calibration
-  arbiter/pipeline/      durable Postgres queue + worker
-  arbiter/community/     reviewer onboarding, tests, task routing, disputes
-  arbiter/billing/       quotes, usage, invoices, payouts (Decimal only)
-  arbiter/api/           HTTP layer (contract: docs/api-contract.md)
+  arbiter/fileproc/      FormatHandler per format
+  arbiter/linguistic/    TM, glossary, stemming, embeddings
+  arbiter/engines/       MT + LLM providers
+  arbiter/quality/       hard QA, QE judge, senate, editor, calibration
+  arbiter/pipeline/      orchestrator, durable queue, worker, evidence
+  arbiter/community/     reviewers, tests, task queue, pay, score, disputes, payouts
+  arbiter/billing/       quotes, pricing, usage, invoices, ledger
+  arbiter/agency/        Agency OS: CRM, price lists, workflows, dashboards, assistant
+  arbiter/api/           HTTP layer (routes/*.py)
+  arbiter/cli.py         operator CLI
   migrations/            Alembic
-apps/web/                Next.js 16 (client portal, PM exceptions, reviewer workspace, admin)
+apps/web/                Next.js 16: customers (/app), reviewers (/reviewer), operators (/admin); e2e/
 deploy/                  Docker Compose, Caddy, backups, Hetzner guide
 docs/                    design, decisions, runbook, phases, API contract
 memory-bank/             current state for the next session (human or agent)
@@ -41,22 +55,36 @@ cp .env.example services/api/.env      # dev defaults work as-is, provider keys 
 make install                           # services/api/.venv + web deps
 make dev-db                            # Postgres 16 + pgvector on 127.0.0.1:5432 (dbs arbiter, arbiter_test)
 make migrate
-make api                               # http://localhost:8000/healthz
+cd services/api && .venv/bin/python -m arbiter.cli seed-demo && cd -   # fictional demo data
+make api                               # http://localhost:8000/healthz, docs at /docs
 make worker                            # second terminal
 make web                               # http://localhost:3000
 ```
 
-Without provider keys everything runs on the mock providers (`mock-mt`, `mock-llm`).
+Demo logins after `seed-demo` (all fictional, password `demo-password-123`):
+
+| Email | Role |
+|---|---|
+| pm@demo.test | project manager (customer org) |
+| client@demo.test | client user (no money fields) |
+| reviewer@demo.test | reviewer |
+| reviewer2@demo.test | senior reviewer (needed for second review) |
+| admin@demo.test | platform operator |
+
+Without provider keys everything runs on the mock providers (`mock-mt`, `mock-llm`); the assistant then uses its built-in heuristic planner. The web app can also run with no backend at all: `cd apps/web && npm run dev:mock`.
+
+Operator CLI (`python -m arbiter.cli ...` in services/api): `seed-demo`, `create-admin`, `calibrate`, `run-worker`.
 
 ## Tests and lint
 
 ```bash
-make test     # pytest against arbiter_test; never calls a real provider
+make test     # 432 backend tests against arbiter_test; never calls a real provider
 make lint     # ruff check + ruff format --check, eslint + tsc
 make fmt
+cd apps/web && npm run e2e   # browser end-to-end against a running API + worker (see apps/web/README.md)
 ```
 
-CI (`.github/workflows/ci.yml`) runs the same checks plus Docker builds of both images.
+CI (`.github/workflows/ci.yml`) runs lint, tests, web build and Docker builds of both images.
 
 ## Deploy
 
@@ -65,8 +93,9 @@ Single Hetzner host in the EU with Docker Compose and Caddy. Step by step: [depl
 ## More
 
 - [docs/DESIGN.md](docs/DESIGN.md) system design
-- [docs/decisions.md](docs/decisions.md) architecture decision log
+- [docs/decisions.md](docs/decisions.md) architecture decision log (D-001..D-044)
 - [ROADMAP.md](ROADMAP.md) phases P0-P6 and exit criteria
+- [memory-bank/progress.md](memory-bank/progress.md) what exists, what is missing, known limitations
 - [CLAUDE.md](CLAUDE.md) rules for AI coding agents working in this repo
 
 Proprietary. See [LICENSE](LICENSE).

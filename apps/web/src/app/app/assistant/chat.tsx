@@ -17,7 +17,7 @@ import type { ApplyResult, AssistantMessage, AssistantThread, PlanAction } from 
 const EXAMPLES = [
   {
     label: "Set up an agency (Serbian)",
-    text: "Mi smo agencija Lingua Pro. Naši klijenti su Acme d.o.o., Beta Pharma i Gamma Soft. Workflow: MT, pa QE, pa revizija, pa druga revizija za farmaciju, i odobrenje klijenta. Cena 0.08 EUR po reči. Hoću dashboard sa prihodom, maržom i poslovima koji kasne.",
+    text: "Mi smo agencija Primer Prevodi Demo. Naši klijenti su Acme d.o.o., Beta Pharma i Gamma Soft. Workflow: MT, pa QE, pa revizija, pa druga revizija za farmaciju, i odobrenje klijenta. Cena 0.08 EUR po reči. Hoću dashboard sa prihodom, maržom i poslovima koji kasne.",
   },
   {
     label: "Set up a software localization team",

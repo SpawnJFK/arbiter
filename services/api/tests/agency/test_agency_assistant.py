@@ -14,12 +14,12 @@ from arbiter.engines.mock import ScriptedLlm
 from arbiter.models import CrmAccount, Dashboard, PriceList, WorkflowTemplate, utcnow
 
 SR = (
-    "Mi smo agencija Lingua Pro. Naši klijenti su Acme d.o.o., Beta Pharma i Gamma Soft. "
+    "Mi smo agencija Primer Prevodi Demo. Naši klijenti su Acme d.o.o., Beta Pharma i Gamma Soft. "
     "Workflow: MT, pa QE, pa revizija, pa druga revizija za farmaciju, i odobrenje klijenta. "
     "Cena 0.08 EUR po reči. Hoću dashboard sa prihodom, maržom i poslovima koji kasne."
 )
 EN = (
-    "We are a translation agency called Lingua Pro. Our clients are Acme Ltd, Beta Pharma and Gamma Soft. "
+    "We are a translation agency called Primer Prevodi Demo. Our clients are Acme Ltd, Beta Pharma and Gamma Soft. "
     "Our workflow: MT, then QE, then review, then a second review, and client approval. "
     "We charge 8 cents per word. I want a dashboard with revenue, margin and overdue jobs."
 )
@@ -67,7 +67,7 @@ def test_serbian_description_plan_apply_all_and_twice(db):
     thread_id, msg = _ask(c, h, SR)
     plan = msg["plan"]
     types = [a["type"] for a in plan]
-    assert types[0] == "update_org" and plan[0]["data"]["name"] == "Lingua Pro"
+    assert types[0] == "update_org" and plan[0]["data"]["name"] == "Primer Prevodi Demo"
     workflows = [a for a in plan if a["type"] == "create_workflow"]
     assert ["tm", "mt", "qe", "human_review", "second_review", "client_review", "delivery"] in [
         _kinds(w) for w in workflows
@@ -89,7 +89,7 @@ def test_serbian_description_plan_apply_all_and_twice(db):
     results = _apply(c, h, msg["id"])
     assert [r["ok"] for r in results] == [True] * len(plan), results
     db.expire_all()
-    assert org_of(db).name == "Lingua Pro" and org_of(db).vertical == "translation_agency"
+    assert org_of(db).name == "Primer Prevodi Demo" and org_of(db).vertical == "translation_agency"
     assert _counts(db, org.id) == {"accounts": 3, "price_lists": 1, "workflows": 2, "dashboards": 1}
     accs = {a["name"]: a for a in c.get("/v1/crm/accounts", headers=h).json()["items"]}
     wfs = {w["id"]: w for w in c.get("/v1/workflows", headers=h).json()["items"]}
@@ -112,7 +112,7 @@ def test_serbian_description_plan_apply_all_and_twice(db):
     thread = c.get(f"/v1/assistant/threads/{thread_id}", headers=h).json()
     assert [m["role"] for m in thread["messages"]] == ["user", "assistant"]
     assert thread["messages"][1]["applied"] == list(range(len(plan)))
-    assert thread["title"].startswith("Mi smo agencija Lingua Pro")
+    assert thread["title"].startswith("Mi smo agencija Primer Prevodi Demo")
 
     # the same description in a new thread does not duplicate objects (matched by name)
     _, msg2 = _ask(c, h, SR)
@@ -139,7 +139,7 @@ def test_apply_subset_only_creates_those(db):
     assert len(results[0]["warnings"]) == 2  # workflow and price list links skipped (not applied)
     org = org_of(db)
     assert _counts(db, org.id) == {"accounts": 1, "price_lists": 0, "workflows": 0, "dashboards": 0}
-    assert org.name != "Lingua Pro"
+    assert org.name != "Primer Prevodi Demo"
     acc = c.get(f"/v1/crm/accounts/{results[0]['id']}", headers=h).json()
     assert acc["price_list_id"] is None and acc["workflow_template_id"] is None
     # a later apply of the rest links new objects; the applied index is skipped
@@ -155,7 +155,7 @@ def test_english_variant(db):
     h = register(c)
     _, msg = _ask(c, h, EN)
     plan = msg["plan"]
-    assert plan[0]["type"] == "update_org" and plan[0]["data"]["name"] == "Lingua Pro"
+    assert plan[0]["type"] == "update_org" and plan[0]["data"]["name"] == "Primer Prevodi Demo"
     wf = [a for a in plan if a["type"] == "create_workflow"]
     assert len(wf) == 1
     assert _kinds(wf[0]) == ["tm", "mt", "qe", "human_review", "second_review", "client_review", "delivery"]

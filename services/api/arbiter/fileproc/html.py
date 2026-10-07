@@ -33,9 +33,37 @@ from arbiter.fileproc.text import (
 )
 
 INLINE = {
-    "b", "strong", "i", "em", "u", "a", "span", "code", "sup", "sub", "small", "mark", "abbr", "kbd",
-    "s", "strike", "q", "cite", "dfn", "var", "samp", "font", "label", "time", "bdi", "bdo", "big", "tt",
-    "ins", "del", "data",
+    "b",
+    "strong",
+    "i",
+    "em",
+    "u",
+    "a",
+    "span",
+    "code",
+    "sup",
+    "sub",
+    "small",
+    "mark",
+    "abbr",
+    "kbd",
+    "s",
+    "strike",
+    "q",
+    "cite",
+    "dfn",
+    "var",
+    "samp",
+    "font",
+    "label",
+    "time",
+    "bdi",
+    "bdo",
+    "big",
+    "tt",
+    "ins",
+    "del",
+    "data",
 }
 VOID = {"br", "img", "input", "wbr"}
 # Embedded content that sits inside running text but is not text itself: kept whole as a standalone code.
@@ -82,7 +110,7 @@ def _is_inline(el: etree._Element) -> bool:
 
 def start_tag(el: etree._Element) -> str:
     attrs = "".join(
-        f' {k}' if v is None else f' {k}="{html_lib.escape(v, quote=True)}"' for k, v in el.attrib.items()
+        f" {k}" if v is None else f' {k}="{html_lib.escape(v, quote=True)}"' for k, v in el.attrib.items()
     )
     return f"<{el.tag}{attrs}>"
 
@@ -127,9 +155,17 @@ class _Builder:
             return
         tag = _tag(el)
         names: list[str] = [a for a in ATTRS if el.get(a)]
-        if tag == "meta" and (el.get("name") or el.get("property") or "").lower() in META_NAMES and el.get("content"):
+        if (
+            tag == "meta"
+            and (el.get("name") or el.get("property") or "").lower() in META_NAMES
+            and el.get("content")
+        ):
             names.append("content")
-        if tag == "input" and (el.get("type") or "").lower() in ("submit", "button", "reset") and el.get("value"):
+        if (
+            tag == "input"
+            and (el.get("type") or "").lower() in ("submit", "button", "reset")
+            and el.get("value")
+        ):
             names.append("value")
         for name in names:
             uid = f"{self.path(el)}@{name}"
@@ -342,4 +378,3 @@ class HtmlHandler:
                 lxml.html.tostring(c, encoding="unicode", with_tail=True) for c in root
             )
         return decoded.encode(out)
-

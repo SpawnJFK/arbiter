@@ -71,8 +71,17 @@ PLURAL_FORMS: dict[str, str] = {
 DEFAULT_PLURAL_FORMS = "nplurals=2; plural=(n != 1);"
 
 _ESCAPES = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\", "a": "\a", "b": "\b", "f": "\f", "v": "\v"}
-_REVERSE = {"\\": "\\\\", '"': '\\"', "\n": "\\n", "\t": "\\t", "\r": "\\r", "\a": "\\a", "\b": "\\b",
-            "\f": "\\f", "\v": "\\v"}
+_REVERSE = {
+    "\\": "\\\\",
+    '"': '\\"',
+    "\n": "\\n",
+    "\t": "\\t",
+    "\r": "\\r",
+    "\a": "\\a",
+    "\b": "\\b",
+    "\f": "\\f",
+    "\v": "\\v",
+}
 
 
 def unquote(token: str) -> str:
@@ -218,7 +227,7 @@ def _split_ws(value: str) -> tuple[str, str, str]:
     if not core:
         return value, "", ""
     lead = value[: len(value) - len(value.lstrip())]
-    trail = value[len(value.rstrip()):]
+    trail = value[len(value.rstrip()) :]
     return lead, core, trail
 
 
@@ -333,7 +342,10 @@ class PoHandler:
             new_header = self._header_text(header.msgstr.get(0, ""), target_lang)
             if new_header != header.msgstr.get(0, ""):
                 eol = lines[header.msgstr_lines[0]][2] or "\n"
-                replace[header.msgstr_lines[0]] = (header.msgstr_lines[1], format_field("msgstr", new_header, eol))
+                replace[header.msgstr_lines[0]] = (
+                    header.msgstr_lines[1],
+                    format_field("msgstr", new_header, eol),
+                )
         out: list[str] = []
         ln = 0
         while ln < len(lines):
@@ -354,8 +366,9 @@ class PoHandler:
             return merged.encode("utf-8")
 
     @staticmethod
-    def _unfuzzy(e: _Entry, lines: list[tuple[int, str, str]], replace: dict[int, tuple[int, str]],
-                 drop: set[int]) -> None:
+    def _unfuzzy(
+        e: _Entry, lines: list[tuple[int, str, str]], replace: dict[int, tuple[int, str]], drop: set[int]
+    ) -> None:
         for ln, c in e.comments:
             if c.startswith("#,"):
                 flags = [f for f in (x.strip() for x in c[2:].split(",")) if f and f != "fuzzy"]
@@ -388,4 +401,3 @@ class PoHandler:
 def _plural_forms(lang: str) -> str:
     key = lang.lower().replace("_", "-")
     return PLURAL_FORMS.get(key) or PLURAL_FORMS.get(key.split("-")[0]) or DEFAULT_PLURAL_FORMS
-

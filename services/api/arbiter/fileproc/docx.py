@@ -47,7 +47,9 @@ def _w(name: str) -> str:
 
 
 TRACKED = (_w("ins"), _w("del"), _w("moveFrom"), _w("moveTo"), _w("cellIns"), _w("cellDel"))
-TRACKED_MESSAGE = "This document contains tracked changes. Accept or reject all changes in Word and upload it again."
+TRACKED_MESSAGE = (
+    "This document contains tracked changes. Accept or reject all changes in Word and upload it again."
+)
 
 _DROP = {"proofErr", "lastRenderedPageBreak"}
 
@@ -90,8 +92,14 @@ _PARA_CODE_DISPLAY = {
 
 # Inline wrappers whose runs we translate; value is the child holding the content.
 _CONTAINERS = {"hyperlink": "", "smartTag": "", "customXml": "", "sdt": "sdtContent", "dir": "", "bdo": ""}
-_CONTAINER_DISPLAY = {"hyperlink": "link", "smartTag": "smart tag", "customXml": "custom XML",
-                      "sdt": "content control", "dir": "direction", "bdo": "direction"}
+_CONTAINER_DISPLAY = {
+    "hyperlink": "link",
+    "smartTag": "smart tag",
+    "customXml": "custom XML",
+    "sdt": "content control",
+    "dir": "direction",
+    "bdo": "direction",
+}
 
 
 def _rpr_key(rpr: etree._Element | None) -> str:
@@ -184,8 +192,12 @@ class _Walker:
         self._walk([c for c in p if c.tag != _w("pPr")], items)
         return items
 
-    def _field_add(self, items: list[Item], atom: etree._Element | tuple[etree._Element, etree._Element],
-                   instr_source: etree._Element | None = None) -> None:
+    def _field_add(
+        self,
+        items: list[Item],
+        atom: etree._Element | tuple[etree._Element, etree._Element],
+        instr_source: etree._Element | None = None,
+    ) -> None:
         st = self.state
         if st.code is None:
             st.code = CodeItem([], "field")
@@ -284,14 +296,19 @@ class DocxHandler:
     def _parts(self, pkg: Package) -> list[tuple[str, str]]:
         main = pkg.main_part("/officeDocument")
         parts = [(main, "body")]
-        for suffix, kind in (("/header", "header"), ("/footer", "footer"),
-                             ("/footnotes", "footnote"), ("/endnotes", "endnote")):
+        for suffix, kind in (
+            ("/header", "header"),
+            ("/footer", "footer"),
+            ("/footnotes", "footnote"),
+            ("/endnotes", "endnote"),
+        ):
             for part in sorted(pkg.related(main, suffix), key=_natural):
                 parts.append((part, kind))
         return parts
 
-    def _walk_part(self, tree: etree._ElementTree, part: str, kind: str, lang: str,
-                   warnings: list[str]) -> list[_Para]:
+    def _walk_part(
+        self, tree: etree._ElementTree, part: str, kind: str, lang: str, warnings: list[str]
+    ) -> list[_Para]:
         root = tree.getroot()
         if any(True for _ in root.iter(*TRACKED)):
             raise FormatError(TRACKED_MESSAGE)

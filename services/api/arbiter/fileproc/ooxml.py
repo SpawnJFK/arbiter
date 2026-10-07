@@ -312,13 +312,17 @@ def build_paragraph_model(items: list[Item], dialect: Dialect) -> ParagraphModel
                         assert isinstance(x, CodeItem)
                         sid = new_id()
                         codes[sid] = StandaloneSpec(x.atoms)
-                        out.append(InlineCode(sid, "standalone", "".join(atom_markup(a) for a in x.atoms), x.display))
+                        out.append(
+                            InlineCode(sid, "standalone", "".join(atom_markup(a) for a in x.atoms), x.display)
+                        )
                 out.append(InlineCode(cid, "close", "", disp))
                 i = last + 1
             elif isinstance(it, CodeItem):
                 sid = new_id()
                 codes[sid] = StandaloneSpec(it.atoms)
-                out.append(InlineCode(sid, "standalone", "".join(atom_markup(a) for a in it.atoms), it.display))
+                out.append(
+                    InlineCode(sid, "standalone", "".join(atom_markup(a) for a in it.atoms), it.display)
+                )
                 i += 1
             else:
                 cid = new_id()
@@ -328,7 +332,14 @@ def build_paragraph_model(items: list[Item], dialect: Dialect) -> ParagraphModel
                 inner, inner_base = level(it.items)
                 spec.base_rpr = inner_base
                 out.extend(inner)
-                out.append(InlineCode(cid, "close", f"</{it.elem.prefix + ':' if it.elem.prefix else ''}{local(it.elem)}>", it.display))
+                out.append(
+                    InlineCode(
+                        cid,
+                        "close",
+                        f"</{it.elem.prefix + ':' if it.elem.prefix else ''}{local(it.elem)}>",
+                        it.display,
+                    )
+                )
                 i += 1
         return out, base_rpr
 
@@ -438,7 +449,9 @@ def render_paragraph(
             continue
         spec = model.codes.get(item.id)
         if spec is None:
-            raise FormatError(f"The translation of unit {unit_id} contains inline code {item.id} which is not in the source.")
+            raise FormatError(
+                f"The translation of unit {unit_id} contains inline code {item.id} which is not in the source."
+            )
         if item.kind == "standalone":
             assert isinstance(spec, StandaloneSpec)
             parent, _ = current()

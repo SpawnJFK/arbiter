@@ -60,9 +60,20 @@ def _describe(rpr: etree._Element | None) -> str:
     if rpr is None:
         return "plain"
     names = {c.tag.rsplit("}", 1)[-1] for c in rpr if isinstance(c.tag, str)}
-    parts = [label for tag, label in (("b", "bold"), ("i", "italic"), ("u", "underline"),
-                                      ("strike", "strikethrough"), ("vertAlign", "position"),
-                                      ("color", "color"), ("rFont", "font"), ("sz", "size")) if tag in names]
+    parts = [
+        label
+        for tag, label in (
+            ("b", "bold"),
+            ("i", "italic"),
+            ("u", "underline"),
+            ("strike", "strikethrough"),
+            ("vertAlign", "position"),
+            ("color", "color"),
+            ("rFont", "font"),
+            ("sz", "size"),
+        )
+        if tag in names
+    ]
     return "+".join(parts[:3]) if parts else "format"
 
 
@@ -85,7 +96,9 @@ def _items(si: etree._Element) -> list[Item]:
         elif child.tag == _s("r"):
             rpr = child.find(_s("rPr"))
             t = child.find(_s("t"))
-            items.append(TextItem(decode_x((t.text or "") if t is not None else ""), rpr, DIALECT.rpr_key(rpr)))
+            items.append(
+                TextItem(decode_x((t.text or "") if t is not None else ""), rpr, DIALECT.rpr_key(rpr))
+            )
     return items
 
 

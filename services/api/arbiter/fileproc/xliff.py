@@ -214,7 +214,9 @@ def _render(target: etree._Element, content: Content, codes: dict[str, _CodeRef]
         key = item.id + "/close" if item.kind == "close" and item.id + "/close" in codes else item.id
         ref = codes.get(key)
         if ref is None:
-            raise FormatError(f"The translation of unit {unit_id} contains inline code {item.id} which is not in the source.")
+            raise FormatError(
+                f"The translation of unit {unit_id} contains inline code {item.id} which is not in the source."
+            )
         if ref.mode == "container":
             if item.kind == "open":
                 el = etree.SubElement(cur, ref.elem.tag, attrib=dict(ref.elem.attrib))
@@ -254,7 +256,11 @@ class XliffHandler:
                 context = tu.get("resname") or ""
                 conv = _Converter(1)
                 seg_source = tu.find(_q(X12, "seg-source"))
-                mrks = [m for m in seg_source.iter(_q(X12, "mrk")) if m.get("mtype") == "seg"] if seg_source is not None else []
+                mrks = (
+                    [m for m in seg_source.iter(_q(X12, "mrk")) if m.get("mtype") == "seg"]
+                    if seg_source is not None
+                    else []
+                )
                 if mrks:
                     assert seg_source is not None
                     segs: list[_Seg] = []
@@ -262,20 +268,36 @@ class XliffHandler:
                     for m in mrks:
                         content, codes = conv.segment(m)
                         segs.append(_Seg(m, codes, content))
-                        drafts.append(SegmentDraft(content=content, trailing_ws=(m.tail or "") if not (m.tail or "").strip() else ""))
+                        drafts.append(
+                            SegmentDraft(
+                                content=content,
+                                trailing_ws=(m.tail or "") if not (m.tail or "").strip() else "",
+                            )
+                        )
                     if not any(has_text(s.content) for s in segs):
                         continue
-                    unit = ExtractedUnit(uid, drafts, context=context, notes=notes,
-                                         max_length=int(max_len) if max_len and max_len.isdigit() else None,
-                                         leading_ws=seg_source.text if seg_source.text and not seg_source.text.strip() else "")
+                    unit = ExtractedUnit(
+                        uid,
+                        drafts,
+                        context=context,
+                        notes=notes,
+                        max_length=int(max_len) if max_len and max_len.isdigit() else None,
+                        leading_ws=seg_source.text if seg_source.text and not seg_source.text.strip() else "",
+                    )
                     out.append(_Unit(uid, tu, 1, segs, False, unit, seg_source, mrks))
                     continue
                 source = tu.find(_q(X12, "source"))
                 if source is None:
                     continue
                 content, codes = conv.segment(source)
-                built = make_unit(uid, content, lang, context=context, notes=notes,
-                                  max_length=int(max_len) if max_len and max_len.isdigit() else None)
+                built = make_unit(
+                    uid,
+                    content,
+                    lang,
+                    context=context,
+                    notes=notes,
+                    max_length=int(max_len) if max_len and max_len.isdigit() else None,
+                )
                 if built is None:
                     continue
                 out.append(_Unit(uid, tu, 1, [_Seg(source, codes, content)], True, built))
@@ -310,7 +332,9 @@ class XliffHandler:
                             leading += ws
                 if not segs or not any(has_text(s.content) for s in segs):
                     continue
-                unit = ExtractedUnit(uid, drafts, context=u.get("name") or "", notes=notes, leading_ws=leading)
+                unit = ExtractedUnit(
+                    uid, drafts, context=u.get("name") or "", notes=notes, leading_ws=leading
+                )
                 out.append(_Unit(uid, u, 2, segs, False, unit))
         return out
 
@@ -429,8 +453,9 @@ def _export_content(parent: etree._Element, content: Content, unit_id: str) -> N
                 el.set("disp", disp)
             last = el
         elif item.kind == "open" and item.id in matched:
-            el = etree.SubElement(cur, _q(X2, "pc"), id=item.id, dataRefStart=f"d{item.id}s",
-                                  dataRefEnd=f"d{item.id}e")
+            el = etree.SubElement(
+                cur, _q(X2, "pc"), id=item.id, dataRefStart=f"d{item.id}s", dataRefEnd=f"d{item.id}e"
+            )
             if disp:
                 el.set("dispStart", disp)
             stack.append(cur)
@@ -463,8 +488,9 @@ def export_xliff21(
     Unit ids in XLIFF must be NMTOKENs, which our unit ids (paths, pointers) are not, so
     units get ids u1, u2, ... and carry the real unit id in the name attribute.
     """
-    root = etree.Element(_q(X2, "xliff"), nsmap={None: X2}, version="2.1", srcLang=source_lang,
-                         trgLang=target_lang)
+    root = etree.Element(
+        _q(X2, "xliff"), nsmap={None: X2}, version="2.1", srcLang=source_lang, trgLang=target_lang
+    )
     file_el = etree.SubElement(root, _q(X2, "file"), id="f1", original=original_name)
     for n, unit in enumerate(result.units, start=1):
         u = etree.SubElement(file_el, _q(X2, "unit"), id=f"u{n}", name=unit.unit_id)
@@ -528,20 +554,50 @@ def _import_content(el: etree._Element, data: dict[str, str], version: int) -> C
                 if version == 2:
                     if name == "pc":
                         cid = child.get("id", "")
-                        out.append(InlineCode(cid, "open", data.get(child.get("dataRefStart", ""), ""),
-                                              child.get("dispStart", "")))
+                        out.append(
+                            InlineCode(
+                                cid,
+                                "open",
+                                data.get(child.get("dataRefStart", ""), ""),
+                                child.get("dispStart", ""),
+                            )
+                        )
                         walk(child)
-                        out.append(InlineCode(cid, "close", data.get(child.get("dataRefEnd", ""), ""),
-                                              child.get("dispStart", "")))
+                        out.append(
+                            InlineCode(
+                                cid,
+                                "close",
+                                data.get(child.get("dataRefEnd", ""), ""),
+                                child.get("dispStart", ""),
+                            )
+                        )
                     elif name == "ph":
-                        out.append(InlineCode(child.get("id", ""), "standalone",
-                                              data.get(child.get("dataRef", ""), ""), child.get("disp", "")))
+                        out.append(
+                            InlineCode(
+                                child.get("id", ""),
+                                "standalone",
+                                data.get(child.get("dataRef", ""), ""),
+                                child.get("disp", ""),
+                            )
+                        )
                     elif name == "sc":
-                        out.append(InlineCode(child.get("id", ""), "open", data.get(child.get("dataRef", ""), ""),
-                                              child.get("disp", "")))
+                        out.append(
+                            InlineCode(
+                                child.get("id", ""),
+                                "open",
+                                data.get(child.get("dataRef", ""), ""),
+                                child.get("disp", ""),
+                            )
+                        )
                     elif name == "ec":
-                        out.append(InlineCode(child.get("startRef") or child.get("id", ""), "close",
-                                              data.get(child.get("dataRef", ""), ""), child.get("disp", "")))
+                        out.append(
+                            InlineCode(
+                                child.get("startRef") or child.get("id", ""),
+                                "close",
+                                data.get(child.get("dataRef", ""), ""),
+                                child.get("disp", ""),
+                            )
+                        )
                     elif name == "cp":
                         out.append(chr(int(child.get("hex", "0"), 16)))
                     elif name in ("mrk", "sm", "em"):
@@ -557,9 +613,17 @@ def _import_content(el: etree._Element, data: dict[str, str], version: int) -> C
                     elif name in ("x", "ph", "it"):
                         out.append(InlineCode(child.get("id", ""), "standalone", element_markup(child), name))
                     elif name in ("bx", "bpt"):
-                        out.append(InlineCode(child.get("rid") or child.get("id", ""), "open", element_markup(child), name))
+                        out.append(
+                            InlineCode(
+                                child.get("rid") or child.get("id", ""), "open", element_markup(child), name
+                            )
+                        )
                     elif name in ("ex", "ept"):
-                        out.append(InlineCode(child.get("rid") or child.get("id", ""), "close", element_markup(child), name))
+                        out.append(
+                            InlineCode(
+                                child.get("rid") or child.get("id", ""), "close", element_markup(child), name
+                            )
+                        )
                     else:
                         walk(child)
             if child.tail:

@@ -149,8 +149,11 @@ class _Inline:
                         inner = self._build(self._tokens(s[start + 1 : close]))
                         cid = self.code_id()
                         label = "image" if opener == "![" else "link"
-                        node: Content = [InlineCode(cid, "open", opener, label), *inner,
-                                         InlineCode(cid, "close", s[close : end + 1], label)]
+                        node: Content = [
+                            InlineCode(cid, "open", opener, label),
+                            *inner,
+                            InlineCode(cid, "close", s[close : end + 1], label),
+                        ]
                         toks.append(_Tok("node", node=node))
                         i = end + 1
                         continue
@@ -288,9 +291,15 @@ def parse_inline(text: str) -> Content:
 
 def _block_start(body: str) -> bool:
     return bool(
-        _FENCE.match(body) or _ATX.match(body) or _ATX_EMPTY.match(body) or _QUOTE.match(body)
-        or _LIST.match(body) or _RULE.match(body) or _REFDEF.match(body)
-        or body.lstrip().startswith("|") or body.lstrip().startswith("<!--")
+        _FENCE.match(body)
+        or _ATX.match(body)
+        or _ATX_EMPTY.match(body)
+        or _QUOTE.match(body)
+        or _LIST.match(body)
+        or _RULE.match(body)
+        or _REFDEF.match(body)
+        or body.lstrip().startswith("|")
+        or body.lstrip().startswith("<!--")
     )
 
 
@@ -419,7 +428,12 @@ class MarkdownHandler:
                 inner = body[prefix_len:]
                 hm = _ATX.match(inner)
                 if hm:
-                    add(uid, off + prefix_len + hm.start(3), off + prefix_len + hm.start(3) + len(hm.group(3)), "heading")
+                    add(
+                        uid,
+                        off + prefix_len + hm.start(3),
+                        off + prefix_len + hm.start(3) + len(hm.group(3)),
+                        "heading",
+                    )
                     i += 1
                     prev_blank = False
                     continue
@@ -441,8 +455,11 @@ class MarkdownHandler:
             start = off + prefix_len
             end = off + len(body)
             i += 1
-            while i < n and lines[i][1].strip() and not _block_start(lines[i][1]) and not (
-                "|" in lines[i][1] and i + 1 < n and _TABLE_DELIM.match(lines[i + 1][1])
+            while (
+                i < n
+                and lines[i][1].strip()
+                and not _block_start(lines[i][1])
+                and not ("|" in lines[i][1] and i + 1 < n and _TABLE_DELIM.match(lines[i + 1][1]))
             ):
                 end = lines[i][0] + len(lines[i][1])
                 i += 1
@@ -452,7 +469,9 @@ class MarkdownHandler:
 
     def extract(self, data: bytes, source_lang: str) -> ExtractionResult:
         decoded = decode_text(data)
-        return ExtractionResult(self.name, source_lang, [s.unit for s in self._spans(decoded.text, source_lang)])
+        return ExtractionResult(
+            self.name, source_lang, [s.unit for s in self._spans(decoded.text, source_lang)]
+        )
 
     def merge(self, original: bytes, targets: TargetMap, target_lang: str) -> bytes:
         decoded = decode_text(original)

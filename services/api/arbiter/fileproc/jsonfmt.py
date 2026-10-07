@@ -34,7 +34,9 @@ from arbiter.fileproc.text import (
 _STRING = re.compile(r'"(?:[^"\\\x00-\x1f]|\\.)*"', re.S)
 _SCALAR = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null")
 _WS = " \t\r\n"
-_SKIP_VALUE = re.compile(r"^(?:https?://\S+|[\w.+-]+@[\w-]+\.[\w.-]+|#[0-9a-fA-F]{3,8}|[\w./-]+\.(?:png|jpe?g|gif|svg|webp|css|js|json|html?))$")
+_SKIP_VALUE = re.compile(
+    r"^(?:https?://\S+|[\w.+-]+@[\w-]+\.[\w.-]+|#[0-9a-fA-F]{3,8}|[\w./-]+\.(?:png|jpe?g|gif|svg|webp|css|js|json|html?))$"
+)
 _ICU_HEAD = re.compile(r"\{\s*([A-Za-z0-9_]+)\s*,\s*(plural|selectordinal|select)\s*,")
 _ICU_OFFSET = re.compile(r"\s*offset\s*:\s*\d+")
 _ICU_SELECTOR = re.compile(r"(\s*)(=\d+|[A-Za-z0-9_-]+)(\s*)\{")
@@ -234,8 +236,9 @@ class JsonHandler:
         for tok in scanner.found:
             if _SKIP_VALUE.match(tok.value.strip()):
                 continue
-            unit = make_unit(tok.pointer, message_content(tok.value), lang, segment=False,
-                             context=f"key:{tok.pointer}")
+            unit = make_unit(
+                tok.pointer, message_content(tok.value), lang, segment=False, context=f"key:{tok.pointer}"
+            )
             if unit is None:
                 continue
 
@@ -258,5 +261,3 @@ class JsonHandler:
             return original
         json.loads(merged)  # never hand back invalid JSON
         return decoded.encode(merged)
-
-

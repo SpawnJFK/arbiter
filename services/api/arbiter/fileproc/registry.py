@@ -84,8 +84,17 @@ def detect_and_extract(filename: str, data: bytes, source_lang: str) -> Extracti
         result = handler.extract(data, source_lang)
     except FormatError:
         raise
-    except (ValueError, KeyError, IndexError, UnicodeError, RecursionError, OSError, AssertionError,
-            zipfile.BadZipFile, etree.LxmlError):
+    except (
+        ValueError,
+        KeyError,
+        IndexError,
+        UnicodeError,
+        RecursionError,
+        OSError,
+        AssertionError,
+        zipfile.BadZipFile,
+        etree.LxmlError,
+    ):
         raise FormatError(
             f"The file could not be read. It may be damaged or not a valid {handler.name.upper()} file."
         ) from None

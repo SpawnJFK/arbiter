@@ -122,7 +122,7 @@ def make_unit(
             core.pop(0)
     if core and isinstance(core[-1], str):
         stripped = core[-1].rstrip()
-        trail = core[-1][len(stripped):]
+        trail = core[-1][len(stripped) :]
         if stripped:
             core[-1] = stripped
         else:
@@ -246,8 +246,9 @@ def refit(unit: ExtractedUnit, n_segments: int) -> ExtractedUnit:
         return unit
     raw = unit_source(unit)
     for lang in _SEG_LANGS:
-        cand = make_unit(unit.unit_id, raw, lang, context=unit.context, notes=unit.notes,
-                         max_length=unit.max_length)
+        cand = make_unit(
+            unit.unit_id, raw, lang, context=unit.context, notes=unit.notes, max_length=unit.max_length
+        )
         if cand is not None and len(cand.segments) == n_segments:
             return cand
     raise FormatError(
@@ -293,7 +294,9 @@ PLACEHOLDER_RE = re.compile(
 )
 
 
-def placeholder_content(text: str, ids: Iterable[int] | None = None, pattern: re.Pattern[str] = PLACEHOLDER_RE) -> Content:
+def placeholder_content(
+    text: str, ids: Iterable[int] | None = None, pattern: re.Pattern[str] = PLACEHOLDER_RE
+) -> Content:
     """Split text into strings and standalone codes for every placeholder match."""
     counter = iter(ids) if ids is not None else count(1)
     out: Content = []
@@ -343,7 +346,7 @@ def decode_text(data: bytes, declared: str | None = None) -> DecodedText:
     for bom, enc in _BOMS:
         if data.startswith(bom):
             try:
-                return DecodedText(data[len(bom):].decode(enc), enc, bom)
+                return DecodedText(data[len(bom) :].decode(enc), enc, bom)
             except UnicodeDecodeError:
                 raise FormatError("The file's text encoding could not be read.") from None
     candidates = [declared] if declared else []
@@ -408,7 +411,7 @@ def iter_lines(text: str) -> list[tuple[int, str, str]]:
         if not raw:
             break
         body = raw.rstrip("\r\n")
-        out.append((pos, body, raw[len(body):]))
+        out.append((pos, body, raw[len(body) :]))
         pos = m.end()
     return out
 
@@ -497,7 +500,7 @@ class CsvHandler:
     def _delimiter(self, text: str) -> str:
         if self.delimiter:
             return self.delimiter
-        sample = text[:64 * 1024]
+        sample = text[: 64 * 1024]
         try:
             return csv.Sniffer().sniff(sample, delimiters=",;\t|").delimiter
         except csv.Error:
@@ -561,7 +564,11 @@ class CsvHandler:
             expected = [r for r in reader]
         except csv.Error:
             raise FormatError("The CSV file could not be read.") from None
-        got = [[c.value for c in row] for row in rows if row != [] and not (len(row) == 1 and row[0].start == row[0].end and not row[0].quoted)]
+        got = [
+            [c.value for c in row]
+            for row in rows
+            if row != [] and not (len(row) == 1 and row[0].start == row[0].end and not row[0].quoted)
+        ]
         exp = [r for r in expected if r]
         if got != exp:
             raise FormatError("The CSV file has an irregular structure that cannot be translated safely.")

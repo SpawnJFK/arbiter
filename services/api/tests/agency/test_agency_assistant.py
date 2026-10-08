@@ -397,3 +397,11 @@ def test_heuristic_answers_in_english_with_a_note_for_other_locales(db):
         json={"content": "x", "locale": "not a locale"},
     )
     assert r.status_code == 422
+
+
+def test_heuristic_short_we_are_sentence_sets_org_name():
+    from arbiter.agency.heuristic import heuristic_plan
+
+    _, plan = heuristic_plan("We are Northwind Language Services. Our clients are Acme Ltd and Gamma Soft.")
+    assert plan[0]["type"] == "update_org"
+    assert plan[0]["data"]["name"] == "Northwind Language Services"

@@ -1,5 +1,6 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -15,7 +16,7 @@ import { Time } from "@/components/ui/time";
 import { useToast } from "@/components/ui/toast";
 import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { humanize, isPast, money, TIER_LABEL } from "@/lib/format";
+import { isPast } from "@/lib/format";
 import { ACTIVITY_KINDS, DEAL_STAGES, type AccountDetail, type Activity, type ActivityKind, type DealStage, type PriceList, type Project, type Workflow } from "@/lib/types";
 import { AccountForm } from "../account-form";
 
@@ -37,23 +38,24 @@ export function AccountTabs({
   projects: Project[];
   initialTab?: string;
 }) {
-  const [tab, setTab] = useState<Tab>(TABS.find((t) => t === initialTab) ?? "activities");
+  const { t } = useI18n();
+  const [tab, setTab] = useState<Tab>(TABS.find((tab) => tab === initialTab) ?? "activities");
   const counts: Partial<Record<Tab, number>> = { contacts: account.contacts.length, deals: account.deals.length, projects: projects.length };
   return (
     <>
-      <div role="tablist" aria-label="Account sections" className="mb-4 flex gap-1 overflow-x-auto border-b border-border">
-        {TABS.map((t) => (
+      <div role="tablist" aria-label={t("app.crm.detail.accountTabs.accountSections")} className="mb-4 flex gap-1 overflow-x-auto border-b border-border">
+        {TABS.map((section) => (
           <button
-            key={t}
+            key={section}
             role="tab"
-            id={`tab-${t}`}
-            aria-selected={tab === t}
-            aria-controls={`panel-${t}`}
-            onClick={() => setTab(t)}
-            className={cn("-mb-px inline-flex h-9 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 text-[13.5px]", tab === t ? "border-accent font-medium text-fg" : "border-transparent text-muted hover:text-fg")}
+            id={`tab-${section}`}
+            aria-selected={tab === section}
+            aria-controls={`panel-${section}`}
+            onClick={() => setTab(section)}
+            className={cn("-mb-px inline-flex h-9 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 text-[13.5px]", tab === section ? "border-accent font-medium text-fg" : "border-transparent text-muted hover:text-fg")}
           >
-            {humanize(t)}
-            {counts[t] !== undefined && <span className="tabular rounded bg-subtle px-1.5 text-[11.5px] text-muted">{counts[t]}</span>}
+            {t.enumLabel(section)}
+            {counts[section] !== undefined && <span className="tabular rounded bg-subtle px-1.5 text-[11.5px] text-muted">{counts[section]}</span>}
           </button>
         ))}
       </div>
@@ -69,6 +71,7 @@ export function AccountTabs({
 }
 
 function Activities({ account }: { account: AccountDetail }) {
+  const { t } = useI18n();
   const toast = useToast();
   const [items, setItems] = useState<Activity[]>(account.recent_activities);
   const [kind, setKind] = useState<ActivityKind>("note");
@@ -86,7 +89,7 @@ function Activities({ account }: { account: AccountDetail }) {
       setBody("");
       setDue("");
     } catch (err) {
-      toast.error("Could not add", errorMessage(err));
+      toast.error(t("app.crm.detail.accountTabs.couldNotAdd"), errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -96,7 +99,7 @@ function Activities({ account }: { account: AccountDetail }) {
       const u = await api.updateActivity(a.id, { done: !a.done });
       setItems((xs) => xs.map((x) => (x.id === a.id ? u : x)));
     } catch (err) {
-      toast.error("Could not update", errorMessage(err));
+      toast.error(t("app.crm.detail.accountTabs.couldNotUpdate"), errorMessage(err));
     }
   }
 
@@ -104,7 +107,7 @@ function Activities({ account }: { account: AccountDetail }) {
     <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
       <Card className="order-2 lg:order-1">
         {items.length === 0 ? (
-          <EmptyState title="No activity yet" description="Log calls, meetings and notes, or set a task with a due date." />
+          <EmptyState title={t("app.crm.detail.accountTabs.noActivityYet")} description={t("app.crm.detail.accountTabs.logCallsMeetingsAndNotes")} />
         ) : (
           <ol className="px-4 py-2">
             {items.map((a, i) => {
@@ -118,22 +121,22 @@ function Activities({ account }: { account: AccountDetail }) {
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-muted">
-                      <span className="font-medium text-fg">{humanize(a.kind)}</span>
+                      <span className="font-medium text-fg">{t.enumLabel(a.kind)}</span>
                       <Time iso={a.created_at} mode="relative" />
                       {a.due_at && (
                         <Badge tone={a.done ? "neutral" : overdue ? "danger" : "warn"}>
-                          Due <Time iso={a.due_at} mode="relative" />
+                          {t("app.crm.detail.accountTabs.due")} <Time iso={a.due_at} mode="relative" />
                         </Badge>
                       )}
-                      {a.done && <Badge tone="ok">Done</Badge>}
+                      {a.done && <Badge tone="ok">{t("app.crm.detail.accountTabs.done")}</Badge>}
                     </div>
                     <p className={cn("mt-0.5 whitespace-pre-wrap text-[14px]", a.done && a.kind === "task" && "text-muted line-through")}>{a.body}</p>
                   </div>
                   {(a.kind === "task" || a.due_at) && (
-                    <Button size="sm" variant={a.done ? "ghost" : "secondary"} onClick={() => toggle(a)} aria-label={a.done ? "Reopen" : "Mark done"}>
-                      {a.done ? "Reopen" : (
+                    <Button size="sm" variant={a.done ? "ghost" : "secondary"} onClick={() => toggle(a)} aria-label={a.done ? t("app.crm.detail.accountTabs.reopen") : t("app.crm.detail.accountTabs.markDone")}>
+                      {a.done ? t("app.crm.detail.accountTabs.reopen") : (
                         <>
-                          <Icons.check className="size-3.5" /> Done
+                          <Icons.check className="size-3.5" /> {t("app.crm.detail.accountTabs.done")}
                         </>
                       )}
                     </Button>
@@ -146,22 +149,22 @@ function Activities({ account }: { account: AccountDetail }) {
       </Card>
       <Card className="order-1 self-start p-4 lg:order-2">
         <form onSubmit={add} className="space-y-3">
-          <div role="group" aria-label="Activity kind" className="flex flex-wrap gap-1">
+          <div role="group" aria-label={t("app.crm.detail.accountTabs.activityKind")} className="flex flex-wrap gap-1">
             {ACTIVITY_KINDS.map((k) => {
               const Icon = Icons[ACTIVITY_ICON[k]];
               return (
                 <button key={k} type="button" aria-pressed={kind === k} onClick={() => setKind(k)} className={cn("inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[12.5px]", kind === k ? "border-accent bg-accent-subtle text-accent" : "border-border text-muted hover:bg-hover")}>
-                  <Icon className="size-3.5" /> {humanize(k)}
+                  <Icon className="size-3.5" /> {t.enumLabel(k)}
                 </button>
               );
             })}
           </div>
-          <Textarea aria-label="Activity text" placeholder={kind === "task" ? "What needs doing?" : kind === "call" ? "What was discussed?" : "Write a note"} value={body} onChange={(e) => setBody(e.target.value)} className="min-h-20" />
+          <Textarea aria-label={t("app.crm.detail.accountTabs.activityText")} placeholder={kind === "task" ? t("app.crm.detail.accountTabs.whatNeedsDoing") : kind === "call" ? t("app.crm.detail.accountTabs.whatWasDiscussed") : t("app.crm.detail.accountTabs.writeANote")} value={body} onChange={(e) => setBody(e.target.value)} className="min-h-20" />
           {(kind === "task" || kind === "meeting") && (
-            <Field label="Due">{(id) => <Input id={id} type="datetime-local" value={due} onChange={(e) => setDue(e.target.value)} />}</Field>
+            <Field label={t("app.crm.detail.accountTabs.due")}>{(id) => <Input id={id} type="datetime-local" value={due} onChange={(e) => setDue(e.target.value)} />}</Field>
           )}
           <Button type="submit" variant="primary" loading={busy} disabled={!body.trim()} className="w-full">
-            Add {kind}
+            {t("app.crm.detail.accountTabs.add", { kind: kind })}
           </Button>
         </form>
       </Card>
@@ -170,6 +173,7 @@ function Activities({ account }: { account: AccountDetail }) {
 }
 
 function Contacts({ account }: { account: AccountDetail }) {
+  const { t } = useI18n();
   const toast = useToast();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -181,11 +185,11 @@ function Contacts({ account }: { account: AccountDetail }) {
     setBusy(true);
     try {
       await api.createContact(account.id, { name: v.name, email: v.email || null, phone: v.phone || null, role: v.role || null, is_primary: v.is_primary });
-      toast.success("Contact added");
+      toast.success(t("app.crm.detail.accountTabs.contactAdded"));
       setOpen(false);
       router.refresh();
     } catch (err) {
-      toast.error("Could not add contact", errorMessage(err));
+      toast.error(t("app.crm.detail.accountTabs.couldNotAddContact"), errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -195,30 +199,30 @@ function Contacts({ account }: { account: AccountDetail }) {
       await api.deleteContact(id);
       router.refresh();
     } catch (err) {
-      toast.error("Could not remove", errorMessage(err));
+      toast.error(t("app.crm.detail.accountTabs.couldNotRemove"), errorMessage(err));
     }
   }
 
   return (
     <Card>
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-        <h2 className="text-sm font-semibold">Contacts</h2>
+        <h2 className="text-sm font-semibold">{t("app.crm.detail.accountTabs.contacts")}</h2>
         <Button size="sm" onClick={() => setOpen(true)}>
-          <Icons.plus className="size-3.5" /> Add contact
+          <Icons.plus className="size-3.5" /> {t("app.crm.detail.accountTabs.addContact")}
         </Button>
       </div>
       {account.contacts.length === 0 ? (
-        <EmptyState title="No contacts" description="Add the people you work with at this account." />
+        <EmptyState title={t("app.crm.detail.accountTabs.noContacts")} description={t("app.crm.detail.accountTabs.addThePeopleYouWork")} />
       ) : (
         <Table>
           <THead>
             <tr>
-              <Th>Name</Th>
-              <Th>Role</Th>
-              <Th>Email</Th>
-              <Th className="hidden md:table-cell">Phone</Th>
+              <Th>{t("app.crm.detail.accountTabs.name")}</Th>
+              <Th>{t("app.crm.detail.accountTabs.role")}</Th>
+              <Th>{t("app.crm.detail.accountTabs.email")}</Th>
+              <Th className="hidden md:table-cell">{t("app.crm.detail.accountTabs.phone")}</Th>
               <Th className="text-right">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{t("app.crm.detail.accountTabs.actions")}</span>
               </Th>
             </tr>
           </THead>
@@ -226,13 +230,13 @@ function Contacts({ account }: { account: AccountDetail }) {
             {account.contacts.map((c) => (
               <Tr key={c.id}>
                 <Td className="font-medium">
-                  {c.name} {c.is_primary && <Badge tone="accent">Primary</Badge>}
+                  {c.name} {c.is_primary && <Badge tone="accent">{t("app.crm.detail.accountTabs.primary")}</Badge>}
                 </Td>
                 <Td className="text-muted">{c.role ?? "–"}</Td>
                 <Td>{c.email ? <a href={`mailto:${c.email}`} className="text-accent hover:underline">{c.email}</a> : "–"}</Td>
                 <Td className="hidden text-muted md:table-cell">{c.phone ?? "–"}</Td>
                 <Td className="text-right">
-                  <Button size="sm" variant="ghost" onClick={() => remove(c.id)} aria-label={`Remove ${c.name}`}>
+                  <Button size="sm" variant="ghost" onClick={() => remove(c.id)} aria-label={t("app.crm.detail.accountTabs.remove", { name: c.name })}>
                     <Icons.trash className="size-3.5" />
                   </Button>
                 </Td>
@@ -241,21 +245,21 @@ function Contacts({ account }: { account: AccountDetail }) {
           </TBody>
         </Table>
       )}
-      <Dialog open={open} onClose={() => setOpen(false)} title="Add contact">
+      <Dialog open={open} onClose={() => setOpen(false)} title={t("app.crm.detail.accountTabs.addContact")}>
         <form onSubmit={add} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Name">{(id) => <Input id={id} required value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} />}</Field>
-            <Field label="Role">{(id) => <Input id={id} value={v.role} onChange={(e) => setV({ ...v, role: e.target.value })} placeholder="e.g. Localization lead" />}</Field>
-            <Field label="Email">{(id) => <Input id={id} type="email" value={v.email} onChange={(e) => setV({ ...v, email: e.target.value })} />}</Field>
-            <Field label="Phone">{(id) => <Input id={id} type="tel" value={v.phone} onChange={(e) => setV({ ...v, phone: e.target.value })} />}</Field>
+            <Field label={t("app.crm.detail.accountTabs.name")}>{(id) => <Input id={id} required value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} />}</Field>
+            <Field label={t("app.crm.detail.accountTabs.role")}>{(id) => <Input id={id} value={v.role} onChange={(e) => setV({ ...v, role: e.target.value })} placeholder={t("app.crm.detail.accountTabs.eGLocalizationLead")} />}</Field>
+            <Field label={t("app.crm.detail.accountTabs.email")}>{(id) => <Input id={id} type="email" value={v.email} onChange={(e) => setV({ ...v, email: e.target.value })} />}</Field>
+            <Field label={t("app.crm.detail.accountTabs.phone")}>{(id) => <Input id={id} type="tel" value={v.phone} onChange={(e) => setV({ ...v, phone: e.target.value })} />}</Field>
           </div>
-          <Checkbox label="Primary contact" checked={v.is_primary} onChange={(e) => setV({ ...v, is_primary: e.target.checked })} />
+          <Checkbox label={t("app.crm.detail.accountTabs.primaryContact")} checked={v.is_primary} onChange={(e) => setV({ ...v, is_primary: e.target.checked })} />
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setOpen(false)}>
-              Cancel
+              {t("app.crm.detail.accountTabs.cancel")}
             </Button>
             <Button type="submit" variant="primary" loading={busy}>
-              Add contact
+              {t("app.crm.detail.accountTabs.addContact")}
             </Button>
           </div>
         </form>
@@ -265,6 +269,7 @@ function Contacts({ account }: { account: AccountDetail }) {
 }
 
 function Deals({ account }: { account: AccountDetail }) {
+  const { f, t } = useI18n();
   const toast = useToast();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -276,11 +281,11 @@ function Deals({ account }: { account: AccountDetail }) {
     setBusy(true);
     try {
       await api.createDeal({ account_id: account.id, title: v.title, value: v.value || "0", stage: v.stage, expected_close: v.expected_close || undefined, currency: account.currency ?? undefined });
-      toast.success("Deal created");
+      toast.success(t("app.crm.detail.accountTabs.dealCreated"));
       setOpen(false);
       router.refresh();
     } catch (err) {
-      toast.error("Could not create deal", errorMessage(err));
+      toast.error(t("app.crm.detail.accountTabs.couldNotCreateDeal"), errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -289,26 +294,26 @@ function Deals({ account }: { account: AccountDetail }) {
   return (
     <Card>
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-        <h2 className="text-sm font-semibold">Deals</h2>
+        <h2 className="text-sm font-semibold">{t("app.crm.detail.accountTabs.deals")}</h2>
         <div className="flex gap-2">
           <Link href="/app/crm/deals" className="inline-flex h-7 items-center px-2 text-[13px] text-accent hover:underline">
-            Deal board
+            {t("app.crm.detail.accountTabs.dealBoard")}
           </Link>
           <Button size="sm" onClick={() => setOpen(true)}>
-            <Icons.plus className="size-3.5" /> New deal
+            <Icons.plus className="size-3.5" /> {t("app.crm.detail.accountTabs.newDeal")}
           </Button>
         </div>
       </div>
       {account.deals.length === 0 ? (
-        <EmptyState title="No deals" description="Track opportunities from lead to won." />
+        <EmptyState title={t("app.crm.detail.accountTabs.noDeals")} description={t("app.crm.detail.accountTabs.trackOpportunitiesFromLeadTo")} />
       ) : (
         <Table>
           <THead>
             <tr>
-              <Th>Deal</Th>
-              <Th>Stage</Th>
-              <Th className="text-right">Value</Th>
-              <Th className="hidden sm:table-cell">Expected close</Th>
+              <Th>{t("app.crm.detail.accountTabs.deal")}</Th>
+              <Th>{t("app.crm.detail.accountTabs.stage")}</Th>
+              <Th className="text-right">{t("app.crm.detail.accountTabs.value")}</Th>
+              <Th className="hidden sm:table-cell">{t("app.crm.detail.accountTabs.expectedClose")}</Th>
             </tr>
           </THead>
           <TBody>
@@ -316,39 +321,39 @@ function Deals({ account }: { account: AccountDetail }) {
               <Tr key={d.id}>
                 <Td className="font-medium">{d.title}</Td>
                 <Td>
-                  <Badge tone={d.stage === "won" ? "ok" : d.stage === "lost" ? "danger" : "accent"}>{humanize(d.stage)}</Badge>
+                  <Badge tone={d.stage === "won" ? "ok" : d.stage === "lost" ? "danger" : "accent"}>{t.enumLabel(d.stage)}</Badge>
                 </Td>
-                <Td className="tabular text-right">{money(d.value, d.currency)}</Td>
+                <Td className="tabular text-right">{f.money(d.value, d.currency)}</Td>
                 <Td className="hidden text-muted sm:table-cell">{d.expected_close ? <Time iso={d.expected_close} mode="relative" /> : "–"}</Td>
               </Tr>
             ))}
           </TBody>
         </Table>
       )}
-      <Dialog open={open} onClose={() => setOpen(false)} title="New deal">
+      <Dialog open={open} onClose={() => setOpen(false)} title={t("app.crm.detail.accountTabs.newDeal")}>
         <form onSubmit={add} className="space-y-4">
-          <Field label="Title">{(id) => <Input id={id} required value={v.title} onChange={(e) => setV({ ...v, title: e.target.value })} />}</Field>
+          <Field label={t("app.crm.detail.accountTabs.title")}>{(id) => <Input id={id} required value={v.title} onChange={(e) => setV({ ...v, title: e.target.value })} />}</Field>
           <div className="grid gap-4 sm:grid-cols-3">
-            <Field label={`Value (${account.currency ?? "EUR"})`}>{(id) => <Input id={id} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={v.value} onChange={(e) => setV({ ...v, value: e.target.value })} />}</Field>
-            <Field label="Stage">
+            <Field label={t("app.crm.detail.accountTabs.valueInCurrency", { currency: account.currency ?? "EUR" })}>{(id) => <Input id={id} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={v.value} onChange={(e) => setV({ ...v, value: e.target.value })} />}</Field>
+            <Field label={t("app.crm.detail.accountTabs.stage")}>
               {(id) => (
                 <Select id={id} value={v.stage} onChange={(e) => setV({ ...v, stage: e.target.value as DealStage })}>
                   {DEAL_STAGES.map((s) => (
                     <option key={s} value={s}>
-                      {humanize(s)}
+                      {t.enumLabel(s)}
                     </option>
                   ))}
                 </Select>
               )}
             </Field>
-            <Field label="Expected close">{(id) => <Input id={id} type="date" value={v.expected_close} onChange={(e) => setV({ ...v, expected_close: e.target.value })} />}</Field>
+            <Field label={t("app.crm.detail.accountTabs.expectedClose")}>{(id) => <Input id={id} type="date" value={v.expected_close} onChange={(e) => setV({ ...v, expected_close: e.target.value })} />}</Field>
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setOpen(false)}>
-              Cancel
+              {t("app.crm.detail.accountTabs.cancel")}
             </Button>
             <Button type="submit" variant="primary" loading={busy}>
-              Create deal
+              {t("app.crm.detail.accountTabs.createDeal")}
             </Button>
           </div>
         </form>
@@ -358,15 +363,16 @@ function Deals({ account }: { account: AccountDetail }) {
 }
 
 function Projects({ projects, accountId }: { projects: Project[]; accountId: string }) {
+  const { t } = useI18n();
   return (
     <Card>
       {projects.length === 0 ? (
         <EmptyState
-          title="No projects yet"
-          description="Projects started for this account use its workflow and price list."
+          title={t("app.crm.detail.accountTabs.noProjectsYet")}
+          description={t("app.crm.detail.accountTabs.projectsStartedForThisAccount")}
           action={
             <Link href={`/app/projects/new?account=${accountId}`} className="text-[13.5px] font-medium text-accent hover:underline">
-              Start a project
+              {t("app.crm.detail.accountTabs.startAProject")}
             </Link>
           }
         />
@@ -374,10 +380,10 @@ function Projects({ projects, accountId }: { projects: Project[]; accountId: str
         <Table>
           <THead>
             <tr>
-              <Th>Project</Th>
-              <Th>Languages</Th>
-              <Th>Tier</Th>
-              <Th className="hidden sm:table-cell">Created</Th>
+              <Th>{t("app.crm.detail.accountTabs.project")}</Th>
+              <Th>{t("app.crm.detail.accountTabs.languages")}</Th>
+              <Th>{t("app.crm.detail.accountTabs.tier")}</Th>
+              <Th className="hidden sm:table-cell">{t("app.crm.detail.accountTabs.created")}</Th>
             </tr>
           </THead>
           <TBody>
@@ -391,7 +397,7 @@ function Projects({ projects, accountId }: { projects: Project[]; accountId: str
                 <Td className="font-mono text-[12.5px] text-muted">
                   {p.source_lang} → {p.target_langs.join(", ")}
                 </Td>
-                <Td>{TIER_LABEL[p.tier]}</Td>
+                <Td>{t(`tier.${p.tier}.label`)}</Td>
                 <Td className="hidden text-muted sm:table-cell">
                   <Time iso={p.created_at} mode="relative" />
                 </Td>
@@ -405,16 +411,17 @@ function Projects({ projects, accountId }: { projects: Project[]; accountId: str
 }
 
 function Settings({ account, workflows, priceLists }: { account: AccountDetail; workflows: Workflow[]; priceLists: PriceList[] }) {
+  const { t } = useI18n();
   const router = useRouter();
   const toast = useToast();
   const [confirm, setConfirm] = useState(false);
   async function archive() {
     try {
       await api.archiveAccount(account.id);
-      toast.success("Account archived");
+      toast.success(t("app.crm.detail.accountTabs.accountArchived"));
       router.push("/app/crm");
     } catch (err) {
-      toast.error("Could not archive", errorMessage(err));
+      toast.error(t("app.crm.detail.accountTabs.couldNotArchive"), errorMessage(err));
     }
   }
   return (
@@ -425,11 +432,11 @@ function Settings({ account, workflows, priceLists }: { account: AccountDetail; 
       {account.status === "active" && (
         <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div>
-            <h2 className="text-sm font-semibold">Archive account</h2>
-            <p className="text-[13px] text-muted">Hides it from lists. Projects, jobs and deals keep pointing at it.</p>
+            <h2 className="text-sm font-semibold">{t("app.crm.detail.accountTabs.archiveAccount")}</h2>
+            <p className="text-[13px] text-muted">{t("app.crm.detail.accountTabs.hidesItFromListsProjects")}</p>
           </div>
           <Button variant="outline-danger" onClick={() => setConfirm(true)}>
-            Archive
+            {t("app.crm.detail.accountTabs.archive")}
           </Button>
         </Card>
       )}
@@ -437,14 +444,14 @@ function Settings({ account, workflows, priceLists }: { account: AccountDetail; 
         open={confirm}
         onClose={() => setConfirm(false)}
         size="sm"
-        title={`Archive ${account.name}?`}
+        title={t("app.crm.detail.accountTabs.archive2", { name: account.name })}
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirm(false)}>
-              Cancel
+              {t("app.crm.detail.accountTabs.cancel")}
             </Button>
             <Button variant="danger" onClick={archive}>
-              Archive
+              {t("app.crm.detail.accountTabs.archive")}
             </Button>
           </>
         }

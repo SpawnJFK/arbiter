@@ -97,7 +97,7 @@ export function Callout({
   children: ReactNode;
   className?: string;
 }) {
-  const t = {
+  const toneClass = {
     info: "border-info/25 bg-info-subtle",
     warn: "border-warn/30 bg-warn-subtle",
     danger: "border-danger/30 bg-danger-subtle",
@@ -105,7 +105,7 @@ export function Callout({
   }[tone];
   const fg = { info: "text-info", warn: "text-warn", danger: "text-danger", ok: "text-ok" }[tone];
   return (
-    <div className={cn("rounded-lg border px-3.5 py-2.5 text-[13.5px]", t, className)} role={tone === "danger" ? "alert" : undefined}>
+    <div className={cn("rounded-lg border px-3.5 py-2.5 text-[13.5px]", toneClass, className)} role={tone === "danger" ? "alert" : undefined}>
       {title && <div className={cn("mb-0.5 font-semibold", fg)}>{title}</div>}
       <div className="text-fg/90">{children}</div>
     </div>

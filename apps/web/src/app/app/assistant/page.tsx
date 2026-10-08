@@ -1,15 +1,19 @@
+import { getI18n } from "@/lib/i18n/server";
 import type { Metadata } from "next";
 import { withAuth } from "@/lib/server-api";
 import { AssistantChat } from "./chat";
 
-export const metadata: Metadata = { title: "Assistant" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t("app.assistant.metaTitle") };
+}
 
 export default async function AssistantPage({ searchParams }: { searchParams: Promise<{ thread?: string }> }) {
   const { thread: threadId } = await searchParams;
   const [threads, thread] = await withAuth(
     async (api) => {
       const list = await api.threads();
-      const id = threadId && list.items.some((t) => t.id === threadId) ? threadId : undefined;
+      const id = threadId && list.items.some((item) => item.id === threadId) ? threadId : undefined;
       return [list.items, id ? await api.thread(id) : null] as const;
     },
     "/app/assistant",

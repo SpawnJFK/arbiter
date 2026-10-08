@@ -1,5 +1,7 @@
 "use client";
 
+import { k } from "@/lib/i18n/core";
+import { useI18n } from "@/lib/i18n/client";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Icons } from "@/components/icons";
@@ -12,18 +14,18 @@ import { Callout, EmptyState } from "@/components/ui/misc";
 import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { api, errorMessage } from "@/lib/api";
-import { humanize, langName } from "@/lib/format";
 import { LANGS } from "@/lib/langs";
 import { TERM_KINDS, type ImportResult, type ListResponse, type Term, type TermInput, type TermKind } from "@/lib/types";
 
 const KIND_HELP: Record<TermKind, string> = {
-  mandatory: "Target must use exactly this term.",
-  preferred: "Use this term unless context requires otherwise.",
-  forbidden: "This target term must never appear.",
-  do_not_translate: "Keep the source term as is (names, product codes).",
+  mandatory: k("app.glossaries.detail.termsManager.kindHelp.mandatory"),
+  preferred: k("app.glossaries.detail.termsManager.kindHelp.preferred"),
+  forbidden: k("app.glossaries.detail.termsManager.kindHelp.forbidden"),
+  do_not_translate: k("app.glossaries.detail.termsManager.kindHelp.do_not_translate"),
 };
 
 export function TermsManager({ glossaryId, initial }: { glossaryId: string; initial: ListResponse<Term> }) {
+  const { t } = useI18n();
   const toast = useToast();
   const router = useRouter();
   const [terms, setTerms] = useState(initial.items);
@@ -42,32 +44,32 @@ export function TermsManager({ glossaryId, initial }: { glossaryId: string; init
       const res = await api.terms(glossaryId, { q, source_lang: src, target_lang: tgt, limit: 200 });
       setTerms(res.items);
     } catch (err) {
-      toast.error("Search failed", errorMessage(err));
+      toast.error(t("app.glossaries.detail.termsManager.searchFailed"), errorMessage(err));
     }
   }
 
-  async function retire(t: Term) {
+  async function retire(item: Term) {
     try {
-      await api.retireTerm(t.id);
-      setTerms((xs) => xs.filter((x) => x.id !== t.id));
-      toast.success("Term retired", "Kept in history; new jobs no longer use it.");
+      await api.retireTerm(item.id);
+      setTerms((xs) => xs.filter((x) => x.id !== item.id));
+      toast.success(t("app.glossaries.detail.termsManager.termRetired"), t("app.glossaries.detail.termsManager.keptInHistoryNewJobs"));
       setRetiring(null);
       router.refresh();
     } catch (err) {
-      toast.error("Could not retire term", errorMessage(err));
+      toast.error(t("app.glossaries.detail.termsManager.couldNotRetireTerm"), errorMessage(err));
     }
   }
 
-  async function importFile(f: File) {
+  async function importFile(value: File) {
     setImporting(true);
     setImportResult(null);
     try {
-      const r = await api.importGlossary(glossaryId, f);
+      const r = await api.importGlossary(glossaryId, value);
       setImportResult(r);
       await search();
       router.refresh();
     } catch (err) {
-      toast.error("Import failed", errorMessage(err));
+      toast.error(t("app.glossaries.detail.termsManager.importFailed"), errorMessage(err));
     } finally {
       setImporting(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -80,11 +82,11 @@ export function TermsManager({ glossaryId, initial }: { glossaryId: string; init
         <form onSubmit={search} className="flex flex-1 flex-wrap items-center gap-2">
           <div className="relative min-w-48 flex-1 sm:max-w-xs">
             <Icons.search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-faint" />
-            <Input aria-label="Search terms" placeholder="Search terms" value={q} onChange={(e) => setQ(e.target.value)} className="pl-8" />
+            <Input aria-label={t("app.glossaries.detail.termsManager.searchTerms")} placeholder={t("app.glossaries.detail.termsManager.searchTerms")} value={q} onChange={(e) => setQ(e.target.value)} className="pl-8" />
           </div>
-          <LangSelect label="Source language" value={src} onChange={setSrc} />
-          <LangSelect label="Target language" value={tgt} onChange={setTgt} />
-          <Button type="submit">Search</Button>
+          <LangSelect label={t("app.glossaries.detail.termsManager.sourceLanguage")} value={src} onChange={setSrc} />
+          <LangSelect label={t("app.glossaries.detail.termsManager.targetLanguage")} value={tgt} onChange={setTgt} />
+          <Button type="submit">{t("app.glossaries.detail.termsManager.search")}</Button>
         </form>
         <div className="flex flex-wrap gap-2">
           <input
@@ -92,26 +94,26 @@ export function TermsManager({ glossaryId, initial }: { glossaryId: string; init
             type="file"
             accept=".csv,.tbx,.xml"
             className="sr-only"
-            aria-label="Import CSV or TBX"
+            aria-label={t("app.glossaries.detail.termsManager.importCsvOrTbx")}
             onChange={(e) => e.target.files?.[0] && importFile(e.target.files[0])}
           />
           <Button onClick={() => fileRef.current?.click()} loading={importing}>
-            <Icons.upload className="size-4" /> Import CSV/TBX
+            <Icons.upload className="size-4" /> {t("app.glossaries.detail.termsManager.importCsvTbx")}
           </Button>
           <AnchorButton href={api.glossaryExportUrl(glossaryId, "csv")} download>
-            Export CSV
+            {t("app.glossaries.detail.termsManager.exportCsv")}
           </AnchorButton>
           <AnchorButton href={api.glossaryExportUrl(glossaryId, "tbx")} download>
-            Export TBX
+            {t("app.glossaries.detail.termsManager.exportTbx")}
           </AnchorButton>
           <Button variant="primary" onClick={() => setEditing("new")}>
-            <Icons.plus className="size-4" /> Add term
+            <Icons.plus className="size-4" /> {t("app.glossaries.detail.termsManager.addTerm")}
           </Button>
         </div>
       </div>
 
       {importResult && (
-        <Callout tone={importResult.errors?.length ? "warn" : "ok"} title={`Imported ${importResult.imported} terms, skipped ${importResult.skipped}`}>
+        <Callout tone={importResult.errors?.length ? "warn" : "ok"} title={t("app.glossaries.detail.termsManager.importedTermsSkipped", { imported: importResult.imported, skipped: importResult.skipped })}>
           {importResult.errors && importResult.errors.length > 0 && (
             <ul className="mt-1 list-disc pl-4 text-[13px]">
               {importResult.errors.slice(0, 10).map((e) => (
@@ -124,47 +126,47 @@ export function TermsManager({ glossaryId, initial }: { glossaryId: string; init
 
       <Card>
         {terms.length === 0 ? (
-          <EmptyState title="No terms" description="Add terms one by one or import a CSV/TBX file." />
+          <EmptyState title={t("app.glossaries.detail.termsManager.noTerms")} description={t("app.glossaries.detail.termsManager.addTermsOneByOne")} />
         ) : (
           <Table>
             <THead>
               <tr>
-                <Th>Source term</Th>
-                <Th>Target term</Th>
-                <Th>Kind</Th>
-                <Th className="hidden md:table-cell">Pair</Th>
-                <Th className="hidden lg:table-cell">Note</Th>
+                <Th>{t("app.glossaries.detail.termsManager.sourceTerm")}</Th>
+                <Th>{t("app.glossaries.detail.termsManager.targetTerm")}</Th>
+                <Th>{t("app.glossaries.detail.termsManager.kind")}</Th>
+                <Th className="hidden md:table-cell">{t("app.glossaries.detail.termsManager.pair")}</Th>
+                <Th className="hidden lg:table-cell">{t("app.glossaries.detail.termsManager.note")}</Th>
                 <Th className="text-right">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t("app.glossaries.detail.termsManager.actions")}</span>
                 </Th>
               </tr>
             </THead>
             <TBody>
-              {terms.map((t) => (
-                <Tr key={t.id}>
+              {terms.map((term) => (
+                <Tr key={term.id}>
                   <Td className="font-medium">
-                    {t.source_term}
-                    {t.case_sensitive && (
-                      <span className="ml-1.5 text-[11px] font-normal text-faint" title="Case-sensitive">
-                        Aa
+                    {term.source_term}
+                    {term.case_sensitive && (
+                      <span className="ml-1.5 text-[11px] font-normal text-faint" title={t("app.glossaries.detail.termsManager.caseSensitive")}>
+                        {t("app.glossaries.detail.termsManager.aa")}
                       </span>
                     )}
                   </Td>
-                  <Td>{t.target_term ?? <span className="text-faint">–</span>}</Td>
+                  <Td>{term.target_term ?? <span className="text-faint">–</span>}</Td>
                   <Td>
-                    <TermKindBadge kind={t.kind} />
+                    <TermKindBadge kind={term.kind} />
                   </Td>
                   <Td className="hidden whitespace-nowrap font-mono text-[12.5px] text-muted md:table-cell">
-                    {t.source_lang} → {t.target_lang}
+                    {term.source_lang} → {term.target_lang}
                   </Td>
-                  <Td className="hidden max-w-xs text-[13px] text-muted lg:table-cell">{t.note}</Td>
+                  <Td className="hidden max-w-xs text-[13px] text-muted lg:table-cell">{term.note}</Td>
                   <Td className="text-right">
                     <div className="flex justify-end gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => setEditing(t)} aria-label={`Edit ${t.source_term}`}>
-                        Edit
+                      <Button size="sm" variant="ghost" onClick={() => setEditing(term)} aria-label={t("app.glossaries.detail.termsManager.edit2", { source_term: term.source_term })}>
+                        {t("app.glossaries.detail.termsManager.edit")}
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setRetiring(t)} aria-label={`Retire ${t.source_term}`}>
-                        Retire
+                      <Button size="sm" variant="ghost" onClick={() => setRetiring(term)} aria-label={t("app.glossaries.detail.termsManager.retire2", { source_term: term.source_term })}>
+                        {t("app.glossaries.detail.termsManager.retire")}
                       </Button>
                     </div>
                   </Td>
@@ -179,8 +181,8 @@ export function TermsManager({ glossaryId, initial }: { glossaryId: string; init
         glossaryId={glossaryId}
         term={editing}
         onClose={() => setEditing(null)}
-        onSaved={(t, isNew) => {
-          setTerms((xs) => (isNew ? [t, ...xs] : xs.map((x) => (x.id === t.id ? t : x))));
+        onSaved={(term, isNew) => {
+          setTerms((xs) => (isNew ? [term, ...xs] : xs.map((x) => (x.id === term.id ? term : x))));
           setEditing(null);
           router.refresh();
         }}
@@ -190,15 +192,15 @@ export function TermsManager({ glossaryId, initial }: { glossaryId: string; init
         open={retiring !== null}
         onClose={() => setRetiring(null)}
         size="sm"
-        title="Retire this term?"
-        description="Retiring sets an end date and bumps the glossary version. Jobs already running keep their frozen version."
+        title={t("app.glossaries.detail.termsManager.retireThisTerm")}
+        description={t("app.glossaries.detail.termsManager.retiringSetsAnEndDate")}
         footer={
           <>
             <Button variant="ghost" onClick={() => setRetiring(null)}>
-              Cancel
+              {t("app.glossaries.detail.termsManager.cancel")}
             </Button>
             <Button variant="danger" onClick={() => retiring && retire(retiring)}>
-              Retire term
+              {t("app.glossaries.detail.termsManager.retireTerm")}
             </Button>
           </>
         }
@@ -214,9 +216,10 @@ export function TermsManager({ glossaryId, initial }: { glossaryId: string; init
 }
 
 function LangSelect({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const { t } = useI18n();
   return (
     <Select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className="w-36">
-      <option value="">{label.startsWith("Source") ? "Any source" : "Any target"}</option>
+      <option value="">{label.startsWith("Source") ? t("app.glossaries.detail.termsManager.anySource") : t("app.glossaries.detail.termsManager.anyTarget")}</option>
       {LANGS.map((l) => (
         <option key={l} value={l}>
           {l}
@@ -235,13 +238,14 @@ function TermDialog({
   glossaryId: string;
   term: Term | "new" | null;
   onClose: () => void;
-  onSaved: (t: Term, isNew: boolean) => void;
+  onSaved: (item: Term, isNew: boolean) => void;
 }) {
+  const { t } = useI18n();
   const isNew = term === "new";
-  const t = term && term !== "new" ? term : null;
+  const current = term && term !== "new" ? term : null;
   return (
-    <Dialog open={term !== null} onClose={onClose} title={isNew ? "Add term" : "Edit term"}>
-      {term !== null && <TermForm key={t?.id ?? "new"} glossaryId={glossaryId} term={t} onCancel={onClose} onSaved={(x) => onSaved(x, isNew)} />}
+    <Dialog open={term !== null} onClose={onClose} title={isNew ? t("app.glossaries.detail.termsManager.addTerm") : t("app.glossaries.detail.termsManager.editTerm")}>
+      {term !== null && <TermForm key={current?.id ?? "new"} glossaryId={glossaryId} term={current} onCancel={onClose} onSaved={(x) => onSaved(x, isNew)} />}
     </Dialog>
   );
 }
@@ -255,8 +259,9 @@ function TermForm({
   glossaryId: string;
   term: Term | null;
   onCancel: () => void;
-  onSaved: (t: Term) => void;
+  onSaved: (item: Term) => void;
 }) {
+  const { f, t } = useI18n();
   const toast = useToast();
   const [v, setV] = useState<TermInput>({
     source_lang: term?.source_lang ?? "en",
@@ -280,10 +285,10 @@ function TermForm({
     };
     try {
       const saved = term ? await api.updateTerm(term.id, body) : await api.createTerm(glossaryId, body);
-      toast.success(term ? "Term updated" : "Term added", "Glossary version bumped.");
+      toast.success(term ? t("app.glossaries.detail.termsManager.termUpdated") : t("app.glossaries.detail.termsManager.termAdded"), t("app.glossaries.detail.termsManager.glossaryVersionBumped"));
       onSaved(saved);
     } catch (err) {
-      toast.error("Could not save term", errorMessage(err));
+      toast.error(t("app.glossaries.detail.termsManager.couldNotSaveTerm"), errorMessage(err));
       setBusy(false);
     }
   }
@@ -291,32 +296,32 @@ function TermForm({
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Source language">
+        <Field label={t("app.glossaries.detail.termsManager.sourceLanguage")}>
           {(id) => (
             <Select id={id} value={v.source_lang} onChange={(e) => setV({ ...v, source_lang: e.target.value })}>
               {LANGS.map((l) => (
                 <option key={l} value={l}>
-                  {langName(l)} ({l})
+                  {f.langName(l)} ({l})
                 </option>
               ))}
             </Select>
           )}
         </Field>
-        <Field label="Target language">
+        <Field label={t("app.glossaries.detail.termsManager.targetLanguage")}>
           {(id) => (
             <Select id={id} value={v.target_lang} onChange={(e) => setV({ ...v, target_lang: e.target.value })}>
               {LANGS.map((l) => (
                 <option key={l} value={l}>
-                  {langName(l)} ({l})
+                  {f.langName(l)} ({l})
                 </option>
               ))}
             </Select>
           )}
         </Field>
-        <Field label="Source term">
+        <Field label={t("app.glossaries.detail.termsManager.sourceTerm")}>
           {(id) => <Input id={id} required value={v.source_term} onChange={(e) => setV({ ...v, source_term: e.target.value })} />}
         </Field>
-        <Field label={v.kind === "forbidden" ? "Forbidden target term" : "Target term"} hint={v.kind === "do_not_translate" ? "Not used: the source term is kept." : undefined}>
+        <Field label={v.kind === "forbidden" ? t("app.glossaries.detail.termsManager.forbiddenTargetTerm") : t("app.glossaries.detail.termsManager.targetTerm")} hint={v.kind === "do_not_translate" ? t("app.glossaries.detail.termsManager.notUsedTheSourceTerm") : undefined}>
           {(id, d) => (
             <Input
               id={id}
@@ -330,7 +335,7 @@ function TermForm({
         </Field>
       </div>
       <fieldset>
-        <legend className="mb-1.5 text-[13px] font-medium">Kind</legend>
+        <legend className="mb-1.5 text-[13px] font-medium">{t("app.glossaries.detail.termsManager.kind")}</legend>
         <div className="grid gap-2 sm:grid-cols-2">
           {TERM_KINDS.map((k) => (
             <label
@@ -339,23 +344,23 @@ function TermForm({
             >
               <input type="radio" name="kind" className="mt-0.5 accent-[var(--accent)]" checked={v.kind === k} onChange={() => setV({ ...v, kind: k })} />
               <span>
-                <span className="font-medium">{humanize(k)}</span>
-                <span className="block text-muted">{KIND_HELP[k]}</span>
+                <span className="font-medium">{t.enumLabel(k)}</span>
+                <span className="block text-muted">{t(KIND_HELP[k])}</span>
               </span>
             </label>
           ))}
         </div>
       </fieldset>
-      <Checkbox label="Case-sensitive" checked={v.case_sensitive} onChange={(e) => setV({ ...v, case_sensitive: e.target.checked })} />
-      <Field label="Note for translators and reviewers">
+      <Checkbox label={t("app.glossaries.detail.termsManager.caseSensitive")} checked={v.case_sensitive} onChange={(e) => setV({ ...v, case_sensitive: e.target.checked })} />
+      <Field label={t("app.glossaries.detail.termsManager.noteForTranslatorsAndReviewers")}>
         {(id) => <Textarea id={id} value={v.note ?? ""} onChange={(e) => setV({ ...v, note: e.target.value })} className="min-h-16" />}
       </Field>
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onCancel}>
-          Cancel
+          {t("app.glossaries.detail.termsManager.cancel")}
         </Button>
         <Button type="submit" variant="primary" loading={busy}>
-          {term ? "Save changes" : "Add term"}
+          {term ? t("app.glossaries.detail.termsManager.saveChanges") : t("app.glossaries.detail.termsManager.addTerm")}
         </Button>
       </div>
     </form>

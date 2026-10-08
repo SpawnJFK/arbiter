@@ -69,6 +69,7 @@ import type {
   Webhook,
   WebhookEvent,
 } from "./types";
+import type { LocaleInfo } from "./i18n/locales";
 
 export class ApiError extends Error {
   status: number;
@@ -121,7 +122,7 @@ export async function parseError(res: Response): Promise<ApiError> {
   return new ApiError(
     res.status,
     err?.code ?? `http_${res.status}`,
-    err?.message ?? res.statusText ?? "Request failed",
+    err?.message || res.statusText || `HTTP ${res.status}`,
     err?.details ?? {},
   );
 }
@@ -167,16 +168,16 @@ export const proxyTransport: Transport = {
 
 const enc = encodeURIComponent;
 
-export function createApi(t: Transport) {
-  const get = <T>(path: string, query?: Query) => t.request<T>("GET", path, { query });
+export function createApi(item: Transport) {
+  const get = <T>(path: string, query?: Query) => item.request<T>("GET", path, { query });
   const post = <T>(path: string, body?: unknown, idem = false) =>
-    t.request<T>("POST", path, { body, idempotencyKey: idem ? newIdempotencyKey() : undefined });
-  const patch = <T>(path: string, body: unknown) => t.request<T>("PATCH", path, { body });
-  const del = (path: string) => t.request<null>("DELETE", path);
+    item.request<T>("POST", path, { body, idempotencyKey: idem ? newIdempotencyKey() : undefined });
+  const patch = <T>(path: string, body: unknown) => item.request<T>("PATCH", path, { body });
+  const del = (path: string) => item.request<null>("DELETE", path);
   const page = (p?: ListParams): Query => ({ offset: p?.offset, limit: p?.limit });
 
   return {
-    downloadUrl: t.downloadUrl,
+    downloadUrl: item.downloadUrl,
 
     // Auth and account (login/register are handled by /api/session, not here)
     me: () => get<Me>("/me"),
@@ -191,7 +192,7 @@ export function createApi(t: Transport) {
       const form = new FormData();
       form.set("file", file);
       form.set("source_lang", sourceLang);
-      return t.request<UploadedFile>("POST", "/files", { form, idempotencyKey: newIdempotencyKey() });
+      return item.request<UploadedFile>("POST", "/files", { form, idempotencyKey: newIdempotencyKey() });
     },
     createQuote: (body: { file_id: string; target_langs: string[]; content_type: string; account_id?: string }) =>
       post<Quote>("/quotes", body, true),
@@ -220,10 +221,10 @@ export function createApi(t: Transport) {
     clientApprove: (jobId: string) => post<Job>(`/jobs/${enc(jobId)}/client-approve`),
     reportError: (jobId: string, body: { segment_id: string; note: string }) =>
       post<{ id: string }>(`/jobs/${enc(jobId)}/report-error`, body, true),
-    jobDownloadUrl: (jobId: string) => t.downloadUrl(`/jobs/${enc(jobId)}/download`),
-    jobXliffUrl: (jobId: string) => t.downloadUrl(`/jobs/${enc(jobId)}/xliff`),
+    jobDownloadUrl: (jobId: string) => item.downloadUrl(`/jobs/${enc(jobId)}/download`),
+    jobXliffUrl: (jobId: string) => item.downloadUrl(`/jobs/${enc(jobId)}/xliff`),
     jobEvidenceUrl: (jobId: string, format: "json" | "pdf") =>
-      t.downloadUrl(`/jobs/${enc(jobId)}/evidence`, { format }),
+      item.downloadUrl(`/jobs/${enc(jobId)}/evidence`, { format }),
     exceptions: (p?: ListParams) => get<ListResponse<ExceptionItem>>("/exceptions", page(p)),
 
     // Linguistic assets
@@ -238,22 +239,22 @@ export function createApi(t: Transport) {
     importGlossary: (glossaryId: string, file: File) => {
       const form = new FormData();
       form.set("file", file);
-      return t.request<ImportResult>("POST", `/glossaries/${enc(glossaryId)}/import`, {
+      return item.request<ImportResult>("POST", `/glossaries/${enc(glossaryId)}/import`, {
         form,
         idempotencyKey: newIdempotencyKey(),
       });
     },
     glossaryExportUrl: (glossaryId: string, format: "csv" | "tbx") =>
-      t.downloadUrl(`/glossaries/${enc(glossaryId)}/export`, { format }),
+      item.downloadUrl(`/glossaries/${enc(glossaryId)}/export`, { format }),
     importTm: (file: File) => {
       const form = new FormData();
       form.set("file", file);
       form.set("rights_confirmed", "true");
-      return t.request<ImportResult>("POST", "/tm/import", { form, idempotencyKey: newIdempotencyKey() });
+      return item.request<ImportResult>("POST", "/tm/import", { form, idempotencyKey: newIdempotencyKey() });
     },
     tmSearch: (q: { q?: string; source_lang?: string; target_lang?: string } & ListParams) =>
       get<ListResponse<TmHit>>("/tm/search", { ...q }),
-    tmExportUrl: (q: { source_lang?: string; target_lang?: string }) => t.downloadUrl("/tm/export", q),
+    tmExportUrl: (q: { source_lang?: string; target_lang?: string }) => item.downloadUrl("/tm/export", q),
     termQuestions: (p?: ListParams) => get<ListResponse<TermQuestion>>("/term-questions", page(p)),
     answerTermQuestion: (id: string, body: { answer: string; add_to_glossary_id?: string }) =>
       post<TermQuestion>(`/term-questions/${enc(id)}/answer`, body),
@@ -271,7 +272,7 @@ export function createApi(t: Transport) {
       post<{ score: number; passed: boolean }>(`/reviewer/attempts/${enc(attemptId)}/submit`, { answers }),
     /** Resolves to `null` when the queue is empty (HTTP 204). */
     nextTask: (body: { source_lang?: string; target_lang?: string } = {}) =>
-      t.request<Task | null>("POST", "/reviewer/tasks/next", { body }),
+      item.request<Task | null>("POST", "/reviewer/tasks/next", { body }),
     submitTask: (id: string, body: TaskSubmit) =>
       post<{ ok: boolean; pay_amount: string }>(`/reviewer/tasks/${enc(id)}/submit`, body),
     releaseTask: (id: string) => post<null>(`/reviewer/tasks/${enc(id)}/release`),
@@ -291,6 +292,10 @@ export function createApi(t: Transport) {
     runPayouts: () => post<PayoutRun>("/admin/payouts/run", undefined, true),
     adminOrgs: (p?: ListParams) => get<ListResponse<OrgWithUsage>>("/admin/orgs", page(p)),
 
+    // --- UI localization (reads are public; admins also see disabled locales)
+    i18nLocales: () => get<{ items: LocaleInfo[] }>("/i18n/locales"),
+    i18nMessages: (locale: string) => get<{ locale: string; messages: Record<string, string> }>(`/i18n/messages/${enc(locale)}`),
+
     // Agency OS: CRM
     accounts: (q: { q?: string; kind?: string; status?: string } & ListParams = {}) =>
       get<ListResponse<Account>>("/crm/accounts", { ...q }),
@@ -298,7 +303,7 @@ export function createApi(t: Transport) {
     createAccount: (body: AccountInput) => post<AccountDetail>("/crm/accounts", body, true),
     updateAccount: (id: string, body: Partial<AccountInput> & { status?: "active" | "archived" }) =>
       patch<AccountDetail>(`/crm/accounts/${enc(id)}`, body),
-    archiveAccount: (id: string) => t.request<AccountDetail>("DELETE", `/crm/accounts/${enc(id)}`),
+    archiveAccount: (id: string) => item.request<AccountDetail>("DELETE", `/crm/accounts/${enc(id)}`),
     contacts: (accountId: string) => get<ListResponse<Contact>>(`/crm/accounts/${enc(accountId)}/contacts`),
     createContact: (accountId: string, body: Omit<Contact, "id" | "account_id" | "created_at">) =>
       post<Contact>(`/crm/accounts/${enc(accountId)}/contacts`, body, true),
@@ -311,7 +316,7 @@ export function createApi(t: Transport) {
       post<Deal>("/crm/deals", body, true),
     updateDeal: (id: string, body: { stage?: DealStage; value?: string; title?: string; expected_close?: string | null; lost_reason?: string }) =>
       patch<Deal>(`/crm/deals/${enc(id)}`, body),
-    deleteDeal: (id: string) => t.request<Deal>("DELETE", `/crm/deals/${enc(id)}`),
+    deleteDeal: (id: string) => item.request<Deal>("DELETE", `/crm/deals/${enc(id)}`),
     activities: (q: { account_id?: string; deal_id?: string; open?: boolean } & ListParams = {}) =>
       get<ListResponse<Activity>>("/crm/activities", { ...q }),
     createActivity: (body: { account_id: string; deal_id?: string; kind: Activity["kind"]; body: string; due_at?: string }) =>
@@ -324,12 +329,12 @@ export function createApi(t: Transport) {
     priceList: (id: string) => get<PriceList>(`/price-lists/${enc(id)}`),
     createPriceList: (body: PriceListInput) => post<PriceList>("/price-lists", body, true),
     updatePriceList: (id: string, body: Partial<PriceListInput>) => patch<PriceList>(`/price-lists/${enc(id)}`, body),
-    archivePriceList: (id: string) => t.request<PriceList>("DELETE", `/price-lists/${enc(id)}`),
+    archivePriceList: (id: string) => item.request<PriceList>("DELETE", `/price-lists/${enc(id)}`),
     workflows: (p?: ListParams) => get<ListResponse<Workflow>>("/workflows", page(p)),
     workflow: (id: string) => get<Workflow>(`/workflows/${enc(id)}`),
     createWorkflow: (body: WorkflowInput) => post<Workflow>("/workflows", body, true),
     updateWorkflow: (id: string, body: Partial<WorkflowInput>) => patch<Workflow>(`/workflows/${enc(id)}`, body),
-    archiveWorkflow: (id: string) => t.request<Workflow>("DELETE", `/workflows/${enc(id)}`),
+    archiveWorkflow: (id: string) => item.request<Workflow>("DELETE", `/workflows/${enc(id)}`),
 
     // Agency OS: dashboards
     defaultDashboard: () => get<Dashboard>("/dashboards/default"),
@@ -344,10 +349,11 @@ export function createApi(t: Transport) {
     threads: () => get<ListResponse<AssistantThread>>("/assistant/threads"),
     thread: (id: string) => get<AssistantThread>(`/assistant/threads/${enc(id)}`),
     createThread: (title?: string) => post<AssistantThread>("/assistant/threads", { title }, true),
-    sendMessage: (threadId: string, content: string) =>
+    /** `locale` is the UI language; the assistant replies in it. */
+    sendMessage: (threadId: string, content: string, locale?: string) =>
       post<{ user_message: AssistantMessage; assistant_message: AssistantMessage }>(
         `/assistant/threads/${enc(threadId)}/messages`,
-        { content },
+        { content, locale },
         true,
       ),
     applyPlan: (messageId: string, actions?: number[]) =>
@@ -372,5 +378,5 @@ export const api: Api = createApi(proxyTransport);
 export function errorMessage(e: unknown): string {
   if (e instanceof ApiError) return e.message;
   if (e instanceof Error) return e.message;
-  return "Something went wrong";
+  return String(e);
 }

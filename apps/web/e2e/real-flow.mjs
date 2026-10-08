@@ -9,7 +9,10 @@
 // Flow: register a company -> upload .md -> 4 tiers -> order auto -> delivered -> download +
 // evidence PDF; upload .docx -> order full -> reviewer clears the queue in the cockpit (A, E +
 // Ctrl+Enter) -> PM sees it delivered; glossary terms -> job with a blocked segment shows up in
-// Exceptions; admin sees reviewers and payouts. Screenshots: screenshots/real-*.png.
+// Exceptions; admin sees reviewers and payouts; the assistant sets up an agency from an English
+// description; CRM, deals, a pharma job with two reviews and client approval; admin exports the UI
+// catalog as XLIFF for "de", fills targets, imports (placeholder errors first), enables "de", and the
+// PM switches language and sees German strings with English fallback. Screenshots: screenshots/real-*.png.
 import { chromium } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync, readFileSync } from "node:fs";
@@ -23,8 +26,8 @@ const SHOTS = path.resolve(process.env.SHOTS_DIR ?? path.join(here, "..", "scree
 const PYTHON = process.env.PYTHON ?? path.resolve(here, "../../../services/api/.venv/bin/python");
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "demo-password-123";
 const SECOND_REVIEWER = process.env.SECOND_REVIEWER ?? "reviewer2@demo.test";
-const SERBIAN_PROMPT =
-  "Mi smo agencija Primer Prevodi Demo. Naši klijenti su Acme d.o.o., Beta Pharma i Gamma Soft. Workflow: MT, pa QE, pa revizija, pa druga revizija za farmaciju, i odobrenje klijenta. Cena 0.08 EUR po reči. Hoću dashboard sa prihodom, maržom i poslovima koji kasne.";
+const AGENCY_PROMPT =
+  "We are Northwind Language Services. Our clients are Acme Ltd, Beta Pharma and Gamma Soft. Workflow: MT, then QE, then review, then a second review for pharma, then client approval. Price 0.08 EUR per word. I want a dashboard with revenue, margin and overdue jobs.";
 const T = 90_000; // generous timeout for pipeline work
 mkdirSync(SHOTS, { recursive: true });
 
@@ -335,10 +338,10 @@ try {
   await shot(nr.page, "test-result", false);
   step(`applicant took a test: ${await nr.page.getByText(/^(Passed|Not passed this time)$/).innerText()}`);
 
-  // 10. Agency OS: the assistant sets up the workspace from a Serbian description
+  // 10. Agency OS: the assistant sets up the workspace from an English description
   await page.goto("/app/assistant");
   await page.waitForLoadState("networkidle");
-  await page.getByLabel("Message the assistant").fill(SERBIAN_PROMPT);
+  await page.getByLabel("Message the assistant").fill(AGENCY_PROMPT);
   await page.keyboard.press("Enter");
   const planCard = page.getByRole("group", { name: "Proposed plan" });
   await planCard.waitFor({ timeout: 60_000 });
@@ -352,9 +355,9 @@ try {
   step(`assistant plan applied (${actionCount} actions)`);
 
   await page.goto("/app/crm");
-  for (const name of ["Acme d.o.o.", "Beta Pharma", "Gamma Soft"]) await page.getByRole("link", { name, exact: true }).waitFor();
+  for (const name of ["Acme Ltd", "Beta Pharma", "Gamma Soft"]) await page.getByRole("link", { name, exact: true }).waitFor();
   await page.goto("/app/workflows");
-  const pharmaLink = page.getByRole("link", { name: /farmacij|pharma/i }).first();
+  const pharmaLink = page.getByRole("link", { name: /pharma/i }).first();
   await pharmaLink.waitFor();
   await pharmaLink.click();
   await page.getByRole("heading", { name: "Steps" }).waitFor();
@@ -438,6 +441,79 @@ try {
   await rev.page.goto("/reviewer/earnings");
   await rev.page.waitForLoadState("networkidle");
   await shot(rev.page, "reviewer-earnings");
+
+  // 13. Localization: export XLIFF for "de", translate, import, enable, switch the PM's UI
+  const ap = adm.page;
+  await ap.goto("/admin/languages");
+  await ap.getByRole("heading", { name: "Languages", level: 1 }).waitFor();
+  const existingDe = ap.getByRole("button", { name: "Delete Deutsch" });
+  if (await existingDe.count()) {
+    await existingDe.click();
+    await ap.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
+    await ap.getByRole("button", { name: "Delete Deutsch" }).waitFor({ state: "detached" });
+  }
+  await ap.getByRole("button", { name: "Add language" }).first().click();
+  let ld = ap.getByRole("dialog");
+  await ld.getByLabel("Language code").fill("de");
+  await ld.getByLabel("Name", { exact: true }).fill("Deutsch");
+  await ld.getByRole("button", { name: "Add", exact: true }).click();
+  await ld.waitFor({ state: "hidden" });
+  await ap.getByRole("switch", { name: "Enable Deutsch" }).waitFor();
+
+  const [download] = await Promise.all([ap.waitForEvent("download"), ap.getByRole("link", { name: "Export Deutsch as XLIFF" }).click()]);
+  const xliff = readFileSync(await download.path(), "utf8");
+  if (!/<xliff [^>]*version="2\.1"[^>]*srcLang="en"[^>]*trgLang="de"/.test(xliff)) throw new Error("export is not XLIFF 2.1 en -> de");
+  const units = (xliff.match(/<unit /g) ?? []).length;
+  const fill = (xml, translations) =>
+    Object.entries(translations).reduce((x, [key, target]) => {
+      const re = new RegExp(`(<unit id="${key.replace(/[.]/g, "\\.")}">[\\s\\S]*?</source>)`);
+      if (!re.test(x)) throw new Error(`unit ${key} missing from the export`);
+      return x.replace(re, `$1\n        <target>${target.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</target>`);
+    }, xml);
+  const GERMAN = {
+    "app.layout.projects": "Projekte",
+    "app.layout.newProject": "Neues Projekt",
+    "app.layout.dashboard": "Übersicht",
+    "components.shell.signOut": "Abmelden",
+    "app.dashboardView.widgets": "Widgets ({count})",
+    "app.assistant.chat.actionsApplied": "{count, plural, one {# Aktion angewendet} other {# Aktionen angewendet}}",
+  };
+  const importFile = async (xml, name) => {
+    const file = path.join(work, name);
+    writeFileSync(file, xml);
+    await ap.getByRole("button", { name: "Import translations into Deutsch" }).click();
+    const dlg2 = ap.getByRole("dialog");
+    await dlg2.locator('input[type="file"]').setInputFiles(file);
+    await dlg2.getByRole("button", { name: "Import", exact: true }).click();
+    return dlg2;
+  };
+  // A broken placeholder is rejected with a per-key error and nothing is saved.
+  let dlgImport = await importFile(fill(xliff, { ...GERMAN, "app.dashboardView.widgets": "Widgets ({anzahl})" }), "de-broken.xlf");
+  const phList = dlgImport.getByRole("list", { name: "Placeholder mismatches" });
+  await phList.getByText("app.dashboardView.widgets").waitFor({ timeout: 15_000 });
+  await phList.getByText("expected {count}, got {anzahl}").waitFor();
+  await shot(ap, "languages-placeholder-error", false);
+  await dlgImport.getByRole("button", { name: "Cancel" }).click();
+  dlgImport = await importFile(fill(xliff, GERMAN), "de.xlf");
+  await dlgImport.waitFor({ state: "hidden", timeout: 15_000 });
+  await ap.getByText("Translations imported into Deutsch").waitFor();
+  await ap.getByRole("switch", { name: "Enable Deutsch" }).check();
+  await ap.getByText("Deutsch is enabled").waitFor();
+  await ap.getByRole("row", { name: /Deutsch/ }).getByText(`${Object.keys(GERMAN).length} of ${units.toLocaleString("en")} keys`).waitFor();
+  await shot(ap, "languages", false);
+  step(`admin exported XLIFF (${units} units), a placeholder mismatch was rejected, ${Object.keys(GERMAN).length} German strings imported, de enabled`);
+
+  await page.goto("/app");
+  await page.getByLabel("Interface language").selectOption("de");
+  const nav = page.getByRole("navigation", { name: "Main" });
+  await nav.getByRole("link", { name: "Projekte", exact: true }).waitFor({ timeout: 15_000 });
+  await nav.getByRole("link", { name: "Neues Projekt", exact: true }).waitFor();
+  await nav.getByRole("link", { name: "Exceptions", exact: true }).waitFor(); // not translated: English fallback
+  if ((await page.locator("html").getAttribute("lang")) !== "de") throw new Error('<html lang> is not "de"');
+  await shot(page, "locale-de", false);
+  await page.getByLabel("Oberflächensprache").or(page.getByLabel("Interface language")).selectOption("en");
+  await nav.getByRole("link", { name: "Projects", exact: true }).waitFor({ timeout: 15_000 });
+  step("PM switched to Deutsch: translated nav with English fallback, then back to English");
 } catch (e) {
   failed = e;
   for (const [who, p] of openPages) await p.screenshot({ path: path.join(SHOTS, `failure-${who}.png`), fullPage: true }).catch(() => null);

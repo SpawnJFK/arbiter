@@ -86,23 +86,9 @@ export function pair(src: string, tgt: string): string {
 
 export function humanize(s: string | null | undefined): string {
   if (!s) return "–";
-  const t = s.replace(/_/g, " ");
-  return t.charAt(0).toUpperCase() + t.slice(1);
+  const item = s.replace(/_/g, " ");
+  return item.charAt(0).toUpperCase() + item.slice(1);
 }
-
-export const TIER_LABEL: Record<string, string> = {
-  auto: "Auto",
-  ai_review: "AI review",
-  hybrid: "Hybrid",
-  full: "Full human",
-};
-
-export const TIER_BLURB: Record<string, string> = {
-  auto: "Machine translation with QE gating. Uncertain segments go to the AI senate.",
-  ai_review: "Every segment below threshold is revised and voted on by the AI senate.",
-  hybrid: "Confident segments ship automatically; the rest go to a vetted human reviewer.",
-  full: "Every segment is reviewed by a qualified human, with AI checks as a second pair of eyes.",
-};
 
 /** True when the ISO time is in the past (evaluated now; relative-time UI tolerates drift). */
 export function isPast(iso: string | null | undefined): boolean {

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
-import { backendFetch } from "@/lib/backend";
+import { backendFetch, UNREACHABLE_HEADER } from "@/lib/backend";
+import { getI18n } from "@/lib/i18n/server";
 import { IS_MOCK, ROLE_COOKIE, TOKEN_COOKIE } from "@/lib/config";
 import { mockApply, mockLogin, mockRegister } from "@/lib/mock/handler";
 import { safeNext } from "@/lib/roles";
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
   let user: User;
   if (IS_MOCK) {
     const email = String(body.email ?? "");
-    if (!email || !body.password) return errorJson(422, "validation_error", "Email and password are required.");
+    if (!email || !body.password) return errorJson(422, "validation_error", (await getI18n()).t("errors.emailPasswordRequired"));
     const r =
       kind === "login"
         ? mockLogin(email)
@@ -56,7 +57,10 @@ export async function POST(req: NextRequest) {
     });
     const data = (await res.json().catch(() => null)) as { token?: string; user?: User } | null;
     if (!res.ok || !data?.token || !data.user) {
-      return NextResponse.json(data ?? { error: { code: "auth_failed", message: "Sign-in failed.", details: {} } }, {
+      const { t } = await getI18n();
+      const unreachable = res.headers.get(UNREACHABLE_HEADER);
+      const fallback = { error: { code: unreachable ? "backend_unreachable" : "auth_failed", message: t(unreachable ? "errors.backendUnreachable" : "errors.signInFailed"), details: {} } };
+      return NextResponse.json(!data || unreachable ? fallback : data, {
         status: res.ok ? 502 : res.status,
       });
     }

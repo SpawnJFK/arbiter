@@ -71,7 +71,7 @@ from arbiter.models import (
 
 log = logging.getLogger(__name__)
 
-ASSISTANT_PROMPT_VERSION = "2026-10-07.1"
+ASSISTANT_PROMPT_VERSION = "2026-10-08.1"
 HISTORY_TURNS = 10
 ACTION_TYPES = (
     "create_workflow",
@@ -90,13 +90,18 @@ REF = re.compile(r"^@(\d{1,3})$")
 
 SYSTEM_PROMPT = """You are the setup assistant of Arbiter, an AI translation platform that agencies and
 localization teams run their business on (projects, CRM, workflows, prices, dashboards).
-The user describes their agency or team in plain language (English or Serbian) or asks about
-their data. You answer in the user's language and propose a PLAN of configuration actions.
-You never change anything yourself: a human reviews the plan and applies all or some actions.
+The user describes their agency or team in plain language (any language) or asks about their
+data. You propose a PLAN of configuration actions. You never change anything yourself: a
+human reviews the plan and applies all or some actions.
+
+Output language: the request carries "locale" (a BCP-47 tag, e.g. en, de, pt-BR). Write
+"reply", every "summary" and every name YOU choose (workflow, price list and dashboard names,
+workflow descriptions, widget titles) in that locale, whatever language the user wrote in.
+Proper names the user gave (agency, clients, contacts, e-mails) are kept exactly as written.
 
 Output: one JSON object and nothing else:
 {"reply": "<message to the user>", "plan": [<Action>, ...]}
-Action = {"type": "<one of the types below>", "summary": "<one line, user's language>", "data": {...}}
+Action = {"type": "<one of the types below>", "summary": "<one line, in the locale>", "data": {...}}
 
 Action types and their data (fields marked ? are optional; money and rates are decimal strings):
 - update_org: {name?, vertical?, regulated?, default_tier?, no_reviewer_policy? (wait|ai_fallback|partial)}
@@ -500,9 +505,9 @@ def _history(session: Session, thread: AssistantThread) -> list[dict[str, Any]]:
 
 
 def think(
-    session: Session, org: Organization, thread: AssistantThread, content: str
+    session: Session, org: Organization, thread: AssistantThread, content: str, locale: str = "en"
 ) -> tuple[str, list[dict[str, Any]], str]:
-    """(reply, validated plan, model_version) for one user message."""
+    """(reply, validated plan, model_version) for one user message, answered in `locale`."""
     context = build_context(session, org)
     user_text = _user_text(session, thread, content)
     fallback_note = ""
@@ -516,6 +521,7 @@ def think(
             {
                 "task": "assistant",
                 "prompt_version": ASSISTANT_PROMPT_VERSION,
+                "locale": locale,
                 "context": context,
                 "history": _history(session, thread),
                 "message": content,
@@ -548,7 +554,7 @@ def think(
         except EngineError as e:
             log.warning("assistant model failed, using the built-in planner: %s", e)
             fallback_note = "The AI model failed to answer; this answer comes from the built-in planner."
-    reply, raw = heuristic_plan(content, context)
+    reply, raw = heuristic_plan(content, context, locale)
     plan, notes = validate_plan(raw, org, user_text)
     if notes:
         reply += "\n\n" + "\n".join(f"- {n}" for n in notes)
@@ -607,9 +613,14 @@ def thread_messages(session: Session, thread: AssistantThread) -> list[Assistant
 
 
 def post_message(
-    session: Session, org: Organization, thread: AssistantThread, content: str, user_id: str | None
+    session: Session,
+    org: Organization,
+    thread: AssistantThread,
+    content: str,
+    user_id: str | None,
+    locale: str = "en",
 ) -> tuple[AssistantMessage, AssistantMessage]:
-    reply, plan, model_version = think(session, org, thread, content)
+    reply, plan, model_version = think(session, org, thread, content, locale)
     now = utcnow()
     user_msg = AssistantMessage(
         org_id=org.id,

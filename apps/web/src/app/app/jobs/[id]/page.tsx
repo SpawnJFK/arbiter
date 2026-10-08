@@ -1,3 +1,4 @@
+import { getI18n } from "@/lib/i18n/server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -8,7 +9,6 @@ import { Card } from "@/components/ui/card";
 import { Callout, PageHeader, Progress } from "@/components/ui/misc";
 import { Stat } from "@/components/ui/card";
 import { Time } from "@/components/ui/time";
-import { langName, money, num, pct, score, TIER_LABEL } from "@/lib/format";
 import { contentTypeLabel } from "@/lib/langs";
 import { getMe, withAuth } from "@/lib/server-api";
 import { DECISIONS, OUTPUT_STATES, SEGMENT_STATES, TERMINAL_JOB_STATES } from "@/lib/types";
@@ -18,7 +18,10 @@ import { WorkflowPipeline } from "@/components/workflow-pipeline";
 import { stepStatuses } from "@/lib/workflow";
 import { SegmentTable } from "./segment-table";
 
-export const metadata: Metadata = { title: "Job" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t("app.jobs.detail.job") };
+}
 
 
 export default async function JobPage({
@@ -28,6 +31,7 @@ export default async function JobPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ decision?: string; state?: string }>;
 }) {
+  const { f, t } = await getI18n();
   const { id } = await params;
   const sp = await searchParams;
   const decision = DECISIONS.find((d) => d === sp.decision) ?? "";
@@ -42,7 +46,7 @@ export default async function JobPage({
   ]);
   // job.senate_count (Agency OS) is authoritative; older backends only allow counting segments.
   const senateCount =
-    typeof job.senate_count === "number" ? num(job.senate_count) : senate.next_offset === null ? num(senate.items.length) : `${num(senate.items.length)}+`;
+    typeof job.senate_count === "number" ? f.num(job.senate_count) : senate.next_offset === null ? f.num(senate.items.length) : `${f.num(senate.items.length)}+`;
   const wfSteps = job.workflow?.steps ?? [];
   const showMoney = user.role === "pm" || user.role === "admin";
   const delivered = OUTPUT_STATES.includes(job.state);
@@ -55,11 +59,11 @@ export default async function JobPage({
         eyebrow={
           <span className="flex items-center gap-1.5">
             <Link href="/app/projects" className="hover:text-fg">
-              Projects
+              {t("app.jobs.detail.projects")}
             </Link>
             <span aria-hidden="true">/</span>
             <Link href={`/app/projects/${job.project_id}`} className="hover:text-fg">
-              Project
+              {t("app.jobs.detail.project")}
             </Link>
           </span>
         }
@@ -74,34 +78,34 @@ export default async function JobPage({
         }
         description={
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>{langName(job.target_lang)}</span>
-            <Badge tone={job.tier === "hybrid" || job.tier === "full" ? "violet" : "accent"}>{TIER_LABEL[job.tier]}</Badge>
-            <span>{contentTypeLabel(job.content_type)}</span>
+            <span>{f.langName(job.target_lang)}</span>
+            <Badge tone={job.tier === "hybrid" || job.tier === "full" ? "violet" : "accent"}>{t(`tier.${job.tier}.label`)}</Badge>
+            <span>{contentTypeLabel(t, job.content_type)}</span>
             <span className="tabular">
-              {num(job.segment_count)} segments · {num(job.word_count)} words
+              {t("app.jobs.detail.segmentsWords", { segment_count: f.num(job.segment_count), word_count: f.num(job.word_count) })}
             </span>
-            {job.threshold !== null && <span className="tabular">QE threshold {score(job.threshold)}</span>}
+            {job.threshold !== null && <span className="tabular">{t("app.jobs.detail.qeThreshold", { threshold: f.score(job.threshold) })}</span>}
           </span>
         }
         actions={
           <>
             {delivered ? (
               <AnchorButton href={dl("/download")} variant="primary" download>
-                <Icons.download className="size-4" /> Download
+                <Icons.download className="size-4" /> {t("app.jobs.detail.download")}
               </AnchorButton>
             ) : (
-              <Button variant="primary" disabled title="Available once the job is delivered">
-                <Icons.download className="size-4" /> Download
+              <Button variant="primary" disabled title={t("app.jobs.detail.availableOnceTheJobIs")}>
+                <Icons.download className="size-4" /> {t("app.jobs.detail.download")}
               </Button>
             )}
             <AnchorButton href={dl("/xliff")} download>
-              XLIFF
+              {t("app.jobs.detail.xliff")}
             </AnchorButton>
             <AnchorButton href={dl("/evidence?format=json")} download>
-              Evidence JSON
+              {t("app.jobs.detail.evidenceJson")}
             </AnchorButton>
             <AnchorButton href={dl("/evidence?format=pdf")} download>
-              Evidence PDF
+              {t("app.jobs.detail.evidencePdf")}
             </AnchorButton>
             {user.role === "pm" && ["draft", "quoted", "running", "review"].includes(job.state) && <CancelJobButton jobId={job.id} />}
           </>
@@ -112,12 +116,12 @@ export default async function JobPage({
       {wfSteps.length > 0 && (
         <Card className="mb-4 px-4 py-3">
           <div className="mb-2 flex flex-wrap items-center gap-2 text-[13px]">
-            <span className="font-semibold">Workflow</span>
+            <span className="font-semibold">{t("app.jobs.detail.workflow")}</span>
             <span className="text-muted">{job.workflow?.name}</span>
-            {job.workflow?.source === "tier" && <span className="text-[12px] text-faint">(tier default)</span>}
+            {job.workflow?.source === "tier" && <span className="text-[12px] text-faint">{t("app.jobs.detail.tierDefault")}</span>}
             {job.client_approved_at && (
               <span className="ml-auto text-[12.5px] text-ok">
-                Client approved <Time iso={job.client_approved_at} mode="relative" />
+                {t("app.jobs.detail.clientApproved")} <Time iso={job.client_approved_at} mode="relative" />
               </span>
             )}
           </div>
@@ -125,13 +129,12 @@ export default async function JobPage({
         </Card>
       )}
       {job.no_reviewer_fallback_used && (
-        <Callout tone="warn" title="Reviewer fallback used" className="mb-4">
-          No qualified reviewer was available for some segments, so your organisation&apos;s no-reviewer policy was applied.
-          Affected segments are marked in the table and in the evidence pack.
+        <Callout tone="warn" title={t("app.jobs.detail.reviewerFallbackUsed")} className="mb-4">
+          {t("app.jobs.detail.noQualifiedReviewerWasAvailable")}
         </Callout>
       )}
       {job.failure_reason && (
-        <Callout tone="danger" title="Job failed" className="mb-4">
+        <Callout tone="danger" title={t("app.jobs.detail.jobFailed")} className="mb-4">
           {job.failure_reason}
         </Callout>
       )}
@@ -140,34 +143,34 @@ export default async function JobPage({
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px]">
           <div className="flex min-w-60 flex-1 items-center gap-3">
             <Progress value={job.progress} tone={job.state === "failed" ? "danger" : delivered ? "ok" : "accent"} />
-            <span className="tabular font-medium">{pct(job.progress)}</span>
+            <span className="tabular font-medium">{f.pct(job.progress)}</span>
           </div>
           <span className="text-muted">
-            Created <Time iso={job.created_at} />
+            {t("app.jobs.detail.created")} <Time iso={job.created_at} />
           </span>
           {job.due_at && (
             <span className="text-muted">
-              Due <Time iso={job.due_at} />
+              {t("app.jobs.detail.due")} <Time iso={job.due_at} />
             </span>
           )}
           {job.delivered_at && (
             <span className="text-muted">
-              Delivered <Time iso={job.delivered_at} />
+              {t("app.jobs.detail.delivered")} <Time iso={job.delivered_at} />
             </span>
           )}
         </div>
       </Card>
 
       <div className={`mb-4 grid grid-cols-2 gap-3 ${showMoney ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
-        <Stat tone="ok" label="Auto-approved" value={num(job.auto_approved_count)} hint="Cleared threshold + band" />
-        <Stat tone="accent" label="Senate" value={senateCount} hint="Segments the AI senate reviewed" />
-        <Stat tone="violet" label="Routed to humans" value={num(job.review_count)} hint="Sent to a reviewer or your team" />
-        <Stat label="AI reviewed" value={num(job.ai_reviewed_count)} hint="Revised by the AI editor" />
+        <Stat tone="ok" label={t("app.jobs.detail.autoApproved")} value={f.num(job.auto_approved_count)} hint={t("app.jobs.detail.clearedThresholdBand")} />
+        <Stat tone="accent" label={t("app.jobs.detail.senate")} value={senateCount} hint={t("app.jobs.detail.segmentsTheAiSenateReviewed")} />
+        <Stat tone="violet" label={t("app.jobs.detail.routedToHumans")} value={f.num(job.review_count)} hint={t("app.jobs.detail.sentToAReviewerOr")} />
+        <Stat label={t("app.jobs.detail.aiReviewed")} value={f.num(job.ai_reviewed_count)} hint={t("app.jobs.detail.revisedByTheAiEditor")} />
         {showMoney && (
           <Stat
-            label="Margin"
-            value={money(job.margin)}
-            hint={`Revenue ${money(job.revenue)} · cost ${money(job.cost)}`}
+            label={t("app.jobs.detail.margin")}
+            value={f.money(job.margin)}
+            hint={t("app.jobs.detail.revenueCost", { revenue: f.money(job.revenue), cost: f.money(job.cost) })}
           />
         )}
       </div>

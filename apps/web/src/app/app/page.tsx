@@ -1,9 +1,13 @@
+import { getI18n } from "@/lib/i18n/server";
 import type { Metadata } from "next";
 import { withAuth, getMe } from "@/lib/server-api";
 import type { DashboardPeriod } from "@/lib/types";
 import { DashboardView } from "./_dashboard/dashboard-view";
 
-export const metadata: Metadata = { title: "Dashboard" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t("app.dashboard.metaTitle") };
+}
 
 const PERIODS: DashboardPeriod[] = ["30d", "90d", "365d"];
 

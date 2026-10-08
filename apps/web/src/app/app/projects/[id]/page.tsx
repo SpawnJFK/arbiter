@@ -1,3 +1,4 @@
+import { getI18n } from "@/lib/i18n/server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -6,15 +7,18 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState, PageHeader, Progress } from "@/components/ui/misc";
 import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { Time } from "@/components/ui/time";
-import { langName, num, TIER_LABEL } from "@/lib/format";
 import { contentTypeLabel } from "@/lib/langs";
 import { withAuth } from "@/lib/server-api";
 import { OUTPUT_STATES, TERMINAL_JOB_STATES } from "@/lib/types";
 
-export const metadata: Metadata = { title: "Project" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t("app.projects.detail.project") };
+}
 
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
+  const { f, t } = await getI18n();
   const { id } = await params;
   const project = await withAuth((api) => api.project(id), `/app/projects/${id}`);
   const jobs = project.jobs ?? [];
@@ -26,41 +30,41 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       <PageHeader
         eyebrow={
           <Link href="/app/projects" className="hover:text-fg">
-            Projects
+            {t("app.projects.detail.projects")}
           </Link>
         }
         title={project.name}
         description={
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span>
-              {langName(project.source_lang)} → {project.target_langs.map(langName).join(", ")}
+              {f.langName(project.source_lang)} → {project.target_langs.map((l) => f.langName(l)).join(", ")}
             </span>
-            <Badge tone={project.tier === "hybrid" || project.tier === "full" ? "violet" : "accent"}>{TIER_LABEL[project.tier]}</Badge>
-            <span>{contentTypeLabel(project.content_type)}</span>
+            <Badge tone={project.tier === "hybrid" || project.tier === "full" ? "violet" : "accent"}>{t(`tier.${project.tier}.label`)}</Badge>
+            <span>{contentTypeLabel(t, project.content_type)}</span>
             {project.due_at && (
               <span>
-                Due <Time iso={project.due_at} />
+                {t("app.projects.detail.due")} <Time iso={project.due_at} />
               </span>
             )}
           </span>
         }
       />
       <Card>
-        <CardHeader title="Jobs" description="One job per target language. Open a job to see every segment and the evidence behind it." />
+        <CardHeader title={t("app.projects.detail.jobs")} description={t("app.projects.detail.oneJobPerTargetLanguage")} />
         {jobs.length === 0 ? (
-          <EmptyState title="No jobs" description="Jobs appear here as soon as the project is created." />
+          <EmptyState title={t("app.projects.detail.noJobs")} description={t("app.projects.detail.jobsAppearHereAsSoon")} />
         ) : (
           <Table>
             <THead>
               <tr>
-                <Th>Target</Th>
-                <Th>State</Th>
-                <Th className="w-48">Progress</Th>
-                <Th className="hidden text-right md:table-cell">Segments</Th>
-                <Th className="hidden text-right lg:table-cell">Auto</Th>
-                <Th className="hidden text-right lg:table-cell">AI reviewed</Th>
-                <Th className="hidden text-right lg:table-cell">Human</Th>
-                <Th className="hidden sm:table-cell">Delivered</Th>
+                <Th>{t("app.projects.detail.target")}</Th>
+                <Th>{t("app.projects.detail.state")}</Th>
+                <Th className="w-48">{t("app.projects.detail.progress")}</Th>
+                <Th className="hidden text-right md:table-cell">{t("app.projects.detail.segments")}</Th>
+                <Th className="hidden text-right lg:table-cell">{t("app.projects.detail.auto")}</Th>
+                <Th className="hidden text-right lg:table-cell">{t("app.projects.detail.aiReviewed")}</Th>
+                <Th className="hidden text-right lg:table-cell">{t("app.projects.detail.human")}</Th>
+                <Th className="hidden sm:table-cell">{t("app.projects.detail.delivered")}</Th>
               </tr>
             </THead>
             <TBody>
@@ -68,7 +72,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                 <Tr key={j.id}>
                   <Td>
                     <Link href={`/app/jobs/${j.id}`} className="font-medium hover:text-accent hover:underline">
-                      {langName(j.target_lang)}
+                      {f.langName(j.target_lang)}
                     </Link>
                     <div className="font-mono text-[11.5px] text-faint">{j.id}</div>
                   </Td>
@@ -82,10 +86,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                       <span className="tabular w-9 text-right text-[12px] text-muted">{Math.round(j.progress * 100)}%</span>
                     </div>
                   </Td>
-                  <Td className="tabular hidden text-right md:table-cell">{num(j.segment_count)}</Td>
-                  <Td className="tabular hidden text-right text-ok lg:table-cell">{num(j.auto_approved_count)}</Td>
-                  <Td className="tabular hidden text-right lg:table-cell">{num(j.ai_reviewed_count)}</Td>
-                  <Td className="tabular hidden text-right lg:table-cell">{num(j.review_count)}</Td>
+                  <Td className="tabular hidden text-right md:table-cell">{f.num(j.segment_count)}</Td>
+                  <Td className="tabular hidden text-right text-ok lg:table-cell">{f.num(j.auto_approved_count)}</Td>
+                  <Td className="tabular hidden text-right lg:table-cell">{f.num(j.ai_reviewed_count)}</Td>
+                  <Td className="tabular hidden text-right lg:table-cell">{f.num(j.review_count)}</Td>
                   <Td className="hidden text-muted sm:table-cell">
                     <Time iso={j.delivered_at} mode="relative" />
                   </Td>

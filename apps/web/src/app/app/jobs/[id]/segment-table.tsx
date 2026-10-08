@@ -1,5 +1,6 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/client";
 import { useCallback, useRef, useState } from "react";
 import { Icons } from "@/components/icons";
 import { TagEditor, TagStatus, tagsValid, type TagEditorHandle } from "@/components/tag-editor";
@@ -13,7 +14,6 @@ import { EmptyState, Kbd, Skeleton } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/toast";
 import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { humanize } from "@/lib/format";
 import { reasonLabel, violationMessages } from "@/lib/reasons";
 import { tagsOf } from "@/lib/tags";
 import { DECISIONS, SEGMENT_STATES, type Decision, type Job, type ListResponse, type Segment, type SegmentState } from "@/lib/types";
@@ -36,6 +36,7 @@ export function SegmentTable({
   initialDecision?: Decision | "";
   initialState?: SegmentState | "";
 }) {
+  const { t } = useI18n();
   const toast = useToast();
   const [rows, setRows] = useState(initial.items);
   const [nextOffset, setNextOffset] = useState(initial.next_offset);
@@ -57,12 +58,12 @@ export function SegmentTable({
         setNextOffset(res.next_offset);
         setOffset(q.offset);
       } catch (e) {
-        toast.error("Could not load segments", errorMessage(e));
+        toast.error(t("app.jobs.detail.segmentTable.couldNotLoadSegments"), errorMessage(e));
       } finally {
         setLoading(false);
       }
     },
-    [job.id, toast],
+    [job.id, toast, t],
   );
 
   const replace = (s: Segment) => setRows((rs) => rs.map((r) => (r.id === s.id ? s : r)));
@@ -70,18 +71,18 @@ export function SegmentTable({
   async function approve(seg: Segment) {
     try {
       replace(await api.approveSegment(job.id, seg.id));
-      toast.success(`Segment ${num1(seg.seq)} approved`);
+      toast.success(t("app.jobs.detail.segmentTable.segmentApproved", { seq: num1(seg.seq) }));
     } catch (e) {
-      toast.error("Approve failed", errorMessage(e));
+      toast.error(t("app.jobs.detail.segmentTable.approveFailed"), errorMessage(e));
     }
   }
 
   return (
     <Card>
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
-        <h2 className="mr-auto text-sm font-semibold">Segments</h2>
+        <h2 className="mr-auto text-sm font-semibold">{t("app.jobs.detail.segmentTable.segments")}</h2>
         <Select
-          aria-label="Filter by state"
+          aria-label={t("app.jobs.detail.segmentTable.filterByState")}
           value={state}
           onChange={(e) => {
             const v = e.target.value as SegmentState | "";
@@ -90,15 +91,15 @@ export function SegmentTable({
           }}
           className="w-40"
         >
-          <option value="">All states</option>
+          <option value="">{t("app.jobs.detail.segmentTable.allStates")}</option>
           {SEGMENT_STATES.map((s) => (
             <option key={s} value={s}>
-              {humanize(s)}
+              {t.enumLabel(s)}
             </option>
           ))}
         </Select>
         <Select
-          aria-label="Filter by decision"
+          aria-label={t("app.jobs.detail.segmentTable.filterByDecision")}
           value={decision}
           onChange={(e) => {
             const v = e.target.value as Decision | "";
@@ -107,10 +108,10 @@ export function SegmentTable({
           }}
           className="w-40"
         >
-          <option value="">All decisions</option>
+          <option value="">{t("app.jobs.detail.segmentTable.allDecisions")}</option>
           {DECISIONS.map((d) => (
             <option key={d} value={d}>
-              {decisionLabel(d)}
+              {decisionLabel(t, d)}
             </option>
           ))}
         </Select>
@@ -124,8 +125,8 @@ export function SegmentTable({
         </div>
       ) : rows.length === 0 ? (
         <EmptyState
-          title={state || decision ? "No segments match these filters" : "No segments yet"}
-          description={state || decision ? "Clear a filter to see more." : "Segments appear once the file has been prepared and translated."}
+          title={state || decision ? t("app.jobs.detail.segmentTable.noSegmentsMatchTheseFilters") : t("app.jobs.detail.segmentTable.noSegmentsYet")}
+          description={state || decision ? t("app.jobs.detail.segmentTable.clearAFilterToSee") : t("app.jobs.detail.segmentTable.segmentsAppearOnceTheFile")}
         />
       ) : (
         <>
@@ -134,12 +135,12 @@ export function SegmentTable({
             <thead className="border-b border-border bg-subtle/60">
               <tr className="text-[12px] text-muted">
                 <th scope="col" className="h-8 w-12 pl-4 font-medium">#</th>
-                <th scope="col" className="w-[38%] px-3 font-medium">Source</th>
-                <th scope="col" className="px-3 font-medium">Target</th>
-                <th scope="col" className="w-16 px-3 font-medium">QE</th>
-                <th scope="col" className="w-32 px-3 font-medium">Decision</th>
+                <th scope="col" className="w-[38%] px-3 font-medium">{t("app.jobs.detail.segmentTable.source")}</th>
+                <th scope="col" className="px-3 font-medium">{t("app.jobs.detail.segmentTable.target")}</th>
+                <th scope="col" className="w-16 px-3 font-medium">{t("app.jobs.detail.segmentTable.qe")}</th>
+                <th scope="col" className="w-32 px-3 font-medium">{t("app.jobs.detail.segmentTable.decision")}</th>
                 <th scope="col" className="w-28 pr-4 text-right font-medium">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t("app.jobs.detail.segmentTable.actions")}</span>
                 </th>
               </tr>
             </thead>
@@ -188,14 +189,14 @@ export function SegmentTable({
 
       <div className="flex items-center justify-between border-t border-border px-4 py-2.5 text-[12.5px] text-muted">
         <span className="tabular">
-          {rows.length > 0 ? `${offset + 1}–${offset + rows.length}` : "0"} {nextOffset === null ? `of ${offset + rows.length}` : ""}
+          {rows.length === 0 ? "0" : nextOffset === null ? t("app.jobs.detail.segmentTable.rangeOfTotal", { from: offset + 1, to: offset + rows.length, total: offset + rows.length }) : t("app.jobs.detail.segmentTable.range", { from: offset + 1, to: offset + rows.length })}
         </span>
         <div className="flex gap-1.5">
           <Button size="sm" disabled={offset === 0 || loading} onClick={() => load({ state, decision, offset: Math.max(0, offset - PAGE) })}>
-            Previous
+            {t("app.jobs.detail.segmentTable.previous")}
           </Button>
           <Button size="sm" disabled={nextOffset === null || loading} onClick={() => nextOffset !== null && load({ state, decision, offset: nextOffset })}>
-            Next
+            {t("app.jobs.detail.segmentTable.next")}
           </Button>
         </div>
       </div>
@@ -226,6 +227,7 @@ function SegmentRow({
   onApprove: () => void;
   onReport: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <tr className={cn("align-top", editing ? "bg-accent-subtle/40" : "hover:bg-subtle/50")}>
       <td className="py-3 pl-4">
@@ -252,8 +254,8 @@ function SegmentRow({
           <DecisionBadge decision={seg.decision} />
           <SegmentStateBadge state={seg.state} decision={seg.decision} origin={seg.origin} />
           {seg.is_control_sample && (
-            <Badge tone="info" title="Sampled blind for human control review">
-              Control sample
+            <Badge tone="info" title={t("app.jobs.detail.segmentTable.sampledBlindForHumanControl")}>
+              {t("app.jobs.detail.segmentTable.controlSample")}
             </Badge>
           )}
         </div>
@@ -262,17 +264,17 @@ function SegmentRow({
         {!editing && (
           <div className="flex justify-end gap-1">
             {canEdit && (
-              <Button size="sm" variant="ghost" onClick={onEdit} aria-label={`Edit segment ${num1(seg.seq)}`} title="Edit target">
+              <Button size="sm" variant="ghost" onClick={onEdit} aria-label={t("app.jobs.detail.segmentTable.editSegment", { seq: num1(seg.seq) })} title={t("app.jobs.detail.segmentTable.editTarget")}>
                 <Icons.edit className="size-3.5" />
               </Button>
             )}
             {canEdit && APPROVABLE.includes(seg.state) && (
-              <Button size="sm" variant="ghost" onClick={onApprove} aria-label={`Approve segment ${num1(seg.seq)}`} title="Approve">
+              <Button size="sm" variant="ghost" onClick={onApprove} aria-label={t("app.jobs.detail.segmentTable.approveSegment", { seq: num1(seg.seq) })} title={t("app.jobs.detail.segmentTable.approve")}>
                 <Icons.check className="size-3.5" />
               </Button>
             )}
             {canReport && (
-              <Button size="sm" variant="ghost" onClick={onReport} aria-label={`Report an error in segment ${num1(seg.seq)}`} title="Report an error">
+              <Button size="sm" variant="ghost" onClick={onReport} aria-label={t("app.jobs.detail.segmentTable.reportAnErrorInSegment", { seq: num1(seg.seq) })} title={t("app.jobs.detail.segmentTable.reportAnError")}>
                 <Icons.flag className="size-3.5" />
               </Button>
             )}
@@ -284,7 +286,8 @@ function SegmentRow({
 }
 
 function Reasons({ seg, className }: { seg: Segment; className?: string }) {
-  const lines = [...seg.reasons.map(reasonLabel), ...violationMessages(seg.signals)];
+  const { t } = useI18n();
+  const lines = [...seg.reasons.map((r) => reasonLabel(t, r)), ...violationMessages(seg.signals)];
   const unique = lines.filter((l, i) => lines.indexOf(l) === i);
   if (unique.length === 0) return null;
   return (
@@ -313,6 +316,7 @@ type RowProps = {
 
 /** Mobile layout: one stacked card per segment. */
 function SegmentCard({ seg, job, editing, canEdit, canReport, onEdit, onDone, onApprove, onReport }: RowProps) {
+  const { t } = useI18n();
   return (
     <li className={cn("space-y-2 px-4 py-3 text-[14px]", editing && "bg-accent-subtle/40")}>
       <div className="flex flex-wrap items-center gap-1.5">
@@ -320,7 +324,7 @@ function SegmentCard({ seg, job, editing, canEdit, canReport, onEdit, onDone, on
         <QeBadge value={seg.qe_score} threshold={job.threshold} />
         <DecisionBadge decision={seg.decision} />
         <SegmentStateBadge state={seg.state} decision={seg.decision} origin={seg.origin} />
-        {seg.is_control_sample && <Badge tone="info">Control</Badge>}
+        {seg.is_control_sample && <Badge tone="info">{t("app.jobs.detail.segmentTable.control")}</Badge>}
       </div>
       <TaggedText value={seg.source_tagged} className="block text-muted" />
       {editing ? (
@@ -332,17 +336,17 @@ function SegmentCard({ seg, job, editing, canEdit, canReport, onEdit, onDone, on
           <div className="flex gap-1.5">
             {canEdit && (
               <Button size="sm" onClick={onEdit}>
-                <Icons.edit className="size-3.5" /> Edit
+                <Icons.edit className="size-3.5" /> {t("app.jobs.detail.segmentTable.edit")}
               </Button>
             )}
             {canEdit && APPROVABLE.includes(seg.state) && (
               <Button size="sm" onClick={onApprove}>
-                <Icons.check className="size-3.5" /> Approve
+                <Icons.check className="size-3.5" /> {t("app.jobs.detail.segmentTable.approve")}
               </Button>
             )}
             {canReport && (
               <Button size="sm" onClick={onReport}>
-                <Icons.flag className="size-3.5" /> Report error
+                <Icons.flag className="size-3.5" /> {t("app.jobs.detail.segmentTable.reportError")}
               </Button>
             )}
           </div>
@@ -353,6 +357,7 @@ function SegmentCard({ seg, job, editing, canEdit, canReport, onEdit, onDone, on
 }
 
 function InlineEditor({ seg, job, onDone }: { seg: Segment; job: Job; onDone: (s?: Segment) => void }) {
+  const { t } = useI18n();
   const toast = useToast();
   const editor = useRef<TagEditorHandle>(null);
   const [value, setValue] = useState(seg.target_tagged ?? "");
@@ -366,10 +371,10 @@ function InlineEditor({ seg, job, onDone }: { seg: Segment; job: Job; onDone: (s
     setBusy(true);
     try {
       const updated = await api.editSegment(job.id, seg.id, value);
-      toast.success(`Segment ${num1(seg.seq)} saved`, "Your edit counts as a human review.");
+      toast.success(t("app.jobs.detail.segmentTable.segmentSaved", { seq: num1(seg.seq) }), t("app.jobs.detail.segmentTable.yourEditCountsAsA"));
       onDone(updated);
     } catch (e) {
-      toast.error("Save failed", errorMessage(e));
+      toast.error(t("app.jobs.detail.segmentTable.saveFailed"), errorMessage(e));
       setBusy(false);
     }
   }
@@ -382,7 +387,7 @@ function InlineEditor({ seg, job, onDone }: { seg: Segment; job: Job; onDone: (s
         onChange={setValue}
         requiredTags={required}
         autoFocus
-        ariaLabel={`Target for segment ${num1(seg.seq)}`}
+        ariaLabel={t("app.jobs.detail.segmentTable.targetForSegment", { seq: num1(seg.seq) })}
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
@@ -394,18 +399,18 @@ function InlineEditor({ seg, job, onDone }: { seg: Segment; job: Job; onDone: (s
         }}
       />
       <div className="pt-1">
-        <TagStatus required={required} value={value} onInsert={(t) => editor.current?.insertTag(t)} />
+        <TagStatus required={required} value={value} onInsert={(tag) => editor.current?.insertTag(tag)} />
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="primary" onClick={save} loading={busy} disabled={!valid || !changed}>
-          Save
+          {t("app.jobs.detail.segmentTable.save")}
         </Button>
         <Button size="sm" variant="ghost" onClick={() => onDone()}>
-          Cancel
+          {t("app.jobs.detail.segmentTable.cancel")}
         </Button>
         <span className="ml-auto flex items-center gap-1 text-[12px] text-faint">
-          <Kbd>Ctrl</Kbd>
-          <Kbd>Enter</Kbd> save · <Kbd>Esc</Kbd> cancel
+          <Kbd>{t("app.jobs.detail.segmentTable.ctrl")}</Kbd>
+          <Kbd>{t("app.jobs.detail.segmentTable.enter")}</Kbd> {t("app.jobs.detail.segmentTable.save2")} <Kbd>{t("app.jobs.detail.segmentTable.esc")}</Kbd> {t("app.jobs.detail.segmentTable.cancel2")}
         </span>
       </div>
     </div>
@@ -413,6 +418,7 @@ function InlineEditor({ seg, job, onDone }: { seg: Segment; job: Job; onDone: (s
 }
 
 function ReportDialog({ job, seg, onClose }: { job: Job; seg: Segment | null; onClose: () => void }) {
+  const { t } = useI18n();
   const toast = useToast();
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -422,11 +428,11 @@ function ReportDialog({ job, seg, onClose }: { job: Job; seg: Segment | null; on
     setBusy(true);
     try {
       await api.reportError(job.id, { segment_id: seg.id, note: note.trim() });
-      toast.success("Error reported", "Thanks. It is reviewed and feeds the quality calibration for this language.");
+      toast.success(t("app.jobs.detail.segmentTable.errorReported"), t("app.jobs.detail.segmentTable.thanksItIsReviewedAnd"));
       setNote("");
       onClose();
     } catch (e) {
-      toast.error("Could not report", errorMessage(e));
+      toast.error(t("app.jobs.detail.segmentTable.couldNotReport"), errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -436,15 +442,15 @@ function ReportDialog({ job, seg, onClose }: { job: Job; seg: Segment | null; on
     <Dialog
       open={seg !== null}
       onClose={onClose}
-      title={seg ? `Report an error in segment ${num1(seg.seq)}` : "Report an error"}
-      description="Tell us what is wrong with the delivered translation. Reported errors are tracked as escaped errors."
+      title={seg ? t("app.jobs.detail.segmentTable.reportAnErrorInSegment", { seq: num1(seg.seq) }) : t("app.jobs.detail.segmentTable.reportAnError")}
+      description={t("app.jobs.detail.segmentTable.tellUsWhatIsWrong")}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            {t("app.jobs.detail.segmentTable.cancel")}
           </Button>
           <Button variant="primary" onClick={submit} loading={busy} disabled={!note.trim()}>
-            Report error
+            {t("app.jobs.detail.segmentTable.reportError")}
           </Button>
         </>
       }
@@ -455,13 +461,13 @@ function ReportDialog({ job, seg, onClose }: { job: Job; seg: Segment | null; on
             <TaggedText value={seg.source_tagged} className="block text-muted" />
             <TaggedText value={seg.target_tagged} className="mt-1.5 block" />
           </div>
-          <Field label="What is wrong?">
+          <Field label={t("app.jobs.detail.segmentTable.whatIsWrong")}>
             {(id) => (
               <Textarea
                 id={id}
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="e.g. The dosage was changed from 0.5 to 5 mL/h."
+                placeholder={t("app.jobs.detail.segmentTable.eGTheDosageWas")}
                 required
               />
             )}

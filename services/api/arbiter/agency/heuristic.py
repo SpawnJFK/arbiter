@@ -24,6 +24,9 @@ Action list a real model would. It understands:
   questions       "koliko poslova kasni?", "how much revenue ...", answered from the context
                   summary only, with an empty plan
 
+Output is English (the product is English-first): replies, workflow/price list/dashboard
+names and summaries. User-given proper names (agency, clients) are kept verbatim. For a
+locale other than English the reply carries a note that only the AI model localizes replies.
 It never invents names or e-mails: only what the text contains becomes an account. When
 essential information is missing it still proposes what it can and asks in the reply.
 Cross-references between actions use "@<index>" (resolved when the plan is applied).
@@ -99,23 +102,6 @@ def sentences(text: str) -> list[tuple[int, int]]:
     if text[start:].strip():
         spans.append((start, n))
     return spans
-
-
-def is_serbian(text: str) -> bool:
-    f = fold(text)
-    sr = len(
-        re.findall(
-            r"\b(?:mi|smo|nas[aeiu]?|nasi|su|je|pa|sa|za|hocu|zelim|koliko|koji|koja|kasn\w*|klijent\w*|"
-            r"reci|cena|posl\w*|agencij\w*|da|li|imamo|radimo|treba|sta)\b",
-            f,
-        )
-    )
-    en = len(
-        re.findall(
-            r"\b(?:we|our|are|the|and|with|for|per|how|many|much|want|clients|jobs|is|what|which|please)\b", f
-        )
-    )
-    return sr > en
 
 
 def _strip_period(name: str) -> str:
@@ -194,13 +180,13 @@ INDUSTRIES: list[tuple[str, str]] = [
     ("marketing", r"marketing|media|mediji|reklam|advert"),
 ]
 DOMAIN_LABEL = {
-    "pharma": ("farmacija", "pharma"),
-    "medical": ("medicina", "medical"),
-    "legal": ("pravo", "legal"),
-    "finance": ("finansije", "finance"),
-    "software": ("softver", "software"),
-    "automotive": ("auto industrija", "automotive"),
-    "marketing": ("marketing", "marketing"),
+    "pharma": "pharma",
+    "medical": "medical",
+    "legal": "legal",
+    "finance": "finance",
+    "software": "software",
+    "automotive": "automotive",
+    "marketing": "marketing",
 }
 
 # (kind, pattern) in priority order: longer phrases are matched and masked first.
@@ -328,6 +314,8 @@ AGENCY_PATTERNS = [
     r"\bime\s+(?:nase\s+)?(?:agencije|firme)\s+je\s+(?P<n>.+)",
 ]
 AGENCY_CASED = [
+    # "We are Northwind Language Services." : a whole sentence that is just a capitalised name.
+    r"^\s*(?:We\s+are|We're|Mi\s+smo)\s+(?P<n>[A-Z0-9][\w&'.-]*(?:\s+[A-Z0-9][\w&'.-]*){0,5})\s*[.!]?\s*$",
     r"\b(?:[Ww]e\s+are|[Ww]e're|[Mm]i\s+smo)\s+(?P<n>[A-Z0-9][\w&'.-]*(?:\s+[A-Z0-9][\w&'.-]*){0,4})\s*,\s*(?:an?\s+|jedna\s+)?\w*\s*(?:translation|localization|prevodilack|prevodilačk|agency|agencija)",
 ]
 CLIENT_PATTERNS = [
@@ -596,18 +584,8 @@ def _team(f: str, found: _Found) -> None:
 # ----------------------------------------------------------------------------- plan building
 
 
-class _T:
-    """Reply strings in the language of the request."""
-
-    def __init__(self, sr: bool) -> None:
-        self.sr = sr
-
-    def __call__(self, sr: str, en: str) -> str:
-        return sr if self.sr else en
-
-
 def _workflow_steps(
-    found: _Found, regulated: bool, notes: list[str], t: _T
+    found: _Found, regulated: bool, notes: list[str]
 ) -> tuple[list[str], dict[str, dict[str, Any]], str]:
     kinds: list[str] = []
     params: dict[str, dict[str, Any]] = {}
@@ -619,35 +597,20 @@ def _workflow_steps(
         return [], {}, ""
     if "tm" not in kinds:
         kinds.insert(0, "tm")
-        notes.append(
-            t(
-                "Dodao sam TM (prevodilačku memoriju) kao prvi korak; on je uvek koristan.",
-                "I added TM (translation memory) as the first step; it always helps.",
-            )
-        )
+        notes.append("I added TM (translation memory) as the first step; it always helps.")
     if not any(k in kinds for k in ("mt", "translation_senate")):
         if found.human_translation:
             if "human_review" not in kinds:
                 kinds.append("human_review")
         else:
             kinds.insert(1, "mt")
-            notes.append(
-                t(
-                    "Nisi pomenuo mašinski prevod; dodao sam MT posle TM.",
-                    "You did not mention machine translation; I added MT after TM.",
-                )
-            )
+            notes.append("You did not mention machine translation; I added MT after TM.")
     reviews = [
         k for k in kinds if k in ("senate", "ai_review", "human_review", "second_review", "client_review")
     ]
     if reviews and "qe" not in kinds:
         kinds.append("qe")
-        notes.append(
-            t(
-                "Dodao sam QE (procenu kvaliteta) pre revizije; ona odlučuje šta ide čoveku.",
-                "I added QE (quality estimation) before review; it decides what goes to a human.",
-            )
-        )
+        notes.append("I added QE (quality estimation) before review; it decides what goes to a human.")
     if "second_review" in kinds and "human_review" not in kinds:
         kinds.append("human_review")
     humans = "human_review" in kinds
@@ -662,10 +625,7 @@ def _workflow_steps(
         kinds.append("human_review")
         tier = "full"
         notes.append(
-            t(
-                "Regulisana delatnost: svaki segment mora da vidi čovek (R-SEG-12), pa sam dodao reviziju.",
-                "Regulated vertical: every segment needs a human reviewer (R-SEG-12), so I added human review.",
-            )
+            "Regulated vertical: every segment needs a human reviewer (R-SEG-12), so I added human review."
         )
     if tier == "hybrid" and "senate" not in kinds:
         kinds.append("senate")
@@ -682,29 +642,34 @@ def _step_list(kinds: list[str], params: dict[str, dict[str, Any]]) -> list[dict
 
 
 STEP_LABEL = {
-    "tm": ("TM", "TM"),
-    "mt": ("MT", "MT"),
-    "translation_senate": ("best-of-N prevod", "best-of-N translation"),
-    "qe": ("QE", "QE"),
-    "senate": ("senat", "senate"),
-    "ai_review": ("AI revizija", "AI review"),
-    "human_review": ("revizija", "review"),
-    "second_review": ("druga revizija", "second review"),
-    "client_review": ("odobrenje klijenta", "client approval"),
-    "delivery": ("isporuka", "delivery"),
+    "tm": "TM",
+    "mt": "MT",
+    "translation_senate": "best-of-N translation",
+    "qe": "QE",
+    "senate": "senate",
+    "ai_review": "AI review",
+    "human_review": "review",
+    "second_review": "second review",
+    "client_review": "client approval",
+    "delivery": "delivery",
 }
 
 
-def _steps_text(kinds: list[str], t: _T) -> str:
-    return " > ".join(STEP_LABEL[k][0 if t.sr else 1] for k in kinds)
+def _steps_text(kinds: list[str]) -> str:
+    return " > ".join(STEP_LABEL[k] for k in kinds)
 
 
-def heuristic_plan(text: str, context: dict[str, Any] | None = None) -> tuple[str, list[dict[str, Any]]]:
-    """(reply, plan) for one user message. Deterministic; see the module docstring."""
+def heuristic_plan(
+    text: str, context: dict[str, Any] | None = None, locale: str = "en"
+) -> tuple[str, list[dict[str, Any]]]:
+    """(reply, plan) for one user message. Deterministic; see the module docstring.
+
+    Output (reply, names, summaries) is always English: the product is English-first. For any
+    other locale the reply says that only the AI model localizes replies.
+    """
     context = context or {}
     text = text or ""
     f = fold(text)
-    t = _T(is_serbian(text))
     org = context.get("org") or {}
     found = _Found()
     _agency(text, f, found)
@@ -729,21 +694,21 @@ def heuristic_plan(text: str, context: dict[str, Any] | None = None) -> tuple[st
     if org_data:
         bits = []
         if "name" in org_data:
-            bits.append(t(f"naziv „{org_data['name']}“", f'name "{org_data["name"]}"'))
+            bits.append(f'name "{org_data["name"]}"')
         if "vertical" in org_data:
-            bits.append(t("delatnost: prevodilačka agencija", "vertical: translation agency"))
+            bits.append("vertical: translation agency")
         if "regulated" in org_data:
-            bits.append(t("regulisana delatnost (R-SEG-12)", "regulated vertical (R-SEG-12)"))
+            bits.append("regulated vertical (R-SEG-12)")
         plan.append(
             {
                 "type": "update_org",
-                "summary": t("Podešavanja organizacije: ", "Organization settings: ") + ", ".join(bits),
+                "summary": "Organization settings: " + ", ".join(bits),
                 "data": org_data,
             }
         )
 
     # 2. workflows
-    kinds, params, tier = _workflow_steps(found, regulated, notes, t)
+    kinds, params, tier = _workflow_steps(found, regulated, notes)
     main_ref = domain_ref = None
     domain = found.second_domain if "second_review" in kinds else None
     if kinds:
@@ -751,18 +716,14 @@ def heuristic_plan(text: str, context: dict[str, Any] | None = None) -> tuple[st
         main_tier = tier
         if domain and main_tier == "full" and "human_review" not in main_kinds:
             main_kinds.append("human_review")
-        name = t("Standardni tok rada", "Standard workflow")
+        name = "Standard workflow"
         plan.append(
             {
                 "type": "create_workflow",
-                "summary": t(f"Tok rada „{name}“: ", f'Workflow "{name}": ')
-                + _steps_text(main_kinds, t)
-                + f" ({main_tier})",
+                "summary": f'Workflow "{name}": ' + _steps_text(main_kinds) + f" ({main_tier})",
                 "data": {
                     "name": name,
-                    "description": t(
-                        "Napravljeno iz opisa agencije.", "Created from the agency description."
-                    ),
+                    "description": "Created from the agency description.",
                     "tier": main_tier,
                     "steps": _step_list(main_kinds, params),
                     "is_default": True,
@@ -771,21 +732,16 @@ def heuristic_plan(text: str, context: dict[str, Any] | None = None) -> tuple[st
         )
         main_ref = len(plan) - 1
         if domain:
-            label = DOMAIN_LABEL.get(domain, (domain, domain))
-            dname = t(f"Tok rada: {label[0]}", f"{label[1].capitalize()} workflow")
+            label = DOMAIN_LABEL.get(domain, domain)
+            dname = f"{label.capitalize()} workflow"
             dtier = "full"
             plan.append(
                 {
                     "type": "create_workflow",
-                    "summary": t(f"Tok rada „{dname}“: ", f'Workflow "{dname}": ')
-                    + _steps_text(kinds, t)
-                    + f" ({dtier})",
+                    "summary": f'Workflow "{dname}": ' + _steps_text(kinds) + f" ({dtier})",
                     "data": {
                         "name": dname,
-                        "description": t(
-                            f"Druga revizija samo za klijente iz oblasti: {label[0]}.",
-                            f"Second review only for {label[1]} clients.",
-                        ),
+                        "description": f"Second review only for {label} clients.",
                         "content_type": domain,
                         "tier": dtier,
                         "steps": _step_list(kinds, params),
@@ -795,17 +751,11 @@ def heuristic_plan(text: str, context: dict[str, Any] | None = None) -> tuple[st
             domain_ref = len(plan) - 1
     else:
         questions.append(
-            t(
-                "Kako izgleda vaš tok rada (na primer: MT, QE, revizija, druga revizija, odobrenje klijenta)?",
-                "What does your workflow look like (for example: MT, QE, review, second review, client approval)?",
-            )
+            "What does your workflow look like (for example: MT, QE, review, second review, client approval)?"
         )
     if found.dtp:
         notes.append(
-            t(
-                "DTP/prelom nije korak u Arbiter toku rada; izostavio sam ga (ostaje ručni korak posle isporuke).",
-                "DTP/layout is not an Arbiter pipeline step; I left it out (it stays a manual step after delivery).",
-            )
+            "DTP/layout is not an Arbiter pipeline step; I left it out (it stays a manual step after delivery)."
         )
 
     # 3. price list
@@ -831,12 +781,12 @@ def heuristic_plan(text: str, context: dict[str, Any] | None = None) -> tuple[st
                     }
                 )
         cur = found.currency or "EUR"
-        name = t("Standardni cenovnik", "Standard price list")
+        name = "Standard price list"
         data: dict[str, Any] = {"name": name, "currency": cur, "rates": rates}
         if found.minimum is not None:
             data["minimum_charge"] = str(found.minimum)
         rates_txt = ", ".join(
-            f"{r['per_word']} {cur}/{t('reč', 'word')} ({r['tier']}"
+            f"{r['per_word']} {cur}/word ({r['tier']}"
             + (
                 f", {r['source_lang'] or '*'}-{r['target_lang'] or '*'}"
                 if r["source_lang"] or r["target_lang"]
@@ -848,24 +798,18 @@ def heuristic_plan(text: str, context: dict[str, Any] | None = None) -> tuple[st
         plan.append(
             {
                 "type": "create_price_list",
-                "summary": t(f"Cenovnik „{name}“: ", f'Price list "{name}": ') + rates_txt,
+                "summary": f'Price list "{name}": ' + rates_txt,
                 "data": data,
             }
         )
         pl_ref = len(plan) - 1
         if not found.langs_mentioned:
             questions.append(
-                t(
-                    "Za koje jezičke parove radite? Cenu sam za sada postavio za sve parove; mogu da dodam posebne cene po paru.",
-                    "Which language pairs do you work in? I set the rate for all pairs for now; I can add per-pair rates.",
-                )
+                "Which language pairs do you work in? I set the rate for all pairs for now; I can add per-pair rates."
             )
     elif kinds or found.clients:
         questions.append(
-            t(
-                "Koliko naplaćujete po reči (i da li se cena razlikuje po jeziku ili nivou usluge)?",
-                "What do you charge per word (and does it differ by language pair or service level)?",
-            )
+            "What do you charge per word (and does it differ by language pair or service level)?"
         )
 
     # 4. accounts
@@ -884,29 +828,20 @@ def heuristic_plan(text: str, context: dict[str, Any] | None = None) -> tuple[st
         if industry:
             extra.append(industry)
         if wf_ref is not None and wf_ref == domain_ref:
-            extra.append(t("stroži tok rada", "stricter workflow"))
+            extra.append("stricter workflow")
         plan.append(
             {
                 "type": "create_account",
-                "summary": t(f"Klijent „{name}“", f'Client "{name}"')
-                + (f" ({', '.join(extra)})" if extra else ""),
+                "summary": f'Client "{name}"' + (f" ({', '.join(extra)})" if extra else ""),
                 "data": data,
             }
         )
     if not found.clients and (kinds or found.rates or found.agency):
         questions.append(
-            t(
-                "Ko su vaši glavni klijenti? Navedi nazive (i e-mail kontakata ako želiš da ih dodam).",
-                "Who are your main clients? Give me their names (and contact e-mails if you want contacts added).",
-            )
+            "Who are your main clients? Give me their names (and contact e-mails if you want contacts added)."
         )
     elif found.clients and not found.contacts_hint:
-        notes.append(
-            t(
-                "Kontakte nisam dodao jer nisu navedena imena ni e-mail adrese.",
-                "I did not add contacts because no names or e-mail addresses were given.",
-            )
-        )
+        notes.append("I did not add contacts because no names or e-mail addresses were given.")
 
     # 5. dashboard
     if found.wants_dashboard:
@@ -920,141 +855,105 @@ def heuristic_plan(text: str, context: dict[str, Any] | None = None) -> tuple[st
             }
             for wt, m in metrics
         ]
-        name = t("Pregled poslovanja", "Business overview")
+        name = "Business overview"
         plan.append(
             {
                 "type": "create_dashboard",
-                "summary": t(f"Dashboard „{name}“: ", f'Dashboard "{name}": ')
-                + ", ".join(m for _, m in metrics),
+                "summary": f'Dashboard "{name}": ' + ", ".join(m for _, m in metrics),
                 "data": {"name": name, "widgets": widgets},
             }
         )
 
     if found.team:
         notes.append(
-            t(
-                "Revizori se pridružuju preko zajednice revizora (prijava, test, odobrenje); ne mogu da ih napravim odavde. "
-                "Pozovi svoj tim da se prijavi na /reviewers/apply.",
-                "Reviewers join through the reviewer community (apply, test, approval); I cannot create them from here. "
-                "Invite your team to apply at /reviewers/apply.",
-            )
+            "Reviewers join through the reviewer community (apply, test, approval); I cannot create them from here. "
+            "Invite your team to apply at /reviewers/apply."
         )
     if plan and not found.agency and not org_data.get("name") and found.agency_kind:
-        questions.append(t("Kako se zove vaša agencija?", "What is your agency called?"))
+        questions.append("What is your agency called?")
 
     if not plan:
-        return answer_question(text, context, t), []
+        return _localized(answer_question(text, context), locale), []
 
-    lines = [
-        t(
-            "Evo predloga podešavanja na osnovu tvog opisa:",
-            "Here is a proposed setup based on your description:",
-        )
-    ]
+    lines = ["Here is a proposed setup based on your description:"]
     lines += [f"{i + 1}. {a['summary']}" for i, a in enumerate(plan)]
     if notes:
         lines.append("")
         lines += [f"- {n}" for n in notes]
     if questions:
         lines.append("")
-        lines.append(t("Da bih završio podešavanje:", "To finish the setup:"))
+        lines.append("To finish the setup:")
         lines += [f"- {q}" for q in questions]
     lines.append("")
-    lines.append(
-        t(
-            "Ništa se ne menja dok ne primeniš plan (sve ili samo izabrane stavke).",
-            "Nothing changes until you apply the plan (all of it or only selected actions).",
-        )
-    )
-    return "\n".join(lines), plan
+    lines.append("Nothing changes until you apply the plan (all of it or only selected actions).")
+    return _localized("\n".join(lines), locale), plan
+
+
+LOCALE_NOTE = (
+    "(This answer is in English: the built-in planner always answers in English. "
+    "Replies in {locale} come from the AI model when one is configured.)"
+)
+
+
+def _localized(reply: str, locale: str) -> str:
+    """English-first: a non-English locale gets the English reply plus a note."""
+    base = (locale or "en").split("-")[0].lower()
+    return reply if base == "en" else f"{reply}\n\n{LOCALE_NOTE.format(locale=locale)}"
 
 
 # ----------------------------------------------------------------------------- data questions
 
 
-def _poslova(n: int) -> str:
-    """Serbian plural of 'posao' with the verb 'kasniti'."""
-    if n == 0:
-        return "Nijedan posao ne kasni."
-    if n % 10 == 1 and n % 100 != 11:
-        return f"{n} posao kasni."
-    if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14):
-        return f"{n} posla kasne."
-    return f"{n} poslova kasni."
-
-
-def answer_question(text: str, context: dict[str, Any], t: _T | None = None) -> str:
+def answer_question(text: str, context: dict[str, Any]) -> str:
     """Answer a question about the org's data from the context summary only."""
-    t = t or _T(is_serbian(text))
     f = fold(text)
     jobs = context.get("jobs") or {}
     cur = context.get("currency") or "EUR"
     out: list[str] = []
     if re.search(r"\bkasn\w*|\boverdue\b|\blate\b|\brok\w*|\bdeadline\w*|\bzakasn\w*", f):
         n = int(jobs.get("overdue") or 0)
-        out.append(_poslova(n) if t.sr else (f"{n} job is overdue." if n == 1 else f"{n} jobs are overdue."))
+        out.append(
+            "No job is overdue."
+            if n == 0
+            else (f"{n} job is overdue." if n == 1 else f"{n} jobs are overdue.")
+        )
         for j in (jobs.get("overdue_list") or [])[:5]:
             who = ", ".join(x for x in (j.get("project"), j.get("account"), j.get("target_lang")) if x)
             out.append(
-                f"- {j.get('job_id')} ({who}): "
-                + t(
-                    f"rok {j.get('due_at')}, {j.get('hours_overdue')} h kašnjenja",
-                    f"due {j.get('due_at')}, {j.get('hours_overdue')} h late",
-                )
+                f"- {j.get('job_id')} ({who}): " + f"due {j.get('due_at')}, {j.get('hours_overdue')} h late"
             )
     if re.search(r"\baktivn\w*|\bu\s+toku\b|\bactive\b|\bin\s+progress\b|\brunning\b", f):
-        out.append(t(f"Aktivnih poslova: {jobs.get('active', 0)}.", f"Active jobs: {jobs.get('active', 0)}."))
+        out.append(f"Active jobs: {jobs.get('active', 0)}.")
     if re.search(r"\bprihod\w*|\bzarad\w*|\brevenue\b|\bincome\b|\bturnover\b|\bpromet\w*|\bearn\w*", f):
         out.append(
-            t(
-                f"Prihod u poslednjih 90 dana: {context.get('revenue_90d', '0.00')} {cur} (marža {context.get('margin_90d', '0.00')} {cur}).",
-                f"Revenue in the last 90 days: {context.get('revenue_90d', '0.00')} {cur} (margin {context.get('margin_90d', '0.00')} {cur}).",
-            )
+            f"Revenue in the last 90 days: {context.get('revenue_90d', '0.00')} {cur} (margin {context.get('margin_90d', '0.00')} {cur})."
         )
     elif re.search(r"\bmarz\w*|\bmargin\w*|\bprofit\w*|\bdobit\w*", f):
-        out.append(
-            t(
-                f"Marža u poslednjih 90 dana: {context.get('margin_90d', '0.00')} {cur}.",
-                f"Margin in the last 90 days: {context.get('margin_90d', '0.00')} {cur}.",
-            )
-        )
+        out.append(f"Margin in the last 90 days: {context.get('margin_90d', '0.00')} {cur}.")
     if re.search(r"\bdeal\w*|\bponud\w*|\bprodaj\w*|\bpipeline\b|\bsales\b|\bleads?\b|\bprilik\w*", f):
         deals = context.get("deals") or {}
         stages = ", ".join(
             f"{st}: {v.get('count', 0)}" for st, v in (deals.get("by_stage") or {}).items() if v.get("count")
         )
         out.append(
-            t(
-                f"Otvoreni dealovi vrede {deals.get('open_value', '0.00')} {cur}"
-                + (f" ({stages})." if stages else "."),
-                f"Open deals are worth {deals.get('open_value', '0.00')} {cur}"
-                + (f" ({stages})." if stages else "."),
-            )
+            f"Open deals are worth {deals.get('open_value', '0.00')} {cur}"
+            + (f" ({stages})." if stages else ".")
         )
     if re.search(r"\bklijen\w*|\bclients?\b|\baccounts?\b|\bcustomers?\b|\bkupc\w*", f):
         acc = context.get("accounts") or {}
         names = ", ".join(acc.get("names") or [])
-        out.append(
-            t(f"Klijenata: {acc.get('active', 0)}", f"Clients: {acc.get('active', 0)}")
-            + (f" ({names})." if names else ".")
-        )
+        out.append(f"Clients: {acc.get('active', 0)}" + (f" ({names})." if names else "."))
     if re.search(r"\bworkflow\w*|\btok\w*\s+rada|\bproces\w*", f):
         names = ", ".join(w.get("name", "") for w in context.get("workflows") or [])
-        out.append(t(f"Tokovi rada: {names or 'nema ih još'}.", f"Workflows: {names or 'none yet'}."))
+        out.append(f"Workflows: {names or 'none yet'}.")
     if re.search(r"\bcen\w*|\bprice\w*|\brates?\b|\bcenovnik\w*", f):
         names = ", ".join(p.get("name", "") for p in context.get("price_lists") or [])
-        out.append(t(f"Cenovnici: {names or 'nema ih još'}.", f"Price lists: {names or 'none yet'}."))
+        out.append(f"Price lists: {names or 'none yet'}.")
     if not out:
         out.append(
-            t(
-                f"Trenutno: {jobs.get('active', 0)} aktivnih poslova, {jobs.get('overdue', 0)} kasni, "
-                f"prihod 90 dana {context.get('revenue_90d', '0.00')} {cur}, "
-                f"{(context.get('accounts') or {}).get('active', 0)} klijenata. "
-                "Pitaj me nešto konkretno ili opiši svoju agenciju (klijente, tok rada, cene, izveštaje) i predložiću podešavanje.",
-                f"Right now: {jobs.get('active', 0)} active jobs, {jobs.get('overdue', 0)} overdue, "
-                f"revenue 90 days {context.get('revenue_90d', '0.00')} {cur}, "
-                f"{(context.get('accounts') or {}).get('active', 0)} clients. "
-                "Ask me something specific, or describe your agency (clients, workflow, prices, reports) and I will propose a setup.",
-            )
+            f"Right now: {jobs.get('active', 0)} active jobs, {jobs.get('overdue', 0)} overdue, "
+            f"revenue 90 days {context.get('revenue_90d', '0.00')} {cur}, "
+            f"{(context.get('accounts') or {}).get('active', 0)} clients. "
+            "Ask me something specific, or describe your agency (clients, workflow, prices, reports) and I will propose a setup."
         )
     return "\n".join(out)

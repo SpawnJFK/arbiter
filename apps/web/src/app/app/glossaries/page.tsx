@@ -1,35 +1,39 @@
+import { getI18n } from "@/lib/i18n/server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { EmptyState, PageHeader } from "@/components/ui/misc";
 import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
-import { num } from "@/lib/format";
 import { contentTypeLabel } from "@/lib/langs";
 import { withAuth } from "@/lib/server-api";
 import { NewGlossaryButton } from "./new-glossary";
 
-export const metadata: Metadata = { title: "Glossaries" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t("app.glossaries.glossaries") };
+}
 
 export default async function GlossariesPage() {
+  const { f, t } = await getI18n();
   const { items } = await withAuth((api) => api.glossaries({ limit: 200 }), "/app/glossaries");
   return (
     <>
       <PageHeader
-        title="Glossaries"
-        description="Terms are checked on every segment. Each change bumps the version; running jobs keep the version they started with."
+        title={t("app.glossaries.glossaries")}
+        description={t("app.glossaries.termsAreCheckedOnEvery")}
         actions={<NewGlossaryButton />}
       />
       <Card>
         {items.length === 0 ? (
-          <EmptyState title="No glossaries" description="Create one, or import a CSV or TBX file into a new glossary." action={<NewGlossaryButton />} />
+          <EmptyState title={t("app.glossaries.noGlossaries")} description={t("app.glossaries.createOneOrImportA")} action={<NewGlossaryButton />} />
         ) : (
           <Table>
             <THead>
               <tr>
-                <Th>Name</Th>
-                <Th>Content type</Th>
-                <Th className="text-right">Terms</Th>
-                <Th className="text-right">Version</Th>
+                <Th>{t("app.glossaries.name")}</Th>
+                <Th>{t("app.glossaries.contentType")}</Th>
+                <Th className="text-right">{t("app.glossaries.terms")}</Th>
+                <Th className="text-right">{t("app.glossaries.version")}</Th>
               </tr>
             </THead>
             <TBody>
@@ -40,9 +44,9 @@ export default async function GlossariesPage() {
                       {g.name}
                     </Link>
                   </Td>
-                  <Td className="text-muted">{g.content_type ? contentTypeLabel(g.content_type) : "All content"}</Td>
-                  <Td className="tabular text-right">{num(g.term_count)}</Td>
-                  <Td className="tabular text-right text-muted">v{g.version}</Td>
+                  <Td className="text-muted">{g.content_type ? contentTypeLabel(t, g.content_type) : t("app.glossaries.allContent")}</Td>
+                  <Td className="tabular text-right">{f.num(g.term_count)}</Td>
+                  <Td className="tabular text-right text-muted">{t("app.glossaries.versionShort", { version: g.version })}</Td>
                 </Tr>
               ))}
             </TBody>

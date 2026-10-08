@@ -129,7 +129,7 @@ def to_pdf(pack: dict[str, Any]) -> bytes:
     small = st["BodyText"].clone("small", fontSize=7, leading=9)
     j, summ = pack["job"], pack["summary"]
     story: list[Any] = [
-        Paragraph(f"Evidence pack — job {j['id']}", st["Title"]),
+        Paragraph(f"Evidence pack: job {j['id']}", st["Title"]),
         Paragraph(
             f"Pair {j['pair']} · tier {j['tier']} · content {j['content_type']} · {j['segments']} segments · "
             f"{j['words']} words · threshold {j['threshold']} (band {j['band_width']}) · "

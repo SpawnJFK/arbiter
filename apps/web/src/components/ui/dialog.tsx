@@ -1,5 +1,6 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/client";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
@@ -24,6 +25,7 @@ export function Dialog({
   footer?: ReactNode;
   size?: "sm" | "md" | "lg";
 }) {
+  const { t } = useI18n();
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const descId = useId();
@@ -71,7 +73,7 @@ export function Dialog({
               type="button"
               onClick={onClose}
               className="-mr-1.5 rounded-md p-1 text-faint hover:bg-hover hover:text-fg"
-              aria-label="Close"
+              aria-label={t("components.dialog.close")}
             >
               <svg viewBox="0 0 16 16" className="size-4" fill="none" aria-hidden="true">
                 <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />

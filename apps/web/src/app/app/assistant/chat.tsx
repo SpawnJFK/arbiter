@@ -1,5 +1,7 @@
 "use client";
 
+import { k } from "@/lib/i18n/core";
+import { useI18n } from "@/lib/i18n/client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -16,14 +18,14 @@ import type { ApplyResult, AssistantMessage, AssistantThread, PlanAction } from 
 
 const EXAMPLES = [
   {
-    label: "Set up an agency (Serbian)",
-    text: "Mi smo agencija Primer Prevodi Demo. Naši klijenti su Acme d.o.o., Beta Pharma i Gamma Soft. Workflow: MT, pa QE, pa revizija, pa druga revizija za farmaciju, i odobrenje klijenta. Cena 0.08 EUR po reči. Hoću dashboard sa prihodom, maržom i poslovima koji kasne.",
+    label: k("app.assistant.chat.setUpATranslationAgency"),
+    text: k("app.assistant.chat.weAreNorthwindLanguageServices"),
   },
   {
-    label: "Set up a software localization team",
-    text: "We are Northwind Localization. Our clients are Fabrikam and Contoso. Workflow: MT, then QE, then review. Price 0.06 EUR per word. I want a dashboard with revenue, margin and overdue jobs.",
+    label: k("app.assistant.chat.setUpASoftwareLocalization"),
+    text: k("app.assistant.chat.weAreNorthwindLocalizationOur"),
   },
-  { label: "Ask about the business", text: "Which jobs are overdue right now, and what is our margin this month?" },
+  { label: k("app.assistant.chat.askAboutTheBusiness"), text: k("app.assistant.chat.whichJobsAreOverdueRight") },
 ];
 
 const ACTION_ICON: Record<string, keyof typeof Icons> = {
@@ -69,6 +71,7 @@ function linkFor(type: string, id?: string | null): string | null {
 }
 
 export function AssistantChat({ threads, thread }: { threads: AssistantThread[]; thread: AssistantThread | null }) {
+  const { t, locale } = useI18n();
   const router = useRouter();
   const toast = useToast();
   const [messages, setMessages] = useState<AssistantMessage[]>(thread?.messages ?? []);
@@ -102,18 +105,18 @@ export function AssistantChat({ threads, thread }: { threads: AssistantThread[];
     try {
       let id = threadId;
       if (!id) {
-        const t = await api.createThread(content.slice(0, 60));
-        id = t.id;
+        const thread = await api.createThread(content.slice(0, 60));
+        id = thread.id;
         setThreadId(id);
       }
-      const res = await api.sendMessage(id, content);
+      const res = await api.sendMessage(id, content, locale);
       setMessages((m) => [...m.filter((x) => x.id !== optimistic.id), res.user_message, res.assistant_message]);
       if (!threadId) router.replace(`/app/assistant?thread=${id}`, { scroll: false });
       router.refresh();
     } catch (e) {
       setMessages((m) => m.filter((x) => x.id !== optimistic.id));
       setDraft(content);
-      toast.error("The assistant could not answer", errorMessage(e));
+      toast.error(t("app.assistant.chat.theAssistantCouldNotAnswer"), errorMessage(e));
     } finally {
       setSending(false);
       input.current?.focus();
@@ -122,7 +125,7 @@ export function AssistantChat({ threads, thread }: { threads: AssistantThread[];
 
   return (
     <div className="-my-2 grid h-[calc(100dvh-7rem)] min-h-[520px] gap-4 lg:grid-cols-[240px_1fr]">
-      <aside className="hidden flex-col overflow-hidden rounded-lg border border-border bg-surface lg:flex" aria-label="Conversations">
+      <aside className="hidden flex-col overflow-hidden rounded-lg border border-border bg-surface lg:flex" aria-label={t("app.assistant.chat.conversations")}>
         <div className="border-b border-border p-2">
           <Button
             className="w-full"
@@ -130,21 +133,21 @@ export function AssistantChat({ threads, thread }: { threads: AssistantThread[];
               router.push("/app/assistant");
             }}
           >
-            <Icons.plus className="size-3.5" /> New conversation
+            <Icons.plus className="size-3.5" /> {t("app.assistant.chat.newConversation")}
           </Button>
         </div>
         <ul className="flex-1 overflow-y-auto p-1.5">
-          {threads.length === 0 && <li className="px-2 py-3 text-[12.5px] text-faint">No conversations yet.</li>}
-          {threads.map((t) => (
-            <li key={t.id}>
+          {threads.length === 0 && <li className="px-2 py-3 text-[12.5px] text-faint">{t("app.assistant.chat.noConversationsYet")}</li>}
+          {threads.map((thread) => (
+            <li key={thread.id}>
               <Link
-                href={`/app/assistant?thread=${t.id}`}
-                aria-current={t.id === threadId ? "page" : undefined}
-                className={cn("block rounded-md px-2 py-1.5 text-[13px]", t.id === threadId ? "bg-hover font-medium" : "text-muted hover:bg-hover hover:text-fg")}
+                href={`/app/assistant?thread=${thread.id}`}
+                aria-current={thread.id === threadId ? "page" : undefined}
+                className={cn("block rounded-md px-2 py-1.5 text-[13px]", thread.id === threadId ? "bg-hover font-medium" : "text-muted hover:bg-hover hover:text-fg")}
               >
-                <span className="line-clamp-2">{t.title || "Untitled"}</span>
+                <span className="line-clamp-2">{thread.title || t("app.assistant.chat.untitled")}</span>
                 <span className="mt-0.5 block text-[11.5px] text-faint">
-                  <Time iso={t.updated_at ?? t.created_at} mode="relative" />
+                  <Time iso={thread.updated_at ?? thread.created_at} mode="relative" />
                 </span>
               </Link>
             </li>
@@ -152,18 +155,18 @@ export function AssistantChat({ threads, thread }: { threads: AssistantThread[];
         </ul>
       </aside>
 
-      <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-surface" aria-label="Assistant conversation">
+      <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-surface" aria-label={t("app.assistant.chat.assistantConversation")}>
         <header className="flex items-center gap-2 border-b border-border px-4 py-2.5">
           <Icons.sparkle className="size-4 text-accent" />
-          <h1 className="text-[14px] font-semibold">Workspace assistant</h1>
-          <span className="ml-auto hidden text-[12px] text-muted sm:block">Proposes changes as a plan. Nothing changes until you apply it.</span>
+          <h1 className="text-[14px] font-semibold">{t("app.assistant.chat.workspaceAssistant")}</h1>
+          <span className="ml-auto hidden text-[12px] text-muted sm:block">{t("app.assistant.chat.proposesChangesAsAPlan")}</span>
         </header>
         <div className="flex-1 overflow-y-auto px-4 py-4" aria-live="polite">
           {messages.length === 0 ? (
             <div className="mx-auto max-w-2xl py-6">
-              <h2 className="text-lg font-semibold tracking-tight">Describe your agency in plain language</h2>
+              <h2 className="text-lg font-semibold tracking-tight">{t("app.assistant.chat.describeYourAgencyInPlain")}</h2>
               <p className="mt-1 text-[14px] text-muted">
-                Clients, how work should flow, what you charge, what you want to see. The assistant answers with a plan: accounts, workflows, price lists and dashboards it would create. You review every action and apply all of it, some of it, or none.
+                {t("app.assistant.chat.clientsHowWorkShouldFlow")}
               </p>
               <div className="mt-5 space-y-2">
                 {EXAMPLES.map((ex) => (
@@ -171,13 +174,13 @@ export function AssistantChat({ threads, thread }: { threads: AssistantThread[];
                     key={ex.label}
                     type="button"
                     onClick={() => {
-                      setDraft(ex.text);
+                      setDraft(t(ex.text));
                       input.current?.focus();
                     }}
                     className="block w-full rounded-lg border border-border bg-bg px-3.5 py-2.5 text-left transition-colors hover:border-accent/50 hover:bg-accent-subtle/30"
                   >
-                    <span className="text-[12px] font-medium text-accent">{ex.label}</span>
-                    <span className="mt-0.5 line-clamp-2 block text-[13.5px] text-fg/90">{ex.text}</span>
+                    <span className="text-[12px] font-medium text-accent">{t(ex.label)}</span>
+                    <span className="mt-0.5 line-clamp-2 block text-[13.5px] text-fg/90">{t(ex.text)}</span>
                   </button>
                 ))}
               </div>
@@ -189,7 +192,7 @@ export function AssistantChat({ threads, thread }: { threads: AssistantThread[];
               ))}
               {sending && (
                 <li className="flex items-center gap-2 text-[13px] text-muted">
-                  <Spinner /> Thinking…
+                  <Spinner /> {t("app.assistant.chat.thinking")}
                 </li>
               )}
             </ol>
@@ -205,7 +208,7 @@ export function AssistantChat({ threads, thread }: { threads: AssistantThread[];
         >
           <div className="flex items-end gap-2 rounded-lg border border-border-strong bg-surface p-1.5 shadow-card focus-within:outline-2 focus-within:outline-ring">
             <label htmlFor="assistant-input" className="sr-only">
-              Message the assistant
+              {t("app.assistant.chat.messageTheAssistant")}
             </label>
             <textarea
               id="assistant-input"
@@ -219,15 +222,15 @@ export function AssistantChat({ threads, thread }: { threads: AssistantThread[];
                   void send(draft);
                 }
               }}
-              placeholder="Describe your agency, or ask about jobs, revenue and deals…"
+              placeholder={t("app.assistant.chat.describeYourAgencyOrAsk")}
               className="max-h-48 min-h-11 flex-1 resize-none bg-transparent px-2 py-1.5 text-[14px] outline-none placeholder:text-faint"
             />
-            <Button type="submit" variant="primary" disabled={!draft.trim() || sending} aria-label="Send">
+            <Button type="submit" variant="primary" disabled={!draft.trim() || sending} aria-label={t("app.assistant.chat.send")}>
               <Icons.send className="size-4" />
             </Button>
           </div>
           <p className="mt-1.5 flex items-center gap-1 text-[11.5px] text-faint">
-            <Kbd>Enter</Kbd> send · <Kbd>Shift</Kbd>+<Kbd>Enter</Kbd> new line
+            <Kbd>{t("app.assistant.chat.enter")}</Kbd> {t("app.assistant.chat.send2")} <Kbd>{t("app.assistant.chat.shift")}</Kbd>+<Kbd>{t("app.assistant.chat.enter")}</Kbd> {t("app.assistant.chat.newLine")}
           </p>
         </form>
       </section>
@@ -258,6 +261,7 @@ function AssistantBubble({ m, onUpdate }: { m: AssistantMessage; onUpdate: (m: A
 }
 
 function PlanCard({ m, onUpdate }: { m: AssistantMessage; onUpdate: (m: AssistantMessage) => void }) {
+  const { t } = useI18n();
   const router = useRouter();
   const toast = useToast();
   const plan = m.plan as PlanAction[];
@@ -282,22 +286,22 @@ function PlanCard({ m, onUpdate }: { m: AssistantMessage; onUpdate: (m: Assistan
       const nextApplied = res.message?.applied ?? [...new Set([...m.applied, ...res.results.filter((r) => r.ok).map((r) => r.index)])];
       onUpdate({ ...m, ...(res.message ?? {}), applied: nextApplied });
       setSelected(new Set());
-      if (failed) toast.error(`${okCount} applied, ${failed} failed`, "See the messages next to the actions.");
-      else toast.success(`${okCount} action${okCount === 1 ? "" : "s"} applied`);
+      if (failed) toast.error(t("app.assistant.chat.appliedFailed", { okCount: okCount, failed: failed }), t("app.assistant.chat.seeTheMessagesNextTo"));
+      else toast.success(t("app.assistant.chat.actionsApplied", { count: okCount }));
       router.refresh();
     } catch (e) {
-      toast.error("Could not apply the plan", errorMessage(e));
+      toast.error(t("app.assistant.chat.couldNotApplyThePlan"), errorMessage(e));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Card className="mt-3 overflow-hidden" role="group" aria-label="Proposed plan">
+    <Card className="mt-3 overflow-hidden" role="group" aria-label={t("app.assistant.chat.proposedPlan")}>
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-subtle/50 px-3.5 py-2">
-        <span className="text-[13px] font-semibold">Proposed plan</span>
-        <Badge>{plan.length} actions</Badge>
-        {pending.length === 0 ? <Badge tone="ok">All applied</Badge> : m.applied.length > 0 ? <Badge tone="accent">{m.applied.length} applied</Badge> : <Badge tone="warn">Not applied yet</Badge>}
+        <span className="text-[13px] font-semibold">{t("app.assistant.chat.proposedPlan")}</span>
+        <Badge>{t("app.assistant.chat.actions", { count: plan.length })}</Badge>
+        {pending.length === 0 ? <Badge tone="ok">{t("app.assistant.chat.allApplied")}</Badge> : m.applied.length > 0 ? <Badge tone="accent">{t("app.assistant.chat.applied", { count: m.applied.length })}</Badge> : <Badge tone="warn">{t("app.assistant.chat.notAppliedYet")}</Badge>}
       </div>
       <ul className="divide-y divide-border">
         {plan.map((a, i) => {
@@ -311,7 +315,7 @@ function PlanCard({ m, onUpdate }: { m: AssistantMessage; onUpdate: (m: Assistan
                 <input
                   type="checkbox"
                   className="mt-1 size-4 accent-[var(--accent)] disabled:opacity-50"
-                  aria-label={`Select: ${a.summary}`}
+                  aria-label={t("app.assistant.chat.select", { summary: a.summary })}
                   checked={isApplied || selected.has(i)}
                   disabled={isApplied || busy}
                   onChange={(e) => {
@@ -330,17 +334,17 @@ function PlanCard({ m, onUpdate }: { m: AssistantMessage; onUpdate: (m: Assistan
                       <Badge tone="ok">
                         {href ? (
                           <Link href={href} className="hover:underline">
-                            {r.skipped ? "Already applied" : "Applied"} · open
+                            {r.skipped ? t("app.assistant.chat.alreadyApplied") : t("app.assistant.chat.applied2")} {t("app.assistant.chat.open")}
                           </Link>
                         ) : r.skipped ? (
-                          "Already applied"
+                          t("app.assistant.chat.alreadyApplied")
                         ) : (
-                          "Applied"
+                          t("app.assistant.chat.applied2")
                         )}
                       </Badge>
                     )}
-                    {!r && isApplied && <Badge tone="ok">Applied</Badge>}
-                    {r && !r.ok && <Badge tone="danger">Failed: {r.error ?? "error"}</Badge>}
+                    {!r && isApplied && <Badge tone="ok">{t("app.assistant.chat.applied2")}</Badge>}
+                    {r && !r.ok && <Badge tone="danger">{t("app.assistant.chat.failed", { value: r.error ?? "error" })}</Badge>}
                     {r?.note && <span className="text-[12px] text-muted">{r.note}</span>}
                     {r?.warnings?.map((w) => (
                       <Badge key={w} tone="warn">
@@ -358,7 +362,7 @@ function PlanCard({ m, onUpdate }: { m: AssistantMessage; onUpdate: (m: Assistan
                         setOpen(next);
                       }}
                     >
-                      {open.has(i) ? "Hide details" : "Details"}
+                      {open.has(i) ? t("app.assistant.chat.hideDetails") : t("app.assistant.chat.details")}
                     </button>
                   </div>
                   {open.has(i) && <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-subtle p-2.5 font-mono text-[11.5px] leading-relaxed">{JSON.stringify(a.data, null, 2)}</pre>}
@@ -370,12 +374,12 @@ function PlanCard({ m, onUpdate }: { m: AssistantMessage; onUpdate: (m: Assistan
       </ul>
       {pending.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 border-t border-border bg-subtle/40 px-3.5 py-2.5">
-          <span className="mr-auto text-[12.5px] text-muted">Nothing changes until you apply. Applying the same action twice is safe.</span>
+          <span className="mr-auto text-[12.5px] text-muted">{t("app.assistant.chat.nothingChangesUntilYouApply")}</span>
           <Button size="sm" onClick={() => apply([...selected].sort((x, y) => x - y))} disabled={busy || selected.size === 0}>
-            Apply selected ({selected.size})
+            {t("app.assistant.chat.applySelected", { size: selected.size })}
           </Button>
           <Button size="sm" variant="primary" onClick={() => apply()} loading={busy}>
-            Apply all
+            {t("app.assistant.chat.applyAll")}
           </Button>
         </div>
       )}

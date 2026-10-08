@@ -1,9 +1,11 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/client";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
 export function CopyField({ value, label }: { value: string; label: string }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   return (
     <div className="flex items-center gap-2">
@@ -26,7 +28,7 @@ export function CopyField({ value, label }: { value: string; label: string }) {
           }
         }}
       >
-        {copied ? "Copied" : "Copy"}
+        {copied ? t("components.copyField.copied") : t("components.copyField.copy")}
       </Button>
     </div>
   );

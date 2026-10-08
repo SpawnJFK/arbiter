@@ -1,3 +1,4 @@
+import type { Translator } from "./i18n/core";
 import type { WidgetType } from "./types";
 
 /** Metric catalogue from docs/api-contract.md (Agency OS, Dashboards). */
@@ -9,36 +10,15 @@ export const METRICS: Record<WidgetType, string[]> = {
   table: ["overdue_jobs", "top_accounts", "open_activities", "recent_deliveries"],
 };
 
-export const METRIC_LABEL: Record<string, string> = {
-  revenue: "Revenue",
-  margin: "Margin",
-  margin_pct: "Margin %",
-  jobs_active: "Active jobs",
-  jobs_overdue: "Overdue jobs",
-  auto_rate: "Auto-approval rate",
-  escaped_rate: "Escaped error rate",
-  open_deals_value: "Open deals",
-  words_delivered: "Words delivered",
-  reviewer_cost: "Reviewer cost",
-  revenue_by_month: "Revenue by month",
-  jobs_by_state: "Jobs by state",
-  revenue_by_account: "Revenue by account",
-  words_by_pair: "Words by language pair",
-  auto_rate_by_month: "Auto-approval rate by month",
-  deals_by_stage: "Deal pipeline",
-  overdue_jobs: "Overdue jobs",
-  top_accounts: "Top accounts",
-  open_activities: "Open activities",
-  recent_deliveries: "Recent deliveries",
-};
+/** Label for a metric id (`metric.<id>` in messages/en.json), falling back to the id. */
+export function metricLabel(t: Translator, metric: string): string {
+  const key = `metric.${metric}`;
+  return t.has(key) ? t(key) : metric;
+}
 
-export const TYPE_LABEL: Record<WidgetType, string> = {
-  kpi: "KPI tile",
-  bar: "Bar chart",
-  line: "Line chart",
-  pipeline: "Pipeline",
-  table: "Table",
-};
+export function widgetTypeLabel(t: Translator, type: WidgetType): string {
+  return t(`widgetType.${type}`);
+}
 
 /** Lower is better for these KPIs (delta colouring). */
 export const LOWER_IS_BETTER = new Set(["jobs_overdue", "escaped_rate", "reviewer_cost"]);

@@ -1,5 +1,6 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnnotatableText, type AnnotatableHandle } from "@/components/annotatable-text";
 import { ErrorAnnotator, type Annotation } from "@/components/error-annotator";
@@ -23,6 +24,7 @@ interface ItemState {
 }
 
 export function TestRunner({ test }: { test: ReviewerTest }) {
+  const { t } = useI18n();
   const toast = useToast();
   const [attempt, setAttempt] = useState<TestAttempt | null>(null);
   const [deadline, setDeadline] = useState<number | null>(null);
@@ -40,7 +42,7 @@ export function TestRunner({ test }: { test: ReviewerTest }) {
       setItems(Object.fromEntries(a.items.map((it) => [it.index, { target: it.target, errors: [] }])));
       setDeadline(a.expires_at ? new Date(a.expires_at).getTime() : Date.now() + a.time_limit_min * 60_000);
     } catch (e) {
-      toast.error("Could not start the test", errorMessage(e));
+      toast.error(t("reviewer.tests.detail.testRunner.couldNotStartTheTest"), errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -60,30 +62,30 @@ export function TestRunner({ test }: { test: ReviewerTest }) {
       setDeadline(null);
     } catch (e) {
       submitted.current = false;
-      toast.error("Submit failed", errorMessage(e));
+      toast.error(t("reviewer.tests.detail.testRunner.submitFailed"), errorMessage(e));
     } finally {
       setBusy(false);
     }
-  }, [attempt, items, toast]);
+  }, [attempt, items, toast, t]);
 
   // Auto-submit when time runs out.
   useEffect(() => {
     if (left !== 0 || !attempt || result) return;
-    const t = setTimeout(() => void submit(), 0);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => void submit(), 0);
+    return () => clearTimeout(timer);
   }, [left, attempt, result, submit]);
 
   if (result) {
     return (
       <Card className="mx-auto max-w-lg">
         <EmptyState
-          title={result.passed ? "Passed" : "Not passed this time"}
+          title={result.passed ? t("reviewer.tests.detail.testRunner.passed") : t("reviewer.tests.detail.testRunner.notPassedThisTime")}
           description={
             result.passed
-              ? `Score ${fmtScore(result.score)}. Once every test for the pair is passed, the pair turns active and tasks arrive in the cockpit.`
-              : `Score ${fmtScore(result.score)}. The tests list shows when you can retake it.`
+              ? t("reviewer.tests.detail.testRunner.scoreOnceEveryTestFor", { score: fmtScore(result.score) })
+              : t("reviewer.tests.detail.testRunner.scoreTheTestsListShows", { score: fmtScore(result.score) })
           }
-          action={<ButtonLink href="/reviewer" variant="primary">Back to dashboard</ButtonLink>}
+          action={<ButtonLink href="/reviewer" variant="primary">{t("reviewer.tests.detail.testRunner.backToDashboard")}</ButtonLink>}
         />
       </Card>
     );
@@ -92,17 +94,17 @@ export function TestRunner({ test }: { test: ReviewerTest }) {
   if (!attempt) {
     return (
       <Card className="max-w-2xl p-5">
-        <h2 className="text-[15px] font-semibold">Before you start</h2>
+        <h2 className="text-[15px] font-semibold">{t("reviewer.tests.detail.testRunner.beforeYouStart")}</h2>
         <ul className="mt-3 list-disc space-y-1.5 pl-5 text-[14px] text-muted">
-          <li>The timer ({test.time_limit_min} minutes) starts when you click Start.</li>
-          <li>Fix each machine translation so it is correct and fluent. Inline tags must stay in place.</li>
-          <li>Select the faulty text in the target and mark it with a dimension and severity (minor, major, critical).</li>
-          <li>When time is up, your answers are submitted automatically.</li>
+          <li>{t("reviewer.tests.detail.testRunner.theTimerMinutesStartsWhen", { time_limit_min: test.time_limit_min })}</li>
+          <li>{t("reviewer.tests.detail.testRunner.fixEachMachineTranslationSo")}</li>
+          <li>{t("reviewer.tests.detail.testRunner.selectTheFaultyTextIn")}</li>
+          <li>{t("reviewer.tests.detail.testRunner.whenTimeIsUpYour")}</li>
         </ul>
         <Button variant="primary" className="mt-5" onClick={start} loading={busy} disabled={test.status !== "available"}>
-          Start test
+          {t("reviewer.tests.detail.testRunner.startTest")}
         </Button>
-        {test.status !== "available" && <p className="mt-2 text-[13px] text-muted">This test is {test.status}.</p>}
+        {test.status !== "available" && <p className="mt-2 text-[13px] text-muted">{t("reviewer.tests.detail.testRunner.thisTestIs", { status: test.status })}</p>}
       </Card>
     );
   }
@@ -112,7 +114,7 @@ export function TestRunner({ test }: { test: ReviewerTest }) {
     <div className="space-y-4">
       <div className="sticky top-12 z-20 flex items-center gap-3 rounded-lg border border-border bg-surface/95 px-4 py-2.5 shadow-card backdrop-blur md:top-2">
         <span className="text-[13px] text-muted">
-          {attempt.items.length} items · {attempt.items.reduce((n, it) => n + (items[it.index]?.errors.length ?? 0), 0)} errors marked
+          {t("reviewer.tests.detail.testRunner.itemsErrorsMarked", { count: attempt.items.length, errors: attempt.items.reduce((n, it) => n + (items[it.index]?.errors.length ?? 0), 0) })}
         </span>
         <span
           role="timer"
@@ -122,10 +124,10 @@ export function TestRunner({ test }: { test: ReviewerTest }) {
           {left === null ? "–" : formatClock(left)}
         </span>
         <Button variant="primary" onClick={submit} loading={busy}>
-          Submit test
+          {t("reviewer.tests.detail.testRunner.submitTest")}
         </Button>
       </div>
-      {low && <Callout tone="danger">Less than a minute left. Answers are submitted automatically at 0:00.</Callout>}
+      {low && <Callout tone="danger">{t("reviewer.tests.detail.testRunner.lessThanAMinuteLeft")}</Callout>}
       {attempt.items.map((it) => (
         <TestItem
           key={it.index}
@@ -153,28 +155,29 @@ function TestItem({
   state: ItemState;
   onChange: (s: ItemState) => void;
 }) {
+  const { t } = useI18n();
   const mt = useRef<AnnotatableHandle>(null);
   return (
     <Card className="p-4">
-      <div className="mb-2 text-[12px] font-medium text-faint">Item {index + 1}</div>
+      <div className="mb-2 text-[12px] font-medium text-faint">{t("reviewer.tests.detail.testRunner.item", { value: index + 1 })}</div>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-3">
           <div>
-            <div className="mb-1 text-[11.5px] font-medium uppercase tracking-wide text-faint">Source</div>
+            <div className="mb-1 text-[11.5px] font-medium uppercase tracking-wide text-faint">{t("reviewer.tests.detail.testRunner.source")}</div>
             <TaggedText value={source} className="text-[14.5px] leading-relaxed" />
           </div>
           <div>
-            <div className="mb-1 text-[11.5px] font-medium uppercase tracking-wide text-faint">Machine translation (select text to mark errors)</div>
-            <AnnotatableText ref={mt} value={original} label={`Machine translation for item ${index + 1}`} className="rounded-md bg-subtle/60 px-3 py-2 text-[14.5px] leading-relaxed" />
+            <div className="mb-1 text-[11.5px] font-medium uppercase tracking-wide text-faint">{t("reviewer.tests.detail.testRunner.machineTranslationSelectTextTo")}</div>
+            <AnnotatableText ref={mt} value={original} label={t("reviewer.tests.detail.testRunner.machineTranslationForItem", { value: index + 1 })} className="rounded-md bg-subtle/60 px-3 py-2 text-[14.5px] leading-relaxed" />
           </div>
         </div>
         <div>
-          <div className="mb-1 text-[11.5px] font-medium uppercase tracking-wide text-faint">Your corrected target</div>
+          <div className="mb-1 text-[11.5px] font-medium uppercase tracking-wide text-faint">{t("reviewer.tests.detail.testRunner.yourCorrectedTarget")}</div>
           <TagEditor
             value={state.target}
             onChange={(target) => onChange({ ...state, target })}
             requiredTags={tagsOf(source)}
-            ariaLabel={`Corrected target for item ${index + 1}`}
+            ariaLabel={t("reviewer.tests.detail.testRunner.correctedTargetForItem", { item: index + 1 })}
           />
         </div>
       </div>

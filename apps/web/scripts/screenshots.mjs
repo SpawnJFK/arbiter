@@ -114,7 +114,7 @@ function watch(page) {
   await shot(p, "workflow-editor", true);
   await p.goto("/app/assistant");
   await p.waitForLoadState("networkidle");
-  await p.getByRole("button", { name: /Set up an agency \(Serbian\)/ }).click();
+  await p.getByRole("button", { name: /Set up a translation agency/ }).click();
   await p.keyboard.press("Enter");
   await p.getByRole("group", { name: "Proposed plan" }).waitFor();
   await p.getByRole("button", { name: "Apply all" }).click();
@@ -177,6 +177,21 @@ function watch(page) {
     }
     await a.close();
   }
+  await c.close();
+}
+
+// Admin: interface languages (export / import / coverage)
+{
+  const c = await ctx();
+  await login(c, "admin@demo.test");
+  const p = await c.newPage();
+  watch(p);
+  await p.goto("/admin/languages");
+  await p.getByRole("switch", { name: "Enable Deutsch" }).waitFor();
+  await shot(p, "admin-languages", false);
+  await p.getByRole("button", { name: "Import translations into Deutsch" }).click();
+  await p.getByRole("dialog").waitFor();
+  await shot(p, "admin-languages-import", false);
   await c.close();
 }
 

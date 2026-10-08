@@ -1,15 +1,20 @@
+import { getI18n } from "@/lib/i18n/server";
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/ui/misc";
 import { TmScreen } from "./tm-screen";
 
-export const metadata: Metadata = { title: "Translation memory" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t("app.tm.translationMemory") };
+}
 
-export default function TmPage() {
+export default async function TmPage() {
+  const { t } = await getI18n();
   return (
     <>
       <PageHeader
-        title="Translation memory"
-        description="Approved segments are stored automatically. Import existing TMX files to reuse past translations from day one."
+        title={t("app.tm.translationMemory")}
+        description={t("app.tm.approvedSegmentsAreStoredAutomatically")}
       />
       <TmScreen />
     </>

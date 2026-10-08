@@ -127,6 +127,9 @@ export const Icons = {
   keyboard: (p: P) => (
     <svg {...base} {...p}><rect x="1.5" y="4" width="13" height="8" rx="1.5" /><path d="M4 6.5h.01M6.5 6.5h.01M9 6.5h.01M11.5 6.5h.01M5 9.5h6" /></svg>
   ),
+  globe: (p: P) => (
+    <svg {...base} {...p}><circle cx="8" cy="8" r="6" /><path d="M2 8h12M8 2c1.7 1.8 2.5 3.8 2.5 6S9.7 12.2 8 14C6.3 12.2 5.5 10.2 5.5 8S6.3 3.8 8 2z" /></svg>
+  ),
 };
 
 export function Logo({ className }: { className?: string }) {

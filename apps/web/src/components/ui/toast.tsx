@@ -1,5 +1,6 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/client";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
@@ -12,7 +13,7 @@ interface ToastItem {
 }
 
 interface ToastApi {
-  toast: (t: { title: string; description?: string; tone?: ToastTone }) => void;
+  toast: (item: { title: string; description?: string; tone?: ToastTone }) => void;
   success: (title: string, description?: string) => void;
   error: (title: string, description?: string) => void;
 }
@@ -21,6 +22,7 @@ const Ctx = createContext<ToastApi | null>(null);
 let nextId = 1;
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
   const [items, setItems] = useState<ToastItem[]>([]);
 
   const dismiss = useCallback((id: number) => setItems((xs) => xs.filter((x) => x.id !== id)), []);
@@ -51,10 +53,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         aria-atomic="false"
         className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex flex-col items-center gap-2 p-4 sm:items-end"
       >
-        {items.map((t) => (
+        {items.map((item) => (
           <div
-            key={t.id}
-            role={t.tone === "danger" ? "alert" : "status"}
+            key={item.id}
+            role={item.tone === "danger" ? "alert" : "status"}
             className={cn(
               "pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-lg border border-border bg-surface px-3.5 py-3 shadow-pop",
             )}
@@ -62,19 +64,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <span
               className={cn(
                 "mt-1.5 size-2 shrink-0 rounded-full",
-                t.tone === "ok" ? "bg-ok" : t.tone === "danger" ? "bg-danger" : "bg-accent",
+                item.tone === "ok" ? "bg-ok" : item.tone === "danger" ? "bg-danger" : "bg-accent",
               )}
               aria-hidden="true"
             />
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium text-fg">{t.title}</div>
-              {t.description && <div className="mt-0.5 text-[13px] text-muted">{t.description}</div>}
+              <div className="text-sm font-medium text-fg">{item.title}</div>
+              {item.description && <div className="mt-0.5 text-[13px] text-muted">{item.description}</div>}
             </div>
             <button
               type="button"
-              onClick={() => dismiss(t.id)}
+              onClick={() => dismiss(item.id)}
               className="rounded p-0.5 text-faint hover:text-fg"
-              aria-label="Dismiss notification"
+              aria-label={t("components.toast.dismissNotification")}
             >
               <svg viewBox="0 0 16 16" className="size-3.5" fill="none" aria-hidden="true">
                 <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />

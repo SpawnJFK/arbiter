@@ -1,5 +1,6 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/client";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { diffTags, escapeText, tagLabel, tagsOf, tokenize } from "@/lib/tags";
@@ -61,6 +62,7 @@ export const TagEditor = forwardRef<TagEditorHandle, Props>(function TagEditor(
   { value, onChange, requiredTags, id, ariaLabel, ariaDescribedBy, className, autoFocus, placeholder, dir, onKeyDown },
   ref,
 ) {
+  const { t } = useI18n();
   const el = useRef<HTMLDivElement>(null);
   const lastValue = useRef<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -73,7 +75,7 @@ export const TagEditor = forwardRef<TagEditorHandle, Props>(function TagEditor(
       if (!root) return;
       root.replaceChildren();
       const remaining = new Map<string, number>();
-      for (const t of required) remaining.set(t, (remaining.get(t) ?? 0) + 1);
+      for (const tag of required) remaining.set(tag, (remaining.get(tag) ?? 0) + 1);
       for (const p of tokenize(v)) {
         if (p.type === "text") root.append(document.createTextNode(p.value));
         else {
@@ -98,16 +100,16 @@ export const TagEditor = forwardRef<TagEditorHandle, Props>(function TagEditor(
 
   useEffect(() => {
     if (!notice) return;
-    const t = setTimeout(() => setNotice(null), 2500);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setNotice(null), 2500);
+    return () => clearTimeout(timer);
   }, [notice]);
 
   /** A chip may be removed only if the target has more copies of it than the source needs. */
   const isProtected = useCallback(
     (chip: HTMLElement): boolean => {
       const token = chip.dataset.tag!;
-      const have = tagsOf(serializeNodes(el.current?.childNodes ?? [])).filter((t) => t === token).length;
-      const need = required.filter((t) => t === token).length;
+      const have = tagsOf(serializeNodes(el.current?.childNodes ?? [])).filter((tagsOf) => tagsOf === token).length;
+      const need = required.filter((tag) => tag === token).length;
       return have <= need;
     },
     [required],
@@ -139,12 +141,12 @@ export const TagEditor = forwardRef<TagEditorHandle, Props>(function TagEditor(
       // Safety net: a required tag disappeared through a path we did not intercept.
       render(lastValue.current ?? "");
       focusEnd(root);
-      setNotice("Tags cannot be deleted. Edit the text around them.");
+      setNotice(t("components.tagEditor.tagsCannotBeDeletedEdit"));
       return;
     }
     // Refresh the extra flag on chips.
     const remaining = new Map<string, number>();
-    for (const t of required) remaining.set(t, (remaining.get(t) ?? 0) + 1);
+    for (const tag of required) remaining.set(tag, (remaining.get(tag) ?? 0) + 1);
     for (const chip of root.querySelectorAll<HTMLElement>("[data-tag]")) {
       const left = remaining.get(chip.dataset.tag!) ?? 0;
       remaining.set(chip.dataset.tag!, left - 1);
@@ -152,7 +154,7 @@ export const TagEditor = forwardRef<TagEditorHandle, Props>(function TagEditor(
     }
     lastValue.current = next;
     onChange(next);
-  }, [onChange, render, required]);
+  }, [onChange, render, required, t]);
 
   useImperativeHandle(
     ref,
@@ -217,7 +219,7 @@ export const TagEditor = forwardRef<TagEditorHandle, Props>(function TagEditor(
     }
     if (live.some(rangeTouchesProtectedChip)) {
       e.preventDefault();
-      setNotice("Tags cannot be deleted or overwritten. Edit the text around them.");
+      setNotice(t("components.tagEditor.tagsCannotBeDeletedOr"));
     }
   };
 
@@ -298,30 +300,31 @@ export function TagStatus({
   value: string;
   onInsert?: (token: string) => void;
 }) {
+  const { t } = useI18n();
   const { missing, extra } = diffTags(required, tagsOf(value));
   if (missing.length === 0 && extra.length === 0) {
-    return required.length > 0 ? <p className="text-[12px] text-ok">All {required.length} tags in place.</p> : null;
+    return required.length > 0 ? <p className="text-[12px] text-ok">{t("components.tagEditor.allTagsInPlace", { count: required.length })}</p> : null;
   }
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
       {missing.length > 0 && (
         <>
-          <span className="font-medium text-danger">Missing tags (save blocked):</span>
-          {missing.map((t, i) =>
+          <span className="font-medium text-danger">{t("components.tagEditor.missingTagsSaveBlocked")}</span>
+          {missing.map((tag, i) =>
             onInsert ? (
               <button
-                key={`${t}-${i}`}
+                key={`${tag}-${i}`}
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => onInsert(t)}
+                onClick={() => onInsert(tag)}
                 className="tag-chip cursor-pointer hover:opacity-80"
-                title="Insert at cursor"
+                title={t("components.tagEditor.insertAtCursor")}
               >
-                + {tagLabel(t)}
+                + {tagLabel(tag)}
               </button>
             ) : (
-              <span key={`${t}-${i}`} className="tag-chip">
-                {tagLabel(t)}
+              <span key={`${tag}-${i}`} className="tag-chip">
+                {tagLabel(tag)}
               </span>
             ),
           )}
@@ -329,7 +332,7 @@ export function TagStatus({
       )}
       {extra.length > 0 && (
         <span className="font-medium text-danger">
-          Extra tags not in source: {extra.map(tagLabel).join(" ")} (remove them to save)
+          {t("components.tagEditor.extraTagsNotInSource", { value: extra.map(tagLabel).join(" ") })}
         </span>
       )}
     </div>

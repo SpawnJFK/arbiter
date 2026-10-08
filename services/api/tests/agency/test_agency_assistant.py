@@ -25,12 +25,12 @@ EN = (
 )
 
 
-def _ask(c, h, text, thread_id=None):
+def _ask(c, h, text, thread_id=None, **extra):
     if thread_id is None:
         t = c.post("/v1/assistant/threads", headers=h, json={})
         assert t.status_code == 201, t.text
         thread_id = t.json()["id"]
-    r = c.post(f"/v1/assistant/threads/{thread_id}/messages", headers=h, json={"content": text})
+    r = c.post(f"/v1/assistant/threads/{thread_id}/messages", headers=h, json={"content": text, **extra})
     assert r.status_code == 201, r.text
     return thread_id, r.json()["assistant_message"]
 
@@ -62,12 +62,33 @@ def _counts(db, org_id):
 
 
 def test_serbian_description_plan_apply_all_and_twice(db):
+    """Serbian input is understood; the output (locale en, the default) is English."""
     c = client()
     h = register(c)
     thread_id, msg = _ask(c, h, SR)
     plan = msg["plan"]
     types = [a["type"] for a in plan]
     assert types[0] == "update_org" and plan[0]["data"]["name"] == "Primer Prevodi Demo"
+    assert (
+        plan[0]["summary"]
+        == 'Organization settings: name "Primer Prevodi Demo", vertical: translation agency'
+    )
+    assert [a["data"].get("name") for a in plan] == [
+        "Primer Prevodi Demo",
+        "Standard workflow",
+        "Pharma workflow",
+        "Standard price list",
+        "Acme d.o.o.",
+        "Beta Pharma",
+        "Gamma Soft",
+        "Business overview",
+    ]
+    assert plan[1]["summary"].startswith('Workflow "Standard workflow": TM > MT > QE > review')
+    assert plan[3]["summary"] == 'Price list "Standard price list": 0.08 EUR/word (full)'
+    assert plan[5]["summary"] == 'Client "Beta Pharma" (pharma, stricter workflow)'
+    assert plan[7]["summary"].startswith('Dashboard "Business overview": revenue')
+    assert msg["content"].startswith("Here is a proposed setup based on your description:")
+    assert "This answer is in English" not in msg["content"]
     workflows = [a for a in plan if a["type"] == "create_workflow"]
     assert ["tm", "mt", "qe", "human_review", "second_review", "client_review", "delivery"] in [
         _kinds(w) for w in workflows
@@ -82,7 +103,7 @@ def test_serbian_description_plan_apply_all_and_twice(db):
     metrics = {w["metric"] for w in dash["data"]["widgets"]}
     assert {"revenue", "margin", "jobs_overdue"} <= metrics
     assert msg["applied"] == [] and msg["role"] == "assistant"
-    assert "parove" in msg["content"]  # asks for the language pairs, in Serbian
+    assert "language pairs" in msg["content"]  # asks for the language pairs, in English
 
     org = org_of(db)
     assert _counts(db, org.id) == {"accounts": 0, "price_lists": 0, "workflows": 0, "dashboards": 0}
@@ -202,7 +223,7 @@ def test_data_question_answered_from_context_with_empty_plan(db):
     drain()
     _, msg = _ask(c, h, "koliko poslova kasni?")
     assert msg["plan"] == []
-    assert "1 posao kasni" in msg["content"] and late["jobs"][0]["id"] in msg["content"]
+    assert "1 job is overdue" in msg["content"] and late["jobs"][0]["id"] in msg["content"]
     _, msg = _ask(c, h, "How many jobs are overdue?")
     assert msg["plan"] == [] and "1 job is overdue" in msg["content"]
     _, msg = _ask(c, h, "Koliki je prihod?")
@@ -304,7 +325,7 @@ def test_real_model_r_seg_12_and_failure_falls_back(db, monkeypatch):
     assert msg["plan"] == [] and "R-SEG-12" in msg["content"]
     # the model fails: the built-in planner answers and says so
     _, msg = _ask(c, h, "koliko poslova kasni?")
-    assert msg["plan"] == [] and "Nijedan posao ne kasni." in msg["content"]
+    assert msg["plan"] == [] and "No job is overdue." in msg["content"]
     assert "built-in planner" in msg["content"]
 
 
@@ -333,3 +354,46 @@ def test_assistant_tenancy_and_validation(db):
     named = c.post("/v1/assistant/threads", headers=ha, json={"title": "Setup"}).json()
     assert named["title"] == "Setup" and named["messages"] == []
     assert json.loads(json.dumps(msg))  # plain JSON
+
+
+def test_locale_reaches_the_model_prompt(db, monkeypatch):
+    answer = {
+        "reply": "Hier ist ein Plan.",
+        "plan": [
+            {
+                "type": "create_dashboard",
+                "summary": "Dashboard Geschäftsübersicht",
+                "data": {
+                    "name": "Geschäftsübersicht",
+                    "widgets": [{"type": "kpi", "metric": "revenue", "title": "Umsatz"}],
+                },
+            }
+        ],
+    }
+    llm = ScriptedLlm({"assistant": [answer]}, name="scripted")
+    monkeypatch.setattr(assistant, "_llm", lambda: llm)
+    c = client()
+    h = register(c)
+    _, msg = _ask(c, h, "Hoću dashboard sa prihodom.", locale="DE")
+    payload = llm.calls[0]["payload"]
+    assert payload["locale"] == "de" and payload["message"] == "Hoću dashboard sa prihodom."
+    assert '"locale"' in llm.calls[0]["system"] and assistant.ASSISTANT_PROMPT_VERSION == "2026-10-08.1"
+    assert msg["content"] == "Hier ist ein Plan."
+    assert msg["plan"][0]["data"]["widgets"][0]["title"] == "Umsatz"
+
+
+def test_heuristic_answers_in_english_with_a_note_for_other_locales(db):
+    c = client()
+    h = register(c)
+    _, msg = _ask(c, h, SR, locale="sr-latn")
+    assert msg["plan"][1]["data"]["name"] == "Standard workflow"
+    assert "This answer is in English" in msg["content"] and "sr-Latn" in msg["content"]
+    _, msg = _ask(c, h, "How many jobs are overdue?", locale="en-GB")
+    assert "This answer is in English" not in msg["content"]
+    t = c.post("/v1/assistant/threads", headers=h, json={}).json()
+    r = c.post(
+        f"/v1/assistant/threads/{t['id']}/messages",
+        headers=h,
+        json={"content": "x", "locale": "not a locale"},
+    )
+    assert r.status_code == 422

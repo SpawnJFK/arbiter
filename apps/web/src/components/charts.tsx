@@ -1,3 +1,6 @@
+"use client";
+
+import { useI18n } from "@/lib/i18n/client";
 // Small dependency-free SVG charts. Values are plain numbers; formatting is passed in.
 import { cn } from "@/lib/cn";
 
@@ -22,6 +25,7 @@ function shortLabel(l: string): string {
 }
 
 export function BarChart({ points, format, height = 180, width = 600, className }: { points: Point[]; format: (n: number) => string; height?: number; width?: number; className?: string }) {
+  const { t } = useI18n();
   const W = width;
   const max = niceMax(Math.max(0, ...points.map((p) => p.value ?? 0)));
   const padL = 44;
@@ -29,16 +33,16 @@ export function BarChart({ points, format, height = 180, width = 600, className 
   const innerW = W - padL - 8;
   const innerH = height - padB - 8;
   const bw = innerW / Math.max(1, points.length);
-  const ticks = [0, 0.5, 1].map((f) => f * max);
+  const ticks = [0, 0.5, 1].map((frac) => frac * max);
   return (
     <svg viewBox={`0 0 ${W} ${height}`} className={cn("h-auto w-full", className)} role="img" aria-label={points.map((p) => `${p.label}: ${p.value === null ? "no data" : format(p.value)}`).join(", ")}>
-      {ticks.map((t) => {
-        const y = 8 + innerH - (t / max) * innerH;
+      {ticks.map((tick) => {
+        const y = 8 + innerH - (tick / max) * innerH;
         return (
-          <g key={t}>
-            <line x1={padL} x2={W - 8} y1={y} y2={y} stroke="var(--border)" strokeDasharray={t === 0 ? undefined : "3 3"} />
+          <g key={tick}>
+            <line x1={padL} x2={W - 8} y1={y} y2={y} stroke="var(--border)" strokeDasharray={tick === 0 ? undefined : "3 3"} />
             <text x={padL - 6} y={y + 3.5} textAnchor="end" fontSize="10" fill="var(--faint)">
-              {format(t)}
+              {format(tick)}
             </text>
           </g>
         );
@@ -49,7 +53,7 @@ export function BarChart({ points, format, height = 180, width = 600, className 
         return (
           <g key={`${p.label}-${i}`}>
             <rect x={x} y={8 + innerH - h} width={bw * 0.64} height={Math.max(h, p.value ? 1 : 0)} rx="3" fill="var(--accent)" opacity="0.85">
-              <title>{`${p.label}: ${p.value === null ? "no data" : format(p.value)}`}</title>
+              <title>{t("components.charts.text", { label: p.label, value: p.value === null ? "no data" : format(p.value) })}</title>
             </rect>
             <text x={x + bw * 0.32} y={height - 8} textAnchor="middle" fontSize="10" fill="var(--muted)">
               {shortLabel(p.label)}
@@ -62,6 +66,7 @@ export function BarChart({ points, format, height = 180, width = 600, className 
 }
 
 export function LineChart({ points, format, height = 180, width = 600, className }: { points: Point[]; format: (n: number) => string; height?: number; width?: number; className?: string }) {
+  const { t } = useI18n();
   const W = width;
   const max = niceMax(Math.max(0, ...points.map((p) => p.value ?? 0)));
   const padL = 44;
@@ -72,16 +77,16 @@ export function LineChart({ points, format, height = 180, width = 600, className
   const xy = points.map((p, i) => [padL + 8 + i * step, 12 + innerH - ((p.value ?? 0) / max) * innerH] as const);
   const line = xy.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
   const area = xy.length ? `${line} L${xy[xy.length - 1][0].toFixed(1)},${12 + innerH} L${xy[0][0].toFixed(1)},${12 + innerH} Z` : "";
-  const ticks = [0, 0.5, 1].map((f) => f * max);
+  const ticks = [0, 0.5, 1].map((frac) => frac * max);
   return (
     <svg viewBox={`0 0 ${W} ${height}`} className={cn("h-auto w-full", className)} role="img" aria-label={points.map((p) => `${p.label}: ${p.value === null ? "no data" : format(p.value)}`).join(", ")}>
-      {ticks.map((t) => {
-        const y = 12 + innerH - (t / max) * innerH;
+      {ticks.map((tick) => {
+        const y = 12 + innerH - (tick / max) * innerH;
         return (
-          <g key={t}>
-            <line x1={padL} x2={W - 8} y1={y} y2={y} stroke="var(--border)" strokeDasharray={t === 0 ? undefined : "3 3"} />
+          <g key={tick}>
+            <line x1={padL} x2={W - 8} y1={y} y2={y} stroke="var(--border)" strokeDasharray={tick === 0 ? undefined : "3 3"} />
             <text x={padL - 6} y={y + 3.5} textAnchor="end" fontSize="10" fill="var(--faint)">
-              {format(t)}
+              {format(tick)}
             </text>
           </g>
         );
@@ -91,7 +96,7 @@ export function LineChart({ points, format, height = 180, width = 600, className
       {xy.map(([x, y], i) => (
         <g key={i}>
           <circle cx={x} cy={y} r="3" fill="var(--surface)" stroke="var(--accent)" strokeWidth="2">
-            <title>{`${points[i].label}: ${points[i].value === null ? "no data" : format(points[i].value!)}`}</title>
+            <title>{t("components.charts.text", { label: points[i].label, value: points[i].value === null ? "no data" : format(points[i].value!) })}</title>
           </circle>
           {(points.length <= 13 || i % Math.ceil(points.length / 12) === 0) && (
             <text x={x} y={height - 8} textAnchor="middle" fontSize="10" fill="var(--muted)">

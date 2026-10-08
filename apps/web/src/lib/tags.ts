@@ -41,7 +41,7 @@ export function tagsOf(s: string): string[] {
 
 function counts(tags: string[]): Map<string, number> {
   const m = new Map<string, number>();
-  for (const t of tags) m.set(t, (m.get(t) ?? 0) + 1);
+  for (const tag of tags) m.set(tag, (m.get(tag) ?? 0) + 1);
   return m;
 }
 

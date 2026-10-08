@@ -1,12 +1,17 @@
+import { getI18n } from "@/lib/i18n/server";
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/ui/misc";
 import { getMe, withAuth } from "@/lib/server-api";
 import type { Account, Workflow } from "@/lib/types";
 import { NewProjectWizard } from "./wizard";
 
-export const metadata: Metadata = { title: "New project" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t("app.projects.new.newProject") };
+}
 
 export default async function NewProjectPage({ searchParams }: { searchParams: Promise<{ account?: string }> }) {
+  const { t } = await getI18n();
   const { account } = await searchParams;
   const { org, user } = await getMe();
   // CRM and workflow templates are PM-only.
@@ -21,8 +26,8 @@ export default async function NewProjectPage({ searchParams }: { searchParams: P
   return (
     <>
       <PageHeader
-        title="New project"
-        description="Upload a file, pick languages, then compare tiers before anything runs. You are not charged until you start the project."
+        title={t("app.projects.new.newProject")}
+        description={t("app.projects.new.uploadAFilePickLanguages")}
       />
       <NewProjectWizard
         defaultTier={org?.default_tier ?? "hybrid"}

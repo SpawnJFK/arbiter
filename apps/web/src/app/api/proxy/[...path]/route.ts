@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
-import { backendFetch } from "@/lib/backend";
+import { backendFetch, UNREACHABLE_HEADER } from "@/lib/backend";
+import { getI18n } from "@/lib/i18n/server";
 import { TOKEN_COOKIE } from "@/lib/config";
 
 type Ctx = { params: Promise<{ path: string[] }> };
@@ -21,7 +22,8 @@ async function handle(req: NextRequest, ctx: Ctx) {
   }
   const token = (await cookies()).get(TOKEN_COOKIE)?.value;
   if (!token) {
-    return NextResponse.json({ error: { code: "unauthenticated", message: "Sign in first.", details: {} } }, { status: 401 });
+    const { t } = await getI18n();
+    return NextResponse.json({ error: { code: "unauthenticated", message: t("errors.signInFirst"), details: {} } }, { status: 401 });
   }
 
   const headers = new Headers();
@@ -38,6 +40,11 @@ async function handle(req: NextRequest, ctx: Ctx) {
     body: body && body.byteLength > 0 ? body : null,
     token,
   });
+
+  if (upstream.headers.get(UNREACHABLE_HEADER)) {
+    const { t } = await getI18n();
+    return NextResponse.json({ error: { code: "backend_unreachable", message: t("errors.backendUnreachable"), details: {} } }, { status: 502 });
+  }
 
   const outHeaders = new Headers({ "Cache-Control": "no-store" });
   for (const h of FORWARD_RES) {

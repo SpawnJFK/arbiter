@@ -1,17 +1,19 @@
+import { getI18n } from "@/lib/i18n/server";
 import { SubNav } from "@/components/sub-nav";
 import { PageHeader } from "@/components/ui/misc";
 
-export default function SettingsLayout({ children }: { children: React.ReactNode }) {
+export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
+  const { t } = await getI18n();
   return (
     <>
-      <PageHeader title="Settings" />
+      <PageHeader title={t("app.settings.layout.settings")} />
       <SubNav
-        label="Settings"
+        label={t("app.settings.layout.settings")}
         items={[
-          { href: "/app/settings", label: "Policies" },
-          { href: "/app/settings/api-keys", label: "API keys" },
-          { href: "/app/settings/webhooks", label: "Webhooks" },
-          { href: "/app/settings/billing", label: "Usage & invoices" },
+          { href: "/app/settings", label: t("app.settings.layout.policies") },
+          { href: "/app/settings/api-keys", label: t("app.settings.layout.apiKeys") },
+          { href: "/app/settings/webhooks", label: t("app.settings.layout.webhooks") },
+          { href: "/app/settings/billing", label: t("app.settings.layout.usageInvoices") },
         ]}
       />
       {children}

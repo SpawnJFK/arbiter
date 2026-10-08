@@ -1,5 +1,6 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/client";
 import Link from "next/link";
 import { useState } from "react";
 import { StatusBadge } from "@/components/ui/badge";
@@ -11,12 +12,12 @@ import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { humanize, money } from "@/lib/format";
 import { contentTypeLabel } from "@/lib/langs";
 import { REVIEWER_LEVELS, type ReviewerProfile } from "@/lib/types";
 
 
 export function ReviewersTable({ initial, status, statuses }: { initial: ReviewerProfile[]; status: string; statuses: string[] }) {
+  const { f, t } = useI18n();
   const toast = useToast();
   const [rows, setRows] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
@@ -26,9 +27,9 @@ export function ReviewersTable({ initial, status, statuses }: { initial: Reviewe
     try {
       const updated = await api.setReviewerStatus(r.id, body);
       setRows((xs) => xs.map((x) => (x.id === r.id ? { ...x, ...updated } : x)));
-      toast.success(`${r.name ?? r.id}: ${humanize(updated.status)}`, body.level !== undefined ? `Level ${humanize(body.level)}` : undefined);
+      toast.success(t("admin.reviewersTable.statusUpdated", { name: r.name ?? r.id, status: t.enumLabel(updated.status) }), body.level !== undefined ? t("admin.reviewersTable.levelSet", { level: t.enumLabel(body.level) }) : undefined);
     } catch (e) {
-      toast.error("Update failed", errorMessage(e));
+      toast.error(t("admin.reviewersTable.updateFailed"), errorMessage(e));
     } finally {
       setBusy(null);
     }
@@ -47,25 +48,25 @@ export function ReviewersTable({ initial, status, statuses }: { initial: Reviewe
               status === s ? "bg-hover font-medium text-fg" : "text-muted hover:bg-hover hover:text-fg",
             )}
           >
-            {s ? humanize(s) : "All"}
+            {s ? t.enumLabel(s) : t("admin.reviewersTable.all")}
           </Link>
         ))}
       </div>
       {rows.length === 0 ? (
-        <EmptyState title="No reviewers" description={status ? `Nobody is ${status} right now.` : undefined} />
+        <EmptyState title={t("admin.reviewersTable.noReviewers")} description={status ? t("admin.reviewersTable.nobodyIsRightNow", { status: status }) : undefined} />
       ) : (
         <Table>
           <THead>
             <tr>
-              <Th>Reviewer</Th>
-              <Th>Pairs</Th>
-              <Th className="hidden lg:table-cell">Domains</Th>
-              <Th className="text-right">Score</Th>
-              <Th>Status</Th>
-              <Th>Level</Th>
-              <Th className="hidden xl:table-cell text-right">Balance</Th>
+              <Th>{t("admin.reviewersTable.reviewer")}</Th>
+              <Th>{t("admin.reviewersTable.pairs")}</Th>
+              <Th className="hidden lg:table-cell">{t("admin.reviewersTable.domains")}</Th>
+              <Th className="text-right">{t("admin.reviewersTable.score")}</Th>
+              <Th>{t("admin.reviewersTable.status")}</Th>
+              <Th>{t("admin.reviewersTable.level")}</Th>
+              <Th className="hidden xl:table-cell text-right">{t("admin.reviewersTable.balance")}</Th>
               <Th className="text-right">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{t("admin.reviewersTable.actions")}</span>
               </Th>
             </tr>
           </THead>
@@ -76,7 +77,7 @@ export function ReviewersTable({ initial, status, statuses }: { initial: Reviewe
                   <div className="font-medium">{r.name ?? r.id}</div>
                   <div className="text-[12px] text-faint">
                     {r.email ?? r.id}
-                    {r.country ? ` · ${r.country}` : ""}
+                    {r.country ? t("admin.reviewersTable.text2", { country: r.country }) : ""}
                   </div>
                 </Td>
                 <Td>
@@ -88,15 +89,15 @@ export function ReviewersTable({ initial, status, statuses }: { initial: Reviewe
                     ))}
                   </div>
                 </Td>
-                <Td className="hidden text-[13px] text-muted lg:table-cell">{r.domains.map(contentTypeLabel).join(", ")}</Td>
+                <Td className="hidden text-[13px] text-muted lg:table-cell">{r.domains.map((d) => contentTypeLabel(t, d)).join(", ")}</Td>
                 <Td className="tabular text-right">{r.score === null ? "–" : r.score.toFixed(0)}</Td>
                 <Td>
                   <StatusBadge status={r.status} />
-                  {!r.tax_info_complete && r.status === "active" && <div className="mt-1 text-[11.5px] text-warn">No tax info</div>}
+                  {!r.tax_info_complete && r.status === "active" && <div className="mt-1 text-[11.5px] text-warn">{t("admin.reviewersTable.noTaxInfo")}</div>}
                 </Td>
                 <Td>
                   <Select
-                    aria-label={`Level for ${r.name ?? r.id}`}
+                    aria-label={t("admin.reviewersTable.levelFor", { value: r.name ?? r.id })}
                     value={String(r.level)}
                     disabled={busy === r.id}
                     onChange={(e) => update(r, { status: r.status, level: e.target.value })}
@@ -104,27 +105,27 @@ export function ReviewersTable({ initial, status, statuses }: { initial: Reviewe
                   >
                     {REVIEWER_LEVELS.map((l) => (
                       <option key={l} value={l}>
-                        {humanize(l)}
+                        {t.enumLabel(l)}
                       </option>
                     ))}
                   </Select>
                 </Td>
-                <Td className="tabular hidden text-right xl:table-cell">{money(r.balance)}</Td>
+                <Td className="tabular hidden text-right xl:table-cell">{f.money(r.balance)}</Td>
                 <Td className="text-right">
                   <div className="flex justify-end gap-1">
                     {r.status !== "active" && (
                       <Button size="sm" variant="primary" disabled={busy === r.id} onClick={() => update(r, { status: "active", level: r.level === "candidate" ? "reviewer" : String(r.level) })}>
-                        {r.status === "suspended" ? "Reinstate" : "Approve"}
+                        {r.status === "suspended" ? t("admin.reviewersTable.reinstate") : t("admin.reviewersTable.approve")}
                       </Button>
                     )}
                     {r.status === "active" && (
                       <Button size="sm" variant="outline-danger" disabled={busy === r.id} onClick={() => update(r, { status: "suspended" })}>
-                        Suspend
+                        {t("admin.reviewersTable.suspend")}
                       </Button>
                     )}
                     {r.status !== "banned" && (
                       <Button size="sm" variant="ghost" disabled={busy === r.id} onClick={() => update(r, { status: "banned" })}>
-                        Ban
+                        {t("admin.reviewersTable.ban")}
                       </Button>
                     )}
                   </div>

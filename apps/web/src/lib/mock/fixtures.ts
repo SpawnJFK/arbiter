@@ -52,7 +52,7 @@ export const ORG: Org = {
 };
 
 export const USERS: Record<string, User> = {
-  pm: { id: "usr_01JPM", email: "pm@demo.test", name: "Mira Kovač", role: "pm", org_id: ORG.id },
+  pm: { id: "usr_01JPM", email: "pm@demo.test", name: "Mira Keller", role: "pm", org_id: ORG.id },
   client: { id: "usr_01JCLIENT", email: "client@demo.test", name: "Jonas Berg", role: "client", org_id: ORG.id },
   reviewer: { id: "usr_01JREV", email: "reviewer@demo.test", name: "Léa Fontaine", role: "reviewer", org_id: null },
   admin: { id: "usr_01JADMIN", email: "admin@demo.test", name: "Platform Ops", role: "admin", org_id: null },

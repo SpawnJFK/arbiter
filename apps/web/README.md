@@ -25,7 +25,7 @@ In mock mode any password works; the email picks the role: `pm@demo.test`, `clie
 `reviewer@demo.test`, `admin@demo.test` (the login page has one-click buttons). Mock state lives
 in server memory and resets on restart.
 
-Checks: `npm run lint`, `npm run typecheck`, `npm run build`.
+Checks: `npm run lint` (ESLint, then `npm run i18n:check`), `npm run typecheck`, `npm run build`.
 
 Screenshots (server must be running in mock mode on port 3100; uses the Playwright Chromium
 already on the machine): `BASE_URL=http://localhost:3100 npm run screenshots` writes to
@@ -52,9 +52,14 @@ NEXT_PUBLIC_API_URL=http://localhost:8000 npm run build && npm start -- -p 3000 
 npm run e2e        # BASE_URL, PYTHON, SHOTS_DIR, DEMO_PASSWORD can be overridden
 ```
 
-It then runs the Agency OS flow: the Serbian assistant prompt is applied in full, the accounts,
-pharma workflow and dashboard are checked, a deal is dragged across the board, and a project
-for "Beta Pharma" runs through two human reviews and client approval to delivery.
+It then runs the Agency OS flow: an English agency description ("Northwind Language Services",
+clients Acme Ltd, Beta Pharma and Gamma Soft) is sent to the assistant and its plan applied in
+full, the accounts, pharma workflow and dashboard are checked, a deal is dragged across the
+board, and a project for "Beta Pharma" runs through two human reviews and client approval to
+delivery. Last, the localization flow: the admin exports XLIFF for `de`, fills a few targets,
+imports a file with a broken placeholder (rejected per key), imports the fixed file, enables
+`de`, and the PM switches the interface to Deutsch and sees translated navigation with English
+fallback for the rest.
 `e2e/ensure_reviewer.py` creates the second (senior) demo reviewer that `second_review` needs,
 through the backend's own service functions (the seed has only one reviewer).
 
@@ -95,8 +100,10 @@ src/app/(public)/        landing, /login, /register, /reviewers/apply
 src/app/app/             customer app: dashboard (home), projects, wizard, jobs, assets, quality, settings,
                          Agency OS: crm (accounts, deals board, tasks), price-lists, workflows, assistant
 src/app/reviewer/        dashboard, tests, cockpit, earnings, disputes
-src/app/admin/           reviewers, disputes, payouts, orgs
-src/app/api/             session + proxy route handlers
+src/app/admin/           reviewers, disputes, payouts, orgs, languages
+src/app/api/             session, proxy, locale and i18n export/import route handlers
+messages/en.json         every user-visible string (the English source catalog)
+src/lib/i18n/            t() runtime (ICU-lite), Intl formatters, locale resolution, XLIFF/CSV/JSON
 src/components/ui/       Button, Input/Select/Checkbox/Field, Table, Badge, Card, Dialog, Toast, Kbd, EmptyState
 src/components/          shell, tag editor, tagged text, error annotator, …
 src/lib/api.ts           typed client for every contract endpoint (shared by both transports)
@@ -116,6 +123,40 @@ with live validation mirroring `agency/workflows.py`, boxes-and-arrows pipeline)
 `/app/assistant` (chat; the assistant answers with a plan that is applied all at once or per
 action; nothing changes before that). The project wizard takes an account and a workflow; the
 job page shows the workflow position, the senate count and the client-approval step.
+
+## Localization
+
+The product is English-first. Every user-visible string lives in `messages/en.json` under a
+namespaced key (`app.jobs.detail.segmentTable.reportAnError`); components call
+`t(key, vars)`: `const { t, f } = useI18n()` in Client Components, `const { t, f } = await
+getI18n()` in Server Components, route handlers and `generateMetadata`. Messages use an ICU
+subset: `{name}`, `{count, plural, one {# job} other {# jobs}}` (Intl.PluralRules, `=n`, `#`),
+`{kind, select, ...}` and `'` quoting. Enum values render through `t.enumLabel(value)` (keys
+`enum.<value>`). `f` holds Intl formatters for the active locale (money, percent, numbers,
+dates in UTC, relative time, language names).
+
+Locale resolution per request: cookie `arbiter_locale`, then `Accept-Language`, then `en`, limited
+to the locales the backend lists as enabled (`GET /v1/i18n/locales`, cached for 60 s in the Next
+server). Active messages are English merged with the backend overrides for that locale
+(`GET /v1/i18n/messages/{locale}`, also cached 60 s); a missing key falls back to English. Only
+the overrides are sent to the browser; English ships in the bundle. The user menu shows a
+language picker once more than one locale is enabled (`POST /api/locale` sets the cookie).
+
+Adding a language (`/admin/languages`, platform admins): add the code and name, export the
+catalog as JSON (`{key: {source, target}}`), CSV (`key,source_en,target`) or XLIFF 2.1
+(`srcLang="en"`, `trgLang` = the locale, one `<unit id="key">` per message), translate, import
+the file (parsed by `/api/i18n/import`, sent to the backend with the English source so
+translations with different `{placeholders}` are rejected per key, merge or replace), then
+enable it. Exporting `en` gives the full source catalog. Coverage counts translated keys that
+still exist in `en.json`.
+
+`npm run i18n:check` fails on keys used in `src/` but missing from `en.json`, keys in `en.json`
+that nothing uses, and messages with unbalanced braces or a plural/select without `other`.
+Dynamic keys are recognised from template prefixes (`` t(`tier.${tier}.label`) ``) and from
+keys quoted verbatim in maps (`k("...")` marks such keys).
+
+Mock mode serves the same endpoints from `src/lib/mock/i18n.ts`, with a partly translated `de`
+(enabled) and `fr` (disabled), so the picker and `/admin/languages` can be tried without the API.
 
 ## Tag-aware editing
 

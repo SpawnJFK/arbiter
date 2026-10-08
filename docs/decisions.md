@@ -654,3 +654,32 @@ Date: 2026-10-07. Status: accepted.
 - *`EmailStr` everywhere.* It rejects reserved domains such as the fictional demo accounts' `.test`, so seeded users could not log in.
 
 **Consequences.** A malformed address at login is simply "wrong email or password".
+
+---
+
+## D-045 English-first product; the assistant answers in the UI locale
+Date: 2026-10-08. Status: accepted.
+
+**Context.** The market is global. Earlier the setup assistant mirrored the language of the user's input, so a Serbian description produced Serbian workflow and dashboard names inside an English UI.
+
+**Decision.** Every user-visible backend string is English (errors, evidence pack, CLI, seed data). `POST /assistant/threads/{id}/messages` takes `locale` (BCP-47, default `en`, sent by the web app from the UI locale). The model replies in that locale and names everything it creates in it; proper names the user gave stay verbatim. The deterministic built-in planner still understands English and Serbian input but always answers in English; for other locales it adds a note that only the AI model localizes replies. `ASSISTANT_PROMPT_VERSION` 2026-10-08.1.
+
+**Rejected.**
+- *Reply in the input language.* Names in the data would not match the UI language and would differ per user.
+- *Translate the built-in planner's strings per locale.* It is a fallback for dev and demos; maintaining catalogs for it is not worth it.
+
+**Consequences.** Serbian remains only in parsing keywords, test inputs and en->sr language data (glossary terms, reviewer test items).
+
+---
+
+## D-046 UI strings: English catalog in the web repo, translations in the database
+Date: 2026-10-08. Status: accepted.
+
+**Decision.** The English UI catalog is the source and lives in the web repo. Translations are stored in Postgres (`ui_locales`, `ui_messages`), served publicly (`GET /v1/i18n/...`, cached 60 s) and written by the platform admin through import endpoints (merge or replace, optional placeholder check against the English source). Adding a language or fixing a string needs no redeploy. Migration 0003 is hand-written; its tables are in `dbinit.LATER_TABLES`.
+
+**Rejected.**
+- *Per-locale JSON files committed per language.* Every fix becomes a code change and a deploy, and translators need repo access.
+- *A third-party TMS.* An extra subprocessor and cost for a few thousand strings; we are a translation platform and can run this flow ourselves later.
+
+**Consequences.** The web app must fall back to the bundled English string for missing keys and must send its English catalog as `source` when importing to get placeholder checks.
+

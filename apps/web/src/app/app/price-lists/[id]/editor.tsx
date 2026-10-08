@@ -1,5 +1,7 @@
 "use client";
 
+import { k } from "@/lib/i18n/core";
+import { useI18n } from "@/lib/i18n/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Icons } from "@/components/icons";
@@ -9,24 +11,24 @@ import { Field, Input, Select } from "@/components/ui/input";
 import { Callout } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/toast";
 import { api, errorMessage } from "@/lib/api";
-import { langName, TIER_LABEL } from "@/lib/format";
 import { LANGS } from "@/lib/langs";
 import { TIERS, TM_WEIGHT_KEYS, type PriceList, type Rate, type Tier, type TmWeightKey } from "@/lib/types";
 
 const WEIGHT_LABEL: Record<TmWeightKey, string> = {
-  context: "Context match (101%)",
-  exact: "Exact match (100%)",
-  fuzzy_95: "Fuzzy 95–99%",
-  fuzzy_85: "Fuzzy 85–94%",
-  fuzzy_75: "Fuzzy 75–84%",
-  new: "New words",
-  repetition: "Repetitions",
+  context: k("app.priceLists.detail.editor.weight.context"),
+  exact: k("app.priceLists.detail.editor.weight.exact"),
+  fuzzy_95: k("app.priceLists.detail.editor.weight.fuzzy_95"),
+  fuzzy_85: k("app.priceLists.detail.editor.weight.fuzzy_85"),
+  fuzzy_75: k("app.priceLists.detail.editor.weight.fuzzy_75"),
+  new: k("app.priceLists.detail.editor.weight.new"),
+  repetition: k("app.priceLists.detail.editor.weight.repetition"),
 };
 const DEFAULT_WEIGHTS: Record<TmWeightKey, string> = { context: "0", exact: "0.1", fuzzy_95: "0.3", fuzzy_85: "0.6", fuzzy_75: "0.8", new: "1", repetition: "0.1" };
 
 type Row = { source_lang: string; target_lang: string; tier: Tier; per_word: string };
 
 export function PriceListEditor({ priceList }: { priceList: PriceList | null }) {
+  const { f, t } = useI18n();
   const router = useRouter();
   const toast = useToast();
   const [name, setName] = useState(priceList?.name ?? "");
@@ -48,10 +50,10 @@ export function PriceListEditor({ priceList }: { priceList: PriceList | null }) 
   const dupes = rows.filter((r, i) => rows.findIndex((x) => keyOf(x) === keyOf(r)) !== i);
   const invalid = rows.filter((r) => !/^\d+(\.\d{1,5})?$/.test(r.per_word.trim()));
   const problems = [
-    ...(rows.length === 0 ? ["Add at least one rate."] : []),
-    ...(dupes.length ? ["Two rates have the same pair and tier."] : []),
-    ...(invalid.length ? ["Rates must be numbers with up to 5 decimals, e.g. 0.085."] : []),
-    ...(useWeights && TM_WEIGHT_KEYS.some((k) => !/^\d+(\.\d+)?$/.test(weights[k])) ? ["TM weights must be numbers (1 = full rate)."] : []),
+    ...(rows.length === 0 ? [t("app.priceLists.detail.editor.problemNoRates")] : []),
+    ...(dupes.length ? [t("app.priceLists.detail.editor.problemDuplicate")] : []),
+    ...(invalid.length ? [t("app.priceLists.detail.editor.problemRateFormat")] : []),
+    ...(useWeights && TM_WEIGHT_KEYS.some((k) => !/^\d+(\.\d+)?$/.test(weights[k])) ? [t("app.priceLists.detail.editor.problemWeights")] : []),
   ];
 
   async function save() {
@@ -68,15 +70,15 @@ export function PriceListEditor({ priceList }: { priceList: PriceList | null }) 
     try {
       if (priceList) {
         await api.updatePriceList(priceList.id, body);
-        toast.success("Price list saved");
+        toast.success(t("app.priceLists.detail.editor.priceListSaved"));
         router.refresh();
       } else {
         const p = await api.createPriceList(body);
-        toast.success("Price list created");
+        toast.success(t("app.priceLists.detail.editor.priceListCreated"));
         router.push(`/app/price-lists/${p.id}`);
       }
     } catch (e) {
-      toast.error("Could not save", errorMessage(e));
+      toast.error(t("app.priceLists.detail.editor.couldNotSave"), errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -86,10 +88,10 @@ export function PriceListEditor({ priceList }: { priceList: PriceList | null }) 
     if (!priceList) return;
     try {
       await api.archivePriceList(priceList.id);
-      toast.success("Price list archived");
+      toast.success(t("app.priceLists.detail.editor.priceListArchived"));
       router.push("/app/price-lists");
     } catch (e) {
-      toast.error("Could not archive", errorMessage(e));
+      toast.error(t("app.priceLists.detail.editor.couldNotArchive"), errorMessage(e));
     }
   }
 
@@ -97,9 +99,9 @@ export function PriceListEditor({ priceList }: { priceList: PriceList | null }) 
     <div className="space-y-4">
       <Card>
         <CardBody className="grid gap-4 sm:grid-cols-[1fr_120px_180px]">
-          <Field label="Name">{(id) => <Input id={id} required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Standard 2026" />}</Field>
-          <Field label="Currency">{(id) => <Input id={id} maxLength={3} value={currency} onChange={(e) => setCurrency(e.target.value)} />}</Field>
-          <Field label="Minimum charge" hint="Per project, optional">
+          <Field label={t("app.priceLists.detail.editor.name")}>{(id) => <Input id={id} required value={name} onChange={(e) => setName(e.target.value)} placeholder={t("app.priceLists.detail.editor.eGStandard2026")} />}</Field>
+          <Field label={t("app.priceLists.detail.editor.currency")}>{(id) => <Input id={id} maxLength={3} value={currency} onChange={(e) => setCurrency(e.target.value)} />}</Field>
+          <Field label={t("app.priceLists.detail.editor.minimumCharge")} hint={t("app.priceLists.detail.editor.perProjectOptional")}>
             {(id, d) => <Input id={id} aria-describedby={d} inputMode="decimal" value={minimum} onChange={(e) => setMinimum(e.target.value)} placeholder="0.00" />}
           </Field>
         </CardBody>
@@ -107,11 +109,11 @@ export function PriceListEditor({ priceList }: { priceList: PriceList | null }) 
 
       <Card>
         <CardHeader
-          title="Rates per word"
-          description="Leave source and target empty for a tier-wide rate. More specific rows win."
+          title={t("app.priceLists.detail.editor.ratesPerWord")}
+          description={t("app.priceLists.detail.editor.leaveSourceAndTargetEmpty")}
           actions={
             <Button size="sm" onClick={() => setRows([...rows, { source_lang: "", target_lang: "", tier: "hybrid", per_word: "" }])}>
-              <Icons.plus className="size-3.5" /> Add rate
+              <Icons.plus className="size-3.5" /> {t("app.priceLists.detail.editor.addRate")}
             </Button>
           }
         />
@@ -119,11 +121,11 @@ export function PriceListEditor({ priceList }: { priceList: PriceList | null }) 
           <table className="w-full min-w-[640px] text-left text-[13.5px]">
             <thead className="border-b border-border bg-subtle/60 text-[12px] text-muted">
               <tr>
-                <th scope="col" className="h-8 pl-4 font-medium">Source</th>
-                <th scope="col" className="px-3 font-medium">Target</th>
-                <th scope="col" className="px-3 font-medium">Tier</th>
-                <th scope="col" className="px-3 font-medium">Per word ({currency})</th>
-                <th scope="col" className="pr-4"><span className="sr-only">Remove</span></th>
+                <th scope="col" className="h-8 pl-4 font-medium">{t("app.priceLists.detail.editor.source")}</th>
+                <th scope="col" className="px-3 font-medium">{t("app.priceLists.detail.editor.target")}</th>
+                <th scope="col" className="px-3 font-medium">{t("app.priceLists.detail.editor.tier")}</th>
+                <th scope="col" className="px-3 font-medium">{t("app.priceLists.detail.editor.perWord", { currency: currency })}</th>
+                <th scope="col" className="pr-4"><span className="sr-only">{t("app.priceLists.detail.editor.remove")}</span></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -133,33 +135,33 @@ export function PriceListEditor({ priceList }: { priceList: PriceList | null }) 
                 return (
                   <tr key={i} className={isDupe ? "bg-danger-subtle/40" : undefined}>
                     <td className="py-2 pl-4">
-                      <Select aria-label={`Rate ${i + 1} source`} value={r.source_lang} onChange={(e) => upd({ source_lang: e.target.value })} className="w-40">
-                        <option value="">Any source</option>
+                      <Select aria-label={t("app.priceLists.detail.editor.rateSource", { value: i + 1 })} value={r.source_lang} onChange={(e) => upd({ source_lang: e.target.value })} className="w-40">
+                        <option value="">{t("app.priceLists.detail.editor.anySource")}</option>
                         {LANGS.map((l) => (
-                          <option key={l} value={l}>{langName(l)} ({l})</option>
+                          <option key={l} value={l}>{f.langName(l)} ({l})</option>
                         ))}
                       </Select>
                     </td>
                     <td className="px-3 py-2">
-                      <Select aria-label={`Rate ${i + 1} target`} value={r.target_lang} onChange={(e) => upd({ target_lang: e.target.value })} className="w-40">
-                        <option value="">Any target</option>
+                      <Select aria-label={t("app.priceLists.detail.editor.rateTarget", { value: i + 1 })} value={r.target_lang} onChange={(e) => upd({ target_lang: e.target.value })} className="w-40">
+                        <option value="">{t("app.priceLists.detail.editor.anyTarget")}</option>
                         {LANGS.map((l) => (
-                          <option key={l} value={l}>{langName(l)} ({l})</option>
+                          <option key={l} value={l}>{f.langName(l)} ({l})</option>
                         ))}
                       </Select>
                     </td>
                     <td className="px-3 py-2">
-                      <Select aria-label={`Rate ${i + 1} tier`} value={r.tier} onChange={(e) => upd({ tier: e.target.value as Tier })} className="w-36">
-                        {TIERS.map((t) => (
-                          <option key={t} value={t}>{TIER_LABEL[t]}</option>
+                      <Select aria-label={t("app.priceLists.detail.editor.rateTier", { value: i + 1 })} value={r.tier} onChange={(e) => upd({ tier: e.target.value as Tier })} className="w-36">
+                        {TIERS.map((tier) => (
+                          <option key={tier} value={tier}>{t(`tier.${tier}.label`)}</option>
                         ))}
                       </Select>
                     </td>
                     <td className="px-3 py-2">
-                      <Input aria-label={`Rate ${i + 1} per word`} inputMode="decimal" value={r.per_word} onChange={(e) => upd({ per_word: e.target.value })} className="tabular w-28" aria-invalid={invalid.includes(r)} />
+                      <Input aria-label={t("app.priceLists.detail.editor.ratePerWord", { value: i + 1 })} inputMode="decimal" value={r.per_word} onChange={(e) => upd({ per_word: e.target.value })} className="tabular w-28" aria-invalid={invalid.includes(r)} />
                     </td>
                     <td className="py-2 pr-4 text-right">
-                      <Button size="sm" variant="ghost" aria-label={`Remove rate ${i + 1}`} onClick={() => setRows(rows.filter((_, j) => j !== i))}>
+                      <Button size="sm" variant="ghost" aria-label={t("app.priceLists.detail.editor.removeRate", { value: i + 1 })} onClick={() => setRows(rows.filter((_, j) => j !== i))}>
                         <Icons.trash className="size-3.5" />
                       </Button>
                     </td>
@@ -173,22 +175,22 @@ export function PriceListEditor({ priceList }: { priceList: PriceList | null }) 
 
       <Card>
         <CardHeader
-          title="TM weights"
-          description="Share of the full rate charged for words with a translation-memory match. Without custom weights the org defaults apply."
+          title={t("app.priceLists.detail.editor.tmWeights")}
+          description={t("app.priceLists.detail.editor.shareOfTheFullRate")}
           actions={
             <label className="flex items-center gap-2 text-[13px]">
               <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={useWeights} onChange={(e) => setUseWeights(e.target.checked)} />
-              Custom weights
+              {t("app.priceLists.detail.editor.customWeights")}
             </label>
           }
         />
         <CardBody className="grid gap-3 sm:grid-cols-4 lg:grid-cols-7">
           {TM_WEIGHT_KEYS.map((k) => (
-            <Field key={k} label={WEIGHT_LABEL[k]}>
+            <Field key={k} label={t(WEIGHT_LABEL[k])}>
               {(id) => (
                 <div className="flex items-center gap-1.5">
                   <Input id={id} inputMode="decimal" disabled={!useWeights} value={weights[k]} onChange={(e) => setWeights({ ...weights, [k]: e.target.value })} className="tabular" />
-                  <span className="tabular w-10 text-[12px] text-faint">{Number.isFinite(Number(weights[k])) ? `${Math.round(Number(weights[k]) * 100)}%` : ""}</span>
+                  <span className="tabular w-10 text-[12px] text-faint">{Number.isFinite(Number(weights[k])) ? f.pct(Number(weights[k])) : ""}</span>
                 </div>
               )}
             </Field>
@@ -208,13 +210,13 @@ export function PriceListEditor({ priceList }: { priceList: PriceList | null }) 
       <div className="flex flex-wrap justify-between gap-2">
         {priceList ? (
           <Button variant="outline-danger" onClick={archive}>
-            Archive
+            {t("app.priceLists.detail.editor.archive")}
           </Button>
         ) : (
           <span />
         )}
         <Button variant="primary" onClick={save} loading={busy} disabled={problems.length > 0 || !name.trim()}>
-          {priceList ? "Save price list" : "Create price list"}
+          {priceList ? t("app.priceLists.detail.editor.savePriceList") : t("app.priceLists.detail.editor.createPriceList")}
         </Button>
       </div>
     </div>

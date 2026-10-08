@@ -1,5 +1,7 @@
 "use client";
 
+import { k } from "@/lib/i18n/core";
+import { useI18n } from "@/lib/i18n/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -9,30 +11,30 @@ import { Callout } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/toast";
 import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { TIER_BLURB, TIER_LABEL } from "@/lib/format";
 import { TIERS, type NoReviewerPolicy, type Org, type OrgPatch } from "@/lib/types";
 
 const POLICIES: { value: NoReviewerPolicy; title: string; body: string }[] = [
   {
     value: "wait",
-    title: "Wait for a qualified reviewer",
-    body: "The job pauses until a reviewer for the pair and domain is free. Slowest, but you always get the human review you paid for.",
+    title: k("app.settings.policyForm.waitForAQualifiedReviewer"),
+    body: k("app.settings.policyForm.theJobPausesUntilA"),
   },
   {
     value: "ai_fallback",
-    title: "Fall back to AI review, disclosed",
-    body: "The AI editor and senate handle the segments instead. Every affected segment is marked in the evidence pack and on the invoice, and pricing follows the path actually taken.",
+    title: k("app.settings.policyForm.fallBackToAiReview"),
+    body: k("app.settings.policyForm.theAiEditorAndSenate"),
   },
   {
     value: "partial",
-    title: "Deliver what is approved, hold the rest",
-    body: "Approved segments are delivered on time; segments still waiting for a human are held and delivered when reviewed.",
+    title: k("app.settings.policyForm.deliverWhatIsApprovedHold"),
+    body: k("app.settings.policyForm.approvedSegmentsAreDeliveredOn"),
   },
 ];
 
 const VERTICALS = ["", "medical_devices", "pharma", "legal", "financial", "public_sector", "other"];
 
 export function PolicyForm({ org, canEdit }: { org: Org; canEdit: boolean }) {
+  const { t } = useI18n();
   const router = useRouter();
   const toast = useToast();
   const [v, setV] = useState<OrgPatch>({
@@ -45,17 +47,17 @@ export function PolicyForm({ org, canEdit }: { org: Org; canEdit: boolean }) {
     data_retention_days: org.data_retention_days,
   });
   const [busy, setBusy] = useState(false);
-  const regulatedBlocks = (t: string) => Boolean(v.regulated) && (t === "auto" || t === "ai_review");
+  const regulatedBlocks = (item: string) => Boolean(v.regulated) && (item === "auto" || item === "ai_review");
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
       await api.updateOrg({ ...v, vertical: v.vertical || null });
-      toast.success("Policies saved");
+      toast.success(t("app.settings.policyForm.policiesSaved"));
       router.refresh();
     } catch (err) {
-      toast.error("Could not save", errorMessage(err));
+      toast.error(t("app.settings.policyForm.couldNotSave"), errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -63,27 +65,27 @@ export function PolicyForm({ org, canEdit }: { org: Org; canEdit: boolean }) {
 
   return (
     <form onSubmit={save} className="space-y-4">
-      {!canEdit && <Callout tone="info">Only project managers can change organisation policies. You can view them here.</Callout>}
+      {!canEdit && <Callout tone="info">{t("app.settings.policyForm.onlyProjectManagersCanChange")}</Callout>}
       <fieldset disabled={!canEdit} className="space-y-4">
         <Card>
-          <CardHeader title="Organisation" />
+          <CardHeader title={t("app.settings.policyForm.organisation")} />
           <CardBody className="grid gap-4 sm:grid-cols-2">
-            <Field label="Name">{(id) => <Input id={id} value={v.name ?? ""} onChange={(e) => setV({ ...v, name: e.target.value })} />}</Field>
-            <Field label="Plan">{(id) => <Input id={id} value={org.plan} readOnly disabled />}</Field>
+            <Field label={t("app.settings.policyForm.name")}>{(id) => <Input id={id} value={v.name ?? ""} onChange={(e) => setV({ ...v, name: e.target.value })} />}</Field>
+            <Field label={t("app.settings.policyForm.plan")}>{(id) => <Input id={id} value={org.plan} readOnly disabled />}</Field>
           </CardBody>
         </Card>
 
         <Card>
-          <CardHeader title="Default tier" description="Preselected on new quotes. You can still choose per project." />
+          <CardHeader title={t("app.settings.policyForm.defaultTier")} description={t("app.settings.policyForm.preselectedOnNewQuotesYou")} />
           <CardBody className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {TIERS.map((t) => {
-              const blocked = regulatedBlocks(t);
+            {TIERS.map((tier) => {
+              const blocked = regulatedBlocks(tier);
               return (
                 <label
-                  key={t}
+                  key={tier}
                   className={cn(
                     "flex cursor-pointer flex-col rounded-md border p-3 text-[13px]",
-                    v.default_tier === t ? "border-accent bg-accent-subtle/50" : "border-border hover:bg-hover",
+                    v.default_tier === tier ? "border-accent bg-accent-subtle/50" : "border-border hover:bg-hover",
                     blocked && "cursor-not-allowed opacity-50",
                   )}
                 >
@@ -92,13 +94,13 @@ export function PolicyForm({ org, canEdit }: { org: Org; canEdit: boolean }) {
                       type="radio"
                       name="default_tier"
                       className="accent-[var(--accent)]"
-                      checked={v.default_tier === t}
+                      checked={v.default_tier === tier}
                       disabled={blocked}
-                      onChange={() => setV({ ...v, default_tier: t })}
+                      onChange={() => setV({ ...v, default_tier: tier })}
                     />
-                    {TIER_LABEL[t]}
+                    {t(`tier.${tier}.label`)}
                   </span>
-                  <span className="mt-1 text-muted">{blocked ? "Not allowed for regulated organisations." : TIER_BLURB[t]}</span>
+                  <span className="mt-1 text-muted">{blocked ? t("app.settings.policyForm.notAllowedForRegulatedOrganisations") : t(`tier.${tier}.blurb`)}</span>
                 </label>
               );
             })}
@@ -107,16 +109,15 @@ export function PolicyForm({ org, canEdit }: { org: Org; canEdit: boolean }) {
 
         <Card>
           <CardHeader
-            title="When no reviewer is available"
-            description="Applies to Hybrid and Full tiers when a segment needs a human and no qualified reviewer can take it in time."
+            title={t("app.settings.policyForm.whenNoReviewerIsAvailable")}
+            description={t("app.settings.policyForm.appliesToHybridAndFull")}
           />
           <CardBody className="space-y-3">
             {v.regulated && (
-              <Callout tone="warn">Regulated organisations always wait for a qualified human reviewer.</Callout>
+              <Callout tone="warn">{t("app.settings.policyForm.regulatedOrganisationsAlwaysWaitFor")}</Callout>
             )}
             <Callout tone="info">
-              We never silently substitute AI for a paid human review. Whatever you choose here is recorded per segment in the
-              evidence pack, and any fallback is shown on the invoice.
+              {t("app.settings.policyForm.weNeverSilentlySubstituteAi")}
             </Callout>
             <div className="grid gap-2 lg:grid-cols-3">
               {POLICIES.map((p) => (
@@ -136,8 +137,8 @@ export function PolicyForm({ org, canEdit }: { org: Org; canEdit: boolean }) {
                     onChange={() => setV({ ...v, no_reviewer_policy: p.value })}
                   />
                   <span>
-                    <span className="font-medium">{p.title}</span>
-                    <span className="mt-1 block leading-relaxed text-muted">{p.body}</span>
+                    <span className="font-medium">{t(p.title)}</span>
+                    <span className="mt-1 block leading-relaxed text-muted">{t(p.body)}</span>
                   </span>
                 </label>
               ))}
@@ -146,13 +147,13 @@ export function PolicyForm({ org, canEdit }: { org: Org; canEdit: boolean }) {
         </Card>
 
         <Card>
-          <CardHeader title="Data and compliance" />
+          <CardHeader title={t("app.settings.policyForm.dataAndCompliance")} />
           <CardBody className="space-y-5">
             <Checkbox
               checked={Boolean(v.ai_subprocessors_opt_in)}
               onChange={(e) => setV({ ...v, ai_subprocessors_opt_in: e.target.checked })}
-              label="Allow third-party AI subprocessors"
-              hint="Off: only engines covered by your data processing agreement are used, which can reduce engine choice and auto-approval. On: additional AI providers may process your content under their API terms."
+              label={t("app.settings.policyForm.allowThirdPartyAiSubprocessors")}
+              hint={t("app.settings.policyForm.offOnlyEnginesCoveredBy")}
             />
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-3">
@@ -164,22 +165,22 @@ export function PolicyForm({ org, canEdit }: { org: Org; canEdit: boolean }) {
                     // Regulated organisations must wait for a human (routes/auth.py PATCH /org).
                     setV({ ...v, regulated, default_tier: dt, no_reviewer_policy: regulated ? "wait" : v.no_reviewer_policy });
                   }}
-                  label="Regulated organisation"
-                  hint="Machine-only tiers (Auto, AI review) are never offered and jobs always wait for a human reviewer."
+                  label={t("app.settings.policyForm.regulatedOrganisation")}
+                  hint={t("app.settings.policyForm.machineOnlyTiersAutoAi")}
                 />
-                <Field label="Vertical">
+                <Field label={t("app.settings.policyForm.vertical")}>
                   {(id) => (
                     <Select id={id} value={v.vertical ?? ""} onChange={(e) => setV({ ...v, vertical: e.target.value })}>
                       {VERTICALS.map((x) => (
                         <option key={x} value={x}>
-                          {x ? x.replace(/_/g, " ") : "Not set"}
+                          {x ? x.replace(/_/g, " ") : t("app.settings.policyForm.notSet")}
                         </option>
                       ))}
                     </Select>
                   )}
                 </Field>
               </div>
-              <Field label="Data retention" hint="How long job data (files, segments, evidence) is kept before deletion.">
+              <Field label={t("app.settings.policyForm.dataRetention")} hint={t("app.settings.policyForm.howLongJobDataFiles")}>
                 {(id, d) => (
                   <div className="flex items-center gap-2">
                     <Input
@@ -192,7 +193,7 @@ export function PolicyForm({ org, canEdit }: { org: Org; canEdit: boolean }) {
                       value={v.data_retention_days ?? 365}
                       onChange={(e) => setV({ ...v, data_retention_days: Number(e.target.value) })}
                     />
-                    <span className="text-[13px] text-muted">days</span>
+                    <span className="text-[13px] text-muted">{t("app.settings.policyForm.days")}</span>
                   </div>
                 )}
               </Field>
@@ -203,7 +204,7 @@ export function PolicyForm({ org, canEdit }: { org: Org; canEdit: boolean }) {
       {canEdit && (
         <div className="flex justify-end">
           <Button type="submit" variant="primary" loading={busy}>
-            Save policies
+            {t("app.settings.policyForm.savePolicies")}
           </Button>
         </div>
       )}

@@ -1,6 +1,6 @@
 # Progress
 
-Last updated: 2026-10-07.
+Last updated: 2026-10-08.
 
 ## Exists (built and tested locally)
 - **File processing**: 10 formats behind `FormatHandler` (docx, xlsx, pptx, html, md, json, po, txt, csv, xliff), segmenter, tagged text model, round-trip tests, XLIFF 2.1 export.
@@ -11,11 +11,12 @@ Last updated: 2026-10-07.
 - **Community**: reviewer apply, qualification tests, task queue, second review, pay (D-024), score (D-025), disputes (D-026), payouts with ledger (D-027, D-028).
 - **Billing**: quotes with TM analysis and per-tier pricing (D-030), price lists, usage, invoices with starting tax rule (D-029), double-entry ledger.
 - **API**: FastAPI, ~100 endpoints documented in `docs/api-contract.md`; JWT + API keys; idempotency per org.
-- **Agency OS**: CRM (accounts, contacts, deals, activities), price lists, workflow templates with presets and validation, dashboards with widget metrics, AI setup assistant (plans only, D-042).
+- **Agency OS**: CRM (accounts, contacts, deals, activities), price lists, workflow templates with presets and validation, dashboards with widget metrics, AI setup assistant (plans only, D-042; replies in the UI locale, D-045).
+- **UI localization store**: locales and translated UI strings in Postgres, public read endpoints, admin import with merge/replace and placeholder checks (D-046). English source catalog lives in the web repo.
 - **Web**: Next.js 16 app for customers (/app), reviewers (/reviewer, keyboard cockpit) and operators (/admin); httpOnly cookie + server proxy (D-036); mock mode for demos; E2E browser test `npm run e2e` (apps/web/e2e/real-flow.mjs) against a real backend.
 - **CLI** (`python -m arbiter.cli`): `seed-demo` (fictional demo org and users), `create-admin`, `calibrate`, `run-worker`.
-- **Tests**: 432 backend tests (pytest, mock providers only). Web: lint, typecheck, build, E2E.
-- **Infra/docs**: Dockerfiles, compose, Caddy, backups, CI, Makefile, deploy guide, runbook, decisions D-001..D-044.
+- **Tests**: 439 backend tests (pytest, mock providers only). Web: lint, typecheck, build, E2E.
+- **Infra/docs**: Dockerfiles, compose, Caddy, backups, CI, Makefile, deploy guide, runbook, decisions D-001..D-046.
 
 ## Not yet
 - Any measurement on a real pair with real keys (P0 core).

@@ -9,10 +9,10 @@ export function useCountdown(deadline: number | null): number | null {
     if (deadline === null) return;
     const tick = () => setNow(Date.now());
     const first = setTimeout(tick, 0);
-    const t = setInterval(tick, 250);
+    const timer = setInterval(tick, 250);
     return () => {
       clearTimeout(first);
-      clearInterval(t);
+      clearInterval(timer);
     };
   }, [deadline]);
   if (deadline === null || now === null) return null;

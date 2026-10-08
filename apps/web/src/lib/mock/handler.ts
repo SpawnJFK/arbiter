@@ -25,6 +25,7 @@ import type {
   UploadedFile,
 } from "../types";
 import * as F from "./fixtures";
+import { i18nRoute } from "./i18n";
 import { agencyRoute, agencyStore, snapshotFor } from "./agency";
 
 interface Store {
@@ -103,10 +104,10 @@ function createStore(): Store {
     files: {},
     quotes: {},
     glossaries: F.GLOSSARIES.map((g) => ({ ...g })),
-    terms: F.TERMS.map((t) => ({ ...t })),
+    terms: F.TERMS.map((term) => ({ ...term })),
     termQuestions: F.TERM_QUESTIONS.map((q) => ({ ...q })),
     reviewer: structuredClone(F.REVIEWER_PROFILE),
-    tests: F.REVIEWER_TESTS.map((t) => ({ ...t })),
+    tests: F.REVIEWER_TESTS.map((reviewer_test) => ({ ...reviewer_test })),
     tasks: F.makeTasks(now),
     heldTask: null,
     ledger: F.makeLedger(now),
@@ -325,9 +326,12 @@ export async function mockFetch(method: string, pathWithQuery: string, headers: 
   const url = new URL(pathWithQuery, "http://mock.local");
   if (url.pathname === "/healthz") return json({ ok: true });
   const role = roleFromToken(headers);
+  const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+  // UI localization reads are public.
+  if (parts[0] === "i18n") return i18nRoute(method, parts, role, {}) ?? err(404, "not_found", `No mock for ${method} ${url.pathname}`);
   if (!role) return err(401, "unauthenticated", "Missing or invalid token.");
   const { json: body, form } = await readBody(headers, rawBody);
-  const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+  if (parts[0] === "admin" && parts[1] === "i18n") return i18nRoute(method, parts, role, body ?? {}) ?? err(404, "not_found", `No mock for ${method} ${url.pathname}`);
   const ctx: Ctx = { method, parts, q: url.searchParams, body: body ?? {}, form, role, s: store() };
   try {
     return (await route(ctx)) ?? err(404, "not_found", `No mock for ${method} ${url.pathname}`);
@@ -382,9 +386,9 @@ async function route(c: Ctx): Promise<Response | null> {
 
   // --- files / quotes / projects / jobs
   if (a === "files" && m === "POST") {
-    const f = c.form?.get("file");
-    const name = f && typeof f === "object" && "name" in f ? (f as File).name : "upload.docx";
-    const size = f && typeof f === "object" && "size" in f ? (f as File).size : 40_000;
+    const value = c.form?.get("file");
+    const name = value && typeof value === "object" && "name" in value ? (value as File).name : "upload.docx";
+    const size = value && typeof value === "object" && "size" in value ? (value as File).size : 40_000;
     const words = Math.max(180, Math.min(48_000, Math.round(size / 6.1)));
     const ext = name.split(".").pop()?.toLowerCase() ?? "docx";
     const rec = {
@@ -403,9 +407,9 @@ async function route(c: Ctx): Promise<Response | null> {
   }
   if (a === "quotes") {
     if (!b && m === "POST") {
-      const f = s.files[String(c.body.file_id)];
-      if (!f) return err(404, "not_found", "File not found.");
-      const qt = buildQuote(f, (c.body.target_langs as string[]) ?? [], String(c.body.content_type ?? "general"), s.org);
+      const value = s.files[String(c.body.file_id)];
+      if (!value) return err(404, "not_found", "File not found.");
+      const qt = buildQuote(value, (c.body.target_langs as string[]) ?? [], String(c.body.content_type ?? "general"), s.org);
       s.quotes[qt.id] = qt;
       return json(qt, 201);
     }
@@ -422,10 +426,10 @@ async function route(c: Ctx): Promise<Response | null> {
       const wfT = wfId ? ag.workflows.find((w) => w.id === wfId) ?? null : null;
       const tier = (wfT?.tier ?? (c.body.tier as Tier | undefined) ?? acc?.default_tier ?? s.org.default_tier) as Tier;
       if (!qt.tiers[tier]?.available) return err(422, "tier_blocked", qt.tiers[tier]?.blocked_reason ?? "Tier not available.");
-      const f = s.files[qt.file_id];
+      const value = s.files[qt.file_id];
       const project: Project = {
         id: F.newId("prj"),
-        name: String(c.body.name ?? f.filename),
+        name: String(c.body.name ?? value.filename),
         source_lang: qt.source_lang,
         target_langs: qt.target_langs,
         tier,
@@ -441,15 +445,15 @@ async function route(c: Ctx): Promise<Response | null> {
         const job: Job = {
           id: F.newId("job"),
           project_id: project.id,
-          file_id: f.id,
-          filename: f.filename,
+          file_id: value.id,
+          filename: value.filename,
           source_lang: qt.source_lang,
           target_lang: lang,
           tier,
           content_type: qt.content_type,
           state: "running",
-          segment_count: f.segment_count,
-          word_count: f.word_count,
+          segment_count: value.segment_count,
+          word_count: value.word_count,
           auto_approved_count: 0,
           review_count: 0,
           ai_reviewed_count: 0,
@@ -575,18 +579,18 @@ async function route(c: Ctx): Promise<Response | null> {
       const tl = c.q.get("target_lang");
       return list(
         s.terms.filter(
-          (t) =>
-            t.glossary_id === gl.id &&
-            !t.valid_to &&
-            (!q || t.source_term.toLowerCase().includes(q) || (t.target_term ?? "").toLowerCase().includes(q)) &&
-            (!sl || t.source_lang === sl) &&
-            (!tl || t.target_lang === tl),
+          (term) =>
+            term.glossary_id === gl.id &&
+            !term.valid_to &&
+            (!q || term.source_term.toLowerCase().includes(q) || (term.target_term ?? "").toLowerCase().includes(q)) &&
+            (!sl || term.source_lang === sl) &&
+            (!tl || term.target_lang === tl),
         ),
         c.q,
       );
     }
     if (cc === "terms" && m === "POST") {
-      const t: Term = {
+      const toneClass: Term = {
         id: F.newId("trm"),
         glossary_id: gl.id,
         source_lang: String(c.body.source_lang),
@@ -599,10 +603,10 @@ async function route(c: Ctx): Promise<Response | null> {
         valid_from: new Date().toISOString(),
         valid_to: null,
       };
-      s.terms.push(t);
+      s.terms.push(toneClass);
       gl.term_count += 1;
       gl.version += 1;
-      return json(t, 201);
+      return json(toneClass, 201);
     }
     if (cc === "import" && m === "POST") {
       gl.version += 1;
@@ -610,30 +614,30 @@ async function route(c: Ctx): Promise<Response | null> {
     }
     if (cc === "export" && m === "GET") {
       const fmt = c.q.get("format") === "tbx" ? "tbx" : "csv";
-      const rows = s.terms.filter((t) => t.glossary_id === gl.id && !t.valid_to);
+      const rows = s.terms.filter((term) => term.glossary_id === gl.id && !term.valid_to);
       if (fmt === "csv") {
         const csv = ["source_lang,target_lang,source_term,target_term,kind,case_sensitive,note"]
-          .concat(rows.map((t) => [t.source_lang, t.target_lang, t.source_term, t.target_term ?? "", t.kind, t.case_sensitive, t.note ?? ""].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")))
+          .concat(rows.map((row) => [row.source_lang, row.target_lang, row.source_term, row.target_term ?? "", row.kind, row.case_sensitive, row.note ?? ""].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")))
           .join("\n");
         return file(csv, "text/csv", `${gl.name}.csv`);
       }
       const tbx = `<?xml version="1.0"?>\n<tbx type="TBX-Basic" style="dca" xml:lang="en"><text><body>\n${rows
-        .map((t) => `<conceptEntry id="${t.id}"><langSec xml:lang="${t.source_lang}"><termSec><term>${t.source_term}</term></termSec></langSec></conceptEntry>`)
+        .map((row) => `<conceptEntry id="${row.id}"><langSec xml:lang="${row.source_lang}"><termSec><term>${row.source_term}</term></termSec></langSec></conceptEntry>`)
         .join("\n")}\n</body></text></tbx>\n`;
       return file(tbx, "application/x-tbx+xml", `${gl.name}.tbx`);
     }
   }
   if (a === "terms" && b) {
-    const t = s.terms.find((x) => x.id === b);
-    if (!t) return err(404, "not_found", "Term not found.");
-    const gl = s.glossaries.find((x) => x.id === t.glossary_id);
+    const item = s.terms.find((x) => x.id === b);
+    if (!item) return err(404, "not_found", "Term not found.");
+    const gl = s.glossaries.find((x) => x.id === item.glossary_id);
     if (m === "PATCH") {
-      Object.assign(t, c.body);
+      Object.assign(item, c.body);
       if (gl) gl.version += 1;
-      return json(t);
+      return json(item);
     }
     if (m === "DELETE") {
-      t.valid_to = new Date().toISOString();
+      item.valid_to = new Date().toISOString();
       if (gl) {
         gl.version += 1;
         gl.term_count = Math.max(0, gl.term_count - 1);
@@ -744,7 +748,7 @@ async function route(c: Ctx): Promise<Response | null> {
       return noContent();
     }
     if (b === "earnings" && m === "GET") {
-      const sum = (f: (x: LedgerEntry) => boolean) => s.ledger.filter(f).reduce((n, x) => n + Number(x.amount), 0).toFixed(2);
+      const sum = (value: (x: LedgerEntry) => boolean) => s.ledger.filter(value).reduce((n, x) => n + Number(x.amount), 0).toFixed(2);
       return json({
         currency: "EUR",
         balance: sum((x) => x.kind !== "payout"),

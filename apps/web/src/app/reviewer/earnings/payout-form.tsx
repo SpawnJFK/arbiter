@@ -1,5 +1,7 @@
 "use client";
 
+import { k } from "@/lib/i18n/core";
+import { useI18n } from "@/lib/i18n/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -14,17 +16,18 @@ import type { PayoutMethod } from "@/lib/types";
 const METHODS: { value: PayoutMethod; label: string; fields: { key: string; label: string; placeholder: string }[] }[] = [
   {
     value: "sepa",
-    label: "SEPA bank transfer",
+    label: k("reviewer.earnings.payoutForm.sepaBankTransfer"),
     fields: [
-      { key: "iban", label: "IBAN", placeholder: "DE89 3704 0044 0532 0130 00" },
-      { key: "bic", label: "BIC", placeholder: "COBADEFFXXX" },
+      { key: "iban", label: k("reviewer.earnings.payoutForm.iban"), placeholder: "DE89 3704 0044 0532 0130 00" },
+      { key: "bic", label: k("reviewer.earnings.payoutForm.bic"), placeholder: "COBADEFFXXX" },
     ],
   },
-  { value: "wise", label: "Wise", fields: [{ key: "email", label: "Wise account email", placeholder: "you@example.com" }] },
-  { value: "paypal", label: "PayPal", fields: [{ key: "email", label: "PayPal email", placeholder: "you@example.com" }] },
+  { value: "wise", label: k("reviewer.earnings.payoutForm.wise"), fields: [{ key: "email", label: k("reviewer.earnings.payoutForm.wiseAccountEmail"), placeholder: "you@example.com" }] },
+  { value: "paypal", label: k("reviewer.earnings.payoutForm.paypal"), fields: [{ key: "email", label: k("reviewer.earnings.payoutForm.paypalEmail"), placeholder: "you@example.com" }] },
 ];
 
 export function PayoutForm({ complete, country: initialCountry }: { complete: boolean; country: string }) {
+  const { t } = useI18n();
   const router = useRouter();
   const toast = useToast();
   const [v, setV] = useState({ legal_name: "", tax_id: "", address: "", date_of_birth: "", country: initialCountry });
@@ -37,12 +40,12 @@ export function PayoutForm({ complete, country: initialCountry }: { complete: bo
     e.preventDefault();
     setBusy(true);
     try {
-      const payout_details = Object.fromEntries(method.fields.map((f) => [f.key, (details[f.key] ?? "").trim()]));
+      const payout_details = Object.fromEntries(method.fields.map((frac) => [frac.key, (details[frac.key] ?? "").trim()]));
       const res = await api.updateReviewerMe({ ...v, country: v.country.toUpperCase(), payout_method: methodValue, payout_details });
-      toast.success("Payout details saved", res.tax_info_complete ? "You are eligible for the next payout run." : "Some required details are still missing.");
+      toast.success(t("reviewer.earnings.payoutForm.payoutDetailsSaved"), res.tax_info_complete ? t("reviewer.earnings.payoutForm.eligible") : t("reviewer.earnings.payoutForm.detailsMissing"));
       router.refresh();
     } catch (err) {
-      toast.error("Could not save", errorMessage(err));
+      toast.error(t("reviewer.earnings.payoutForm.couldNotSave"), errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -51,56 +54,55 @@ export function PayoutForm({ complete, country: initialCountry }: { complete: bo
   return (
     <Card id="payout" className="self-start">
       <CardHeader
-        title="Tax and payout details"
-        description={complete ? "On file. Submit the form again to change them." : "Required before your first payout."}
+        title={t("reviewer.earnings.payoutForm.taxAndPayoutDetails")}
+        description={complete ? t("reviewer.earnings.payoutForm.onFileSubmitTheForm") : t("reviewer.earnings.payoutForm.requiredBeforeYourFirstPayout")}
       />
       <CardBody>
         <Callout tone="info" className="mb-4">
-          Platforms that pay service providers must collect and report these details to tax authorities (for example under the EU
-          DAC7 rules). We only use them for payouts and that reporting. Existing values are never shown back here.
+          {t("reviewer.earnings.payoutForm.platformsThatPayServiceProviders")}
         </Callout>
         <form onSubmit={save} className="space-y-4">
-          <Field label="Legal name" hint="As on your ID or business registration.">
+          <Field label={t("reviewer.earnings.payoutForm.legalName")} hint={t("reviewer.earnings.payoutForm.asOnYourIdOr")}>
             {(id, d) => <Input id={id} aria-describedby={d} required autoComplete="name" value={v.legal_name} onChange={(e) => setV({ ...v, legal_name: e.target.value })} />}
           </Field>
           <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Tax ID" hint="TIN, VAT ID or equivalent." className="sm:col-span-1">
+            <Field label={t("reviewer.earnings.payoutForm.taxId")} hint={t("reviewer.earnings.payoutForm.tinVatIdOrEquivalent")} className="sm:col-span-1">
               {(id, d) => <Input id={id} aria-describedby={d} required value={v.tax_id} onChange={(e) => setV({ ...v, tax_id: e.target.value })} />}
             </Field>
-            <Field label="Date of birth">
+            <Field label={t("reviewer.earnings.payoutForm.dateOfBirth")}>
               {(id) => <Input id={id} type="date" required autoComplete="bday" value={v.date_of_birth} onChange={(e) => setV({ ...v, date_of_birth: e.target.value })} />}
             </Field>
-            <Field label="Country" hint="Two letters, e.g. DE">
+            <Field label={t("reviewer.earnings.payoutForm.country")} hint={t("reviewer.earnings.payoutForm.twoLettersEGDe")}>
               {(id, d) => (
                 <Input id={id} aria-describedby={d} required maxLength={2} pattern="[A-Za-z]{2}" value={v.country} onChange={(e) => setV({ ...v, country: e.target.value })} />
               )}
             </Field>
           </div>
-          <Field label="Address" hint="Primary residence or registered business address.">
+          <Field label={t("reviewer.earnings.payoutForm.address")} hint={t("reviewer.earnings.payoutForm.primaryResidenceOrRegisteredBusiness")}>
             {(id, d) => (
               <Textarea id={id} aria-describedby={d} required autoComplete="street-address" className="min-h-16" value={v.address} onChange={(e) => setV({ ...v, address: e.target.value })} />
             )}
           </Field>
-          <Field label="Payout method">
+          <Field label={t("reviewer.earnings.payoutForm.payoutMethod")}>
             {(id) => (
               <Select id={id} value={methodValue} onChange={(e) => setMethodValue(e.target.value as PayoutMethod)}>
                 {METHODS.map((m) => (
                   <option key={m.value} value={m.value}>
-                    {m.label}
+                    {t(m.label)}
                   </option>
                 ))}
               </Select>
             )}
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            {method.fields.map((f) => (
-              <Field key={`${method.value}-${f.key}`} label={f.label}>
-                {(id) => <Input id={id} required placeholder={f.placeholder} value={details[f.key] ?? ""} onChange={(e) => setDetails({ ...details, [f.key]: e.target.value })} />}
+            {method.fields.map((frac) => (
+              <Field key={`${method.value}-${frac.key}`} label={t(frac.label)}>
+                {(id) => <Input id={id} required placeholder={frac.placeholder} value={details[frac.key] ?? ""} onChange={(e) => setDetails({ ...details, [frac.key]: e.target.value })} />}
               </Field>
             ))}
           </div>
           <Button type="submit" variant="primary" loading={busy}>
-            Save details
+            {t("reviewer.earnings.payoutForm.saveDetails")}
           </Button>
         </form>
       </CardBody>

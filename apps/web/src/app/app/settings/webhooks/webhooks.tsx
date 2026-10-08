@@ -1,5 +1,7 @@
 "use client";
 
+import { k } from "@/lib/i18n/core";
+import { useI18n } from "@/lib/i18n/client";
 import { useState } from "react";
 import { CopyField } from "@/components/copy-field";
 import { Icons } from "@/components/icons";
@@ -14,13 +16,14 @@ import { api, errorMessage } from "@/lib/api";
 import { WEBHOOK_EVENTS, type Webhook, type WebhookEvent } from "@/lib/types";
 
 const EVENT_HELP: Record<WebhookEvent, string> = {
-  "job.delivered": "A job finished and the file is ready to download.",
-  "job.failed": "A job stopped with an error.",
-  "job.needs_attention": "Something needs a human decision (shows up under Exceptions).",
-  "quote.expired": "A quote passed its valid-until time without a project.",
+  "job.delivered": k("app.settings.webhooks.event.job_delivered"),
+  "job.failed": k("app.settings.webhooks.event.job_failed"),
+  "job.needs_attention": k("app.settings.webhooks.event.job_needs_attention"),
+  "quote.expired": k("app.settings.webhooks.event.quote_expired"),
 };
 
 export function Webhooks({ initial }: { initial: Webhook[] }) {
+  const { t } = useI18n();
   const toast = useToast();
   const [hooks, setHooks] = useState(initial);
   const [open, setOpen] = useState(false);
@@ -41,7 +44,7 @@ export function Webhooks({ initial }: { initial: Webhook[] }) {
       setHooks((xs) => [...xs, rest]);
       setUrl("");
     } catch (err) {
-      toast.error("Could not create webhook", errorMessage(err));
+      toast.error(t("app.settings.webhooks.webhooks.couldNotCreateWebhook"), errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -51,10 +54,10 @@ export function Webhooks({ initial }: { initial: Webhook[] }) {
     try {
       await api.deleteWebhook(w.id);
       setHooks((xs) => xs.filter((x) => x.id !== w.id));
-      toast.success("Webhook deleted");
+      toast.success(t("app.settings.webhooks.webhooks.webhookDeleted"));
       setDeleting(null);
     } catch (err) {
-      toast.error("Could not delete", errorMessage(err));
+      toast.error(t("app.settings.webhooks.webhooks.couldNotDelete"), errorMessage(err));
     }
   }
 
@@ -67,16 +70,16 @@ export function Webhooks({ initial }: { initial: Webhook[] }) {
     <div className="space-y-4">
       <Card>
         <CardHeader
-          title="Webhooks"
-          description="We POST a signed JSON event to your URL for each subscribed event."
+          title={t("app.settings.webhooks.webhooks.webhooks")}
+          description={t("app.settings.webhooks.webhooks.wePostASignedJson")}
           actions={
             <Button variant="primary" onClick={() => setOpen(true)}>
-              <Icons.plus className="size-4" /> Add endpoint
+              <Icons.plus className="size-4" /> {t("app.settings.webhooks.webhooks.addEndpoint")}
             </Button>
           }
         />
         {hooks.length === 0 ? (
-          <EmptyState title="No endpoints" description="Add one to hear about deliveries and failures without polling." />
+          <EmptyState title={t("app.settings.webhooks.webhooks.noEndpoints")} description={t("app.settings.webhooks.webhooks.addOneToHearAbout")} />
         ) : (
           <ul className="divide-y divide-border">
             {hooks.map((w) => (
@@ -90,10 +93,10 @@ export function Webhooks({ initial }: { initial: Webhook[] }) {
                   </div>
                 </div>
                 <Badge tone={w.active ? "ok" : "neutral"} dot>
-                  {w.active ? "Active" : "Disabled"}
+                  {w.active ? t("app.settings.webhooks.webhooks.active") : t("app.settings.webhooks.webhooks.disabled")}
                 </Badge>
                 <Button size="sm" variant="ghost" onClick={() => setDeleting(w)}>
-                  Delete
+                  {t("app.settings.webhooks.webhooks.delete")}
                 </Button>
               </li>
             ))}
@@ -102,43 +105,41 @@ export function Webhooks({ initial }: { initial: Webhook[] }) {
       </Card>
 
       <Card>
-        <CardHeader title="Verifying signatures" />
+        <CardHeader title={t("app.settings.webhooks.webhooks.verifyingSignatures")} />
         <CardBody className="space-y-2 text-[13.5px] text-muted">
           <p>
-            Each request carries <code className="rounded bg-subtle px-1 font-mono text-[12.5px] text-fg">Arbiter-Signature: t=&lt;unix&gt;,v1=&lt;hex&gt;</code>.
-            Compute HMAC-SHA256 of <code className="rounded bg-subtle px-1 font-mono text-[12.5px] text-fg">{"`${t}.${rawBody}`"}</code> with your
-            endpoint secret and compare it to <code className="font-mono text-[12.5px] text-fg">v1</code> in constant time. Reject timestamps older than five minutes.
+            {t("app.settings.webhooks.webhooks.eachRequestCarries")} <code className="rounded bg-subtle px-1 font-mono text-[12.5px] text-fg">{t("app.settings.webhooks.webhooks.arbiterSignatureTUnixV1")}</code>{t("app.settings.webhooks.webhooks.computeHmacSha256Of")} <code className="rounded bg-subtle px-1 font-mono text-[12.5px] text-fg">{t("app.settings.webhooks.webhooks.text")}</code> {t("app.settings.webhooks.webhooks.withYourEndpointSecretAnd")} <code className="font-mono text-[12.5px] text-fg">v1</code> {t("app.settings.webhooks.webhooks.inConstantTimeRejectTimestamps")}
           </p>
         </CardBody>
       </Card>
 
-      <Dialog open={open} onClose={close} title={secret ? "Copy the signing secret" : "Add endpoint"}>
+      <Dialog open={open} onClose={close} title={secret ? t("app.settings.webhooks.webhooks.copyTheSigningSecret") : t("app.settings.webhooks.webhooks.addEndpoint")}>
         {secret ? (
           <div className="space-y-4">
-            <Callout tone="warn" title="Shown only once">
-              Use it to verify the Arbiter-Signature header. Delete and re-create the endpoint to rotate it.
+            <Callout tone="warn" title={t("app.settings.webhooks.webhooks.shownOnlyOnce")}>
+              {t("app.settings.webhooks.webhooks.useItToVerifyThe")}
             </Callout>
-            <CopyField value={secret} label="Webhook signing secret" />
+            <CopyField value={secret} label={t("app.settings.webhooks.webhooks.webhookSigningSecret")} />
             <div className="flex justify-end">
               <Button variant="primary" onClick={close}>
-                Done
+                {t("app.settings.webhooks.webhooks.done")}
               </Button>
             </div>
           </div>
         ) : (
           <form onSubmit={create} className="space-y-4">
-            <Field label="Endpoint URL" hint="HTTPS only.">
+            <Field label={t("app.settings.webhooks.webhooks.endpointUrl")} hint={t("app.settings.webhooks.webhooks.httpsOnly")}>
               {(id, d) => (
-                <Input id={id} aria-describedby={d} type="url" required pattern="https://.*" placeholder="https://example.com/hooks/arbiter" value={url} onChange={(e) => setUrl(e.target.value)} />
+                <Input id={id} aria-describedby={d} type="url" required pattern="https://.*" placeholder={t("app.settings.webhooks.webhooks.httpsExampleComHooksArbiter")} value={url} onChange={(e) => setUrl(e.target.value)} />
               )}
             </Field>
             <fieldset className="space-y-2">
-              <legend className="mb-1 text-[13px] font-medium">Events</legend>
+              <legend className="mb-1 text-[13px] font-medium">{t("app.settings.webhooks.webhooks.events")}</legend>
               {WEBHOOK_EVENTS.map((ev) => (
                 <Checkbox
                   key={ev}
                   label={<span className="font-mono text-[12.5px]">{ev}</span>}
-                  hint={EVENT_HELP[ev]}
+                  hint={t(EVENT_HELP[ev])}
                   checked={events.includes(ev)}
                   onChange={(e) => setEvents(e.target.checked ? [...events, ev] : events.filter((x) => x !== ev))}
                 />
@@ -146,10 +147,10 @@ export function Webhooks({ initial }: { initial: Webhook[] }) {
             </fieldset>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={close}>
-                Cancel
+                {t("app.settings.webhooks.webhooks.cancel")}
               </Button>
               <Button type="submit" variant="primary" loading={busy} disabled={!url || events.length === 0}>
-                Add endpoint
+                {t("app.settings.webhooks.webhooks.addEndpoint")}
               </Button>
             </div>
           </form>
@@ -160,15 +161,15 @@ export function Webhooks({ initial }: { initial: Webhook[] }) {
         open={deleting !== null}
         onClose={() => setDeleting(null)}
         size="sm"
-        title="Delete this endpoint?"
-        description="Events stop being sent to it immediately."
+        title={t("app.settings.webhooks.webhooks.deleteThisEndpoint")}
+        description={t("app.settings.webhooks.webhooks.eventsStopBeingSentTo")}
         footer={
           <>
             <Button variant="ghost" onClick={() => setDeleting(null)}>
-              Cancel
+              {t("app.settings.webhooks.webhooks.cancel")}
             </Button>
             <Button variant="danger" onClick={() => deleting && remove(deleting)}>
-              Delete
+              {t("app.settings.webhooks.webhooks.delete")}
             </Button>
           </>
         }

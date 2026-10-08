@@ -343,30 +343,29 @@ function plan(content: string): { reply: string; plan: PlanAction[] | null } {
   const text = content.trim();
   const lower = text.toLowerCase();
   const actions: PlanAction[] = [];
-  const sr = /\b(mi smo|naši|nasi|cena|reči|reci|hoću|hocu|revizija)\b/.test(lower);
 
-  const nameMatch = /(?:mi smo agencija|we are|we're)\s+([A-Z][\w&.\- ]{1,40}?)(?:[.,]|\s+(?:and|a|i)\s)/i.exec(text);
+  const nameMatch = /(?:we are|we're)\s+([A-Z][\w&.\- ]{1,40}?)(?:[.,]|\s+and\s)/i.exec(text);
   if (nameMatch) actions.push({ type: "update_org", summary: `Rename the organisation to "${nameMatch[1].trim()}"`, data: { name: nameMatch[1].trim() } });
 
-  const clientsMatch = /(?:klijenti su|clients are|our clients:?)\s+(.+?)\.\s+(?=[A-ZŠĐČĆŽ])/i.exec(text);
-  const clients = clientsMatch ? clientsMatch[1].split(/,|\s+i\s+|\s+and\s+/).map((x) => x.trim()).filter(Boolean) : [];
+  const clientsMatch = /(?:our\s+)?clients(?:\s+are|:)\s+(.+?)\.\s+(?=[A-Z])/i.exec(text);
+  const clients = clientsMatch ? clientsMatch[1].split(/,\s*(?:and\s+)?|\s+and\s+/).map((x) => x.trim()).filter(Boolean) : [];
 
   const steps: WorkflowStep[] = [];
   if (/\bmt\b|machine/.test(lower)) steps.push(s("tm"), s("mt"));
   if (/\bqe\b|quality estimation/.test(lower)) steps.push(s("qe"));
-  const second = /druga revizija|second review|two reviewers|dva revizora/.test(lower);
-  if (/revizija|review/.test(lower)) steps.push(s("human_review"));
+  const second = /second review|two reviewers/.test(lower);
+  if (/review/.test(lower)) steps.push(s("human_review"));
   if (second) steps.push(s("second_review"));
-  if (/odobrenje klijenta|client approval|client approves|klijent odobr/.test(lower)) steps.push(s("client_review"));
+  if (/client approval|client approves/.test(lower)) steps.push(s("client_review"));
   if (steps.length) {
     if (!steps.some((x) => x.kind === "qe")) steps.splice(steps.findIndex((x) => x.kind === "mt") + 1, 0, s("qe"));
     steps.push(s("delivery"));
-    const pharma = /farmacij|pharma/.test(lower);
+    const pharma = /pharma/.test(lower);
     const name = second ? (pharma ? "Pharma: MT + QE + two reviews + client approval" : "MT + QE + two reviews + client approval") : "MT + QE + review";
     actions.push({ type: "create_workflow", summary: `Create workflow "${name}" (${steps.map((x) => x.kind).join(" → ")})`, data: { name, tier: "full", steps, content_type: pharma ? "regulatory" : null } });
   }
 
-  const price = /(\d+[.,]\d+)\s*(?:eur|€)\s*(?:po reči|po reci|per word|\/word)/i.exec(text);
+  const price = /(\d+[.,]\d+)\s*(?:eur|€)\s*(?:per word|\/word)/i.exec(text);
   if (price) {
     const pw = price[1].replace(",", ".");
     actions.push({ type: "create_price_list", summary: `Create price list "Standard" at ${pw} EUR per word (all tiers)`, data: { name: "Standard", currency: "EUR", rates: (["auto", "ai_review", "hybrid", "full"] as Tier[]).map((tier) => ({ tier, per_word: pw })) } });
@@ -375,9 +374,9 @@ function plan(content: string): { reply: string; plan: PlanAction[] | null } {
     actions.push({ type: "create_account", summary: `Create client account "${c}"${/pharma/i.test(c) ? " with the pharma workflow" : ""}`, data: { name: c, kind: "client", ...(price ? { price_list: "Standard" } : {}), ...(/pharma/i.test(c) && steps.length ? { workflow: actions.find((a) => a.type === "create_workflow")?.data.name } : {}) } });
   }
   const metrics: string[] = [];
-  if (/prihod|revenue/.test(lower)) metrics.push("revenue", "revenue_by_month");
-  if (/marž|marz|margin/.test(lower)) metrics.push("margin", "margin_pct");
-  if (/kasn|overdue|late/.test(lower)) metrics.push("jobs_overdue", "overdue_jobs");
+  if (/revenue/.test(lower)) metrics.push("revenue", "revenue_by_month");
+  if (/margin/.test(lower)) metrics.push("margin", "margin_pct");
+  if (/overdue|late/.test(lower)) metrics.push("jobs_overdue", "overdue_jobs");
   if (metrics.length) {
     const ws = metrics.map((m) => ({ type: m.endsWith("_month") ? "line" : m === "overdue_jobs" ? "table" : "kpi", metric: m, size: m.endsWith("_month") || m === "overdue_jobs" ? "l" : "s" }));
     actions.push({ type: "create_dashboard", summary: `Create dashboard "Management" with ${ws.length} widgets (${metrics.join(", ")})`, data: { name: "Management", widgets: ws } });
@@ -385,16 +384,12 @@ function plan(content: string): { reply: string; plan: PlanAction[] | null } {
 
   if (actions.length === 0) {
     return {
-      reply: sr
-        ? "Mogu da odgovorim na pitanja o poslovima, prihodu i ponudama, ili da predložim podešavanje radnog prostora. Opišite agenciju, klijente, tok rada i cene."
-        : "I can answer questions about your jobs, revenue and deals, or propose a workspace setup. Describe your agency, clients, workflow and prices and I will draft a plan.",
+      reply: "I can answer questions about your jobs, revenue and deals, or propose a workspace setup. Describe your agency, clients, workflow and prices and I will draft a plan.",
       plan: null,
     };
   }
   return {
-    reply: sr
-      ? `Predlažem ${actions.length} izmena. Ništa nije promenjeno dok ne primenite plan: označite stavke koje želite i kliknite "Apply".`
-      : `Here is a plan with ${actions.length} actions. Nothing changes until you apply it: tick what you want and click Apply.`,
+    reply: `Here is a plan with ${actions.length} actions. Nothing changes until you apply it: tick what you want and click Apply.`,
     plan: actions,
   };
 }
@@ -632,24 +627,24 @@ export function agencyRoute(c: AgencyCtx): Response | null {
     if (b === "threads" && !cc) {
       if (m === "GET") return list([...st.threads].sort((x, y) => (y.updated_at ?? "").localeCompare(x.updated_at ?? "")), c.q);
       if (m === "POST") {
-        const t: AssistantThread = { id: newId("thr"), title: String(c.body.title ?? ""), user_id: "usr_01JPM", created_at: nowIso(), updated_at: nowIso() };
-        st.threads.push(t);
-        return json({ ...t, messages: [] }, 201);
+        const toneClass: AssistantThread = { id: newId("thr"), title: String(c.body.title ?? ""), user_id: "usr_01JPM", created_at: nowIso(), updated_at: nowIso() };
+        st.threads.push(toneClass);
+        return json({ ...toneClass, messages: [] }, 201);
       }
     }
     if (b === "threads" && cc) {
-      const t = st.threads.find((x) => x.id === cc);
-      if (!t) return err(404, "not_found", "thread not found");
-      if (!d && m === "GET") return json({ ...t, messages: st.messages.filter((x) => x.thread_id === t.id) });
+      const item = st.threads.find((x) => x.id === cc);
+      if (!item) return err(404, "not_found", "thread not found");
+      if (!d && m === "GET") return json({ ...item, messages: st.messages.filter((x) => x.thread_id === item.id) });
       if (d === "messages" && m === "POST") {
         const content = String(c.body.content ?? "").trim();
         if (!content) return err(422, "validation_error", "content is required");
-        const um: AssistantMessage = { id: newId("msg"), thread_id: t.id, role: "user", content, plan: null, applied: [], results: {}, created_at: nowIso() };
+        const um: AssistantMessage = { id: newId("msg"), thread_id: item.id, role: "user", content, plan: null, applied: [], results: {}, created_at: nowIso() };
         const out = plan(content);
-        const am: AssistantMessage = { id: newId("msg"), thread_id: t.id, role: "assistant", content: out.reply, plan: out.plan, applied: [], results: {}, created_at: nowIso() };
+        const am: AssistantMessage = { id: newId("msg"), thread_id: item.id, role: "assistant", content: out.reply, plan: out.plan, applied: [], results: {}, created_at: nowIso() };
         st.messages.push(um, am);
-        if (!t.title) t.title = content.slice(0, 60);
-        t.updated_at = nowIso();
+        if (!item.title) item.title = content.slice(0, 60);
+        item.updated_at = nowIso();
         return json({ user_message: um, assistant_message: am }, 201);
       }
     }

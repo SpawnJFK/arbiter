@@ -1,59 +1,63 @@
+import { getI18n } from "@/lib/i18n/server";
 import type { Metadata } from "next";
 import { StatusBadge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState, PageHeader } from "@/components/ui/misc";
 import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
-import { humanize } from "@/lib/format";
 import { contentTypeLabel } from "@/lib/langs";
 import { withAuth } from "@/lib/server-api";
 
-export const metadata: Metadata = { title: "Tests" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t("reviewer.tests.tests") };
+}
 
 export default async function TestsPage() {
+  const { t } = await getI18n();
   const { items } = await withAuth((api) => api.reviewerTests(), "/reviewer/tests");
   return (
     <>
       <PageHeader
-        title="Tests"
-        description="Each pair and domain unlocks with a timed test: review machine output, fix it, and annotate the errors you find on the MQM scale."
+        title={t("reviewer.tests.tests")}
+        description={t("reviewer.tests.eachPairAndDomainUnlocks")}
       />
       <Card>
         {items.length === 0 ? (
-          <EmptyState title="No tests" />
+          <EmptyState title={t("reviewer.tests.noTests")} />
         ) : (
           <Table>
             <THead>
               <tr>
-                <Th>Pair</Th>
-                <Th>Domain</Th>
-                <Th>Kind</Th>
-                <Th className="text-right">Time limit</Th>
-                <Th>Status</Th>
+                <Th>{t("reviewer.tests.pair")}</Th>
+                <Th>{t("reviewer.tests.domain")}</Th>
+                <Th>{t("reviewer.tests.kind")}</Th>
+                <Th className="text-right">{t("reviewer.tests.timeLimit")}</Th>
+                <Th>{t("reviewer.tests.status")}</Th>
                 <Th className="text-right">
-                  <span className="sr-only">Action</span>
+                  <span className="sr-only">{t("reviewer.tests.action")}</span>
                 </Th>
               </tr>
             </THead>
             <TBody>
-              {items.map((t) => (
-                <Tr key={t.id}>
+              {items.map((item) => (
+                <Tr key={item.id}>
                   <Td className="font-mono text-[13px]">
-                    {t.source_lang} → {t.target_lang}
+                    {item.source_lang} → {item.target_lang}
                   </Td>
-                  <Td>{contentTypeLabel(t.domain)}</Td>
-                  <Td className="text-muted">{humanize(t.kind)}</Td>
-                  <Td className="tabular text-right">{t.time_limit_min} min</Td>
+                  <Td>{contentTypeLabel(t, item.domain)}</Td>
+                  <Td className="text-muted">{t.enumLabel(item.kind)}</Td>
+                  <Td className="tabular text-right">{t("reviewer.tests.min", { time_limit_min: item.time_limit_min })}</Td>
                   <Td>
-                    <StatusBadge status={t.status} />
+                    <StatusBadge status={item.status} />
                   </Td>
                   <Td className="text-right">
-                    {t.status === "available" ? (
-                      <ButtonLink href={`/reviewer/tests/${t.id}`} size="sm" variant="primary">
-                        Start
+                    {item.status === "available" ? (
+                      <ButtonLink href={`/reviewer/tests/${item.id}`} size="sm" variant="primary">
+                        {t("reviewer.tests.start")}
                       </ButtonLink>
-                    ) : t.status === "locked" ? (
-                      <span className="text-[12.5px] text-faint">Unlocks at a higher level</span>
+                    ) : item.status === "locked" ? (
+                      <span className="text-[12.5px] text-faint">{t("reviewer.tests.unlocksAtAHigherLevel")}</span>
                     ) : null}
                   </Td>
                 </Tr>

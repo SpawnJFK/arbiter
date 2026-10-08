@@ -1,81 +1,85 @@
+import { getI18n } from "@/lib/i18n/server";
 import type { Metadata } from "next";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, Stat } from "@/components/ui/card";
 import { EmptyState, PageHeader } from "@/components/ui/misc";
 import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
-import { langName, num, pct, score } from "@/lib/format";
 import { contentTypeLabel } from "@/lib/langs";
 import { withAuth } from "@/lib/server-api";
 
-export const metadata: Metadata = { title: "Quality" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t("app.quality.quality") };
+}
 
 export default async function QualityPage() {
+  const { f, t } = await getI18n();
   const d = await withAuth((api) => api.qualityDashboard(), "/app/quality");
   const engines = d.engines;
   const cs = d.control_samples;
   return (
     <>
       <PageHeader
-        title="Quality"
-        description="How much ships without a human, how much of that later turned out wrong, and where the thresholds sit."
+        title={t("app.quality.quality")}
+        description={t("app.quality.howMuchShipsWithoutA")}
       />
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat
           tone="ok"
-          label="Auto-approval rate"
-          value={pct(d.auto_rate, 1)}
-          hint={d.segments !== undefined ? `${num(d.auto_approved ?? 0)} of ${num(d.segments)} segments, last ${d.window_days ?? 30} days` : "Segments shipped on QE + senate alone"}
+          label={t("app.quality.autoApprovalRate")}
+          value={f.pct(d.auto_rate, 1)}
+          hint={d.segments !== undefined ? t("app.quality.ofSegmentsLastDays", { autoApproved: f.num(d.auto_approved ?? 0), segments: f.num(d.segments), days: d.window_days ?? 30 }) : t("app.quality.segmentsShippedOnQeSenate")}
         />
         <Stat
           tone={d.escaped_rate !== null && d.escaped_rate > 0.005 ? "danger" : "accent"}
-          label="Escaped error rate"
-          value={pct(d.escaped_rate, 2)}
-          hint={d.escaped_rate === null ? "No auto-approved segments yet" : `${num(d.escaped_errors ?? 0)} accepted escaped errors`}
+          label={t("app.quality.escapedErrorRate")}
+          value={f.pct(d.escaped_rate, 2)}
+          hint={d.escaped_rate === null ? t("app.quality.noAutoApprovedSegmentsYet") : t("app.quality.acceptedEscapedErrors", { count: f.num(d.escaped_errors ?? 0) })}
         />
-        <Stat label="Control samples" value={num(cs.total)} hint={`${num(cs.pending)} pending · ${num(cs.ok)} ok · ${num(cs.escaped)} escaped`} />
-        <Stat label="Thresholds" value={num(d.thresholds.length)} hint={`${d.thresholds.filter((t) => t.auto_approval_suspended).length} with auto-approval suspended`} />
+        <Stat label={t("app.quality.controlSamples")} value={f.num(cs.total)} hint={t("app.quality.pendingOkEscaped", { pending: f.num(cs.pending), ok: f.num(cs.ok), escaped: f.num(cs.escaped) })} />
+        <Stat label={t("app.quality.thresholds")} value={f.num(d.thresholds.length)} hint={t("app.quality.withAutoApprovalSuspended", { count: d.thresholds.filter((thr) => thr.auto_approval_suspended).length })} />
       </div>
 
       <Card className="mb-4">
         <CardHeader
-          title="Thresholds"
-          description="One per content type and target language. Calibration moves a threshold at most 3 points a week; auto-approval suspends itself when control samples catch errors."
+          title={t("app.quality.thresholds")}
+          description={t("app.quality.onePerContentTypeAnd")}
         />
         {d.thresholds.length === 0 ? (
-          <EmptyState title="No thresholds yet" description="They are created with your first job in each language." />
+          <EmptyState title={t("app.quality.noThresholdsYet")} description={t("app.quality.theyAreCreatedWithYour")} />
         ) : (
           <Table>
             <THead>
               <tr>
-                <Th>Content type</Th>
-                <Th>Target</Th>
-                <Th className="text-right">Threshold</Th>
-                <Th className="text-right">Senate band</Th>
-                <Th className="text-right">Safety offset</Th>
-                <Th>Auto-approval</Th>
+                <Th>{t("app.quality.contentType")}</Th>
+                <Th>{t("app.quality.target")}</Th>
+                <Th className="text-right">{t("app.quality.threshold")}</Th>
+                <Th className="text-right">{t("app.quality.senateBand")}</Th>
+                <Th className="text-right">{t("app.quality.safetyOffset")}</Th>
+                <Th>{t("app.quality.autoApproval")}</Th>
               </tr>
             </THead>
             <TBody>
-              {d.thresholds.map((t) => (
-                <Tr key={t.id}>
-                  <Td>{contentTypeLabel(t.content_type)}</Td>
+              {d.thresholds.map((thr) => (
+                <Tr key={thr.id}>
+                  <Td>{contentTypeLabel(t, thr.content_type)}</Td>
                   <Td>
-                    {langName(t.target_lang)} <span className="font-mono text-[12px] text-faint">{t.target_lang}</span>
+                    {f.langName(thr.target_lang)} <span className="font-mono text-[12px] text-faint">{thr.target_lang}</span>
                   </Td>
-                  <Td className="tabular text-right font-medium">{score(t.value)}</Td>
-                  <Td className="tabular text-right text-muted">±{score(t.band_width)}</Td>
-                  <Td className="tabular text-right text-muted">{t.safety_offset ? `+${score(t.safety_offset)}` : "–"}</Td>
+                  <Td className="tabular text-right font-medium">{f.score(thr.value)}</Td>
+                  <Td className="tabular text-right text-muted">±{f.score(thr.band_width)}</Td>
+                  <Td className="tabular text-right text-muted">{thr.safety_offset ? `+${f.score(thr.safety_offset)}` : "–"}</Td>
                   <Td>
-                    {t.auto_approval_suspended ? (
+                    {thr.auto_approval_suspended ? (
                       <div>
                         <Badge tone="warn" dot>
-                          Suspended
+                          {t("app.quality.suspended")}
                         </Badge>
-                        {t.suspended_reason && <div className="mt-1 text-[12px] text-muted">{t.suspended_reason}</div>}
+                        {thr.suspended_reason && <div className="mt-1 text-[12px] text-muted">{thr.suspended_reason}</div>}
                       </div>
                     ) : (
                       <Badge tone="ok" dot>
-                        Active
+                        {t("app.quality.active")}
                       </Badge>
                     )}
                   </Td>
@@ -87,20 +91,20 @@ export default async function QualityPage() {
       </Card>
 
       <Card>
-        <CardHeader title="Engine scoreboard" description="Measured quality per engine for the language pairs you use." />
+        <CardHeader title={t("app.quality.engineScoreboard")} description={t("app.quality.measuredQualityPerEngineFor")} />
         {engines.length === 0 ? (
-          <EmptyState title="No engine data yet" description="Rows appear once jobs in a language pair have been scored." />
+          <EmptyState title={t("app.quality.noEngineDataYet")} description={t("app.quality.rowsAppearOnceJobsIn")} />
         ) : (
           <Table>
             <THead>
               <tr>
-                <Th>Engine</Th>
-                <Th>Pair</Th>
-                <Th className="hidden md:table-cell">Domain</Th>
-                <Th className="text-right">Segments</Th>
-                <Th className="text-right">Mean QE</Th>
-                <Th className="text-right">Edit distance</Th>
-                <Th className="text-right">Term adherence</Th>
+                <Th>{t("app.quality.engine")}</Th>
+                <Th>{t("app.quality.pair")}</Th>
+                <Th className="hidden md:table-cell">{t("app.quality.domain")}</Th>
+                <Th className="text-right">{t("app.quality.segments")}</Th>
+                <Th className="text-right">{t("app.quality.meanQe")}</Th>
+                <Th className="text-right">{t("app.quality.editDistance")}</Th>
+                <Th className="text-right">{t("app.quality.termAdherence")}</Th>
               </tr>
             </THead>
             <TBody>
@@ -110,11 +114,11 @@ export default async function QualityPage() {
                   <Td className="font-mono text-[12.5px] text-muted">
                     {e.source_lang} → {e.target_lang}
                   </Td>
-                  <Td className="hidden text-muted md:table-cell">{e.domain ? contentTypeLabel(e.domain) : "All"}</Td>
-                  <Td className="tabular text-right">{num(e.segments_measured)}</Td>
-                  <Td className="tabular text-right">{score(e.mean_qe)}</Td>
+                  <Td className="hidden text-muted md:table-cell">{e.domain ? contentTypeLabel(t, e.domain) : t("app.quality.all")}</Td>
+                  <Td className="tabular text-right">{f.num(e.segments_measured)}</Td>
+                  <Td className="tabular text-right">{f.score(e.mean_qe)}</Td>
                   <Td className="tabular text-right">{e.mean_edit_distance === null ? "–" : e.mean_edit_distance.toFixed(2)}</Td>
-                  <Td className="tabular text-right">{pct(e.term_adherence)}</Td>
+                  <Td className="tabular text-right">{f.pct(e.term_adherence)}</Td>
                 </Tr>
               ))}
             </TBody>

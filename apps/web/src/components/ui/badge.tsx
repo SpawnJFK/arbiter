@@ -1,6 +1,9 @@
+"use client";
+
+import { k, type Translator } from "@/lib/i18n/core";
+import { useI18n } from "@/lib/i18n/client";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
-import { humanize, score as fmtScore } from "@/lib/format";
 import type { Decision, JobState, SegmentState, TermKind } from "@/lib/types";
 
 export type Tone = "neutral" | "accent" | "ok" | "warn" | "danger" | "info" | "violet";
@@ -58,9 +61,10 @@ const JOB_TONE: Record<JobState, Tone> = {
 };
 
 export function JobStateBadge({ state }: { state: JobState }) {
+  const { t } = useI18n();
   return (
     <Badge tone={JOB_TONE[state] ?? "neutral"} dot>
-      {humanize(state)}
+      {t.enumLabel(state)}
     </Badge>
   );
 }
@@ -85,34 +89,37 @@ export function SegmentStateBadge({
   decision?: string | null;
   origin?: string | null;
 }) {
-  if (state === "reviewed" && origin === "editor") return <Badge tone="accent">AI reviewed</Badge>;
-  return <Badge tone={SEG_TONE[state] ?? "neutral"}>{humanize(state)}</Badge>;
+  const { t } = useI18n();
+  if (state === "reviewed" && origin === "editor") return <Badge tone="accent">{t("components.badge.aiReviewed")}</Badge>;
+  return <Badge tone={SEG_TONE[state] ?? "neutral"}>{t.enumLabel(state)}</Badge>;
 }
 
 const DECISION: Record<Decision, { tone: Tone; label: string; title: string }> = {
-  auto_approve: { tone: "ok", label: "Auto", title: "Cleared the threshold, shipped without a human" },
-  senate: { tone: "accent", label: "Senate", title: "Decided by the AI senate" },
-  review: { tone: "violet", label: "Human", title: "Routed to a human reviewer" },
-  blocked: { tone: "danger", label: "Blocked", title: "A hard check failed; needs a domain expert or your team" },
-  ai_edit: { tone: "accent", label: "AI edit", title: "Queued for the AI editor" },
-  ai_reviewed: { tone: "accent", label: "AI reviewed", title: "Revised by the AI editor" },
-  ai_fallback: { tone: "warn", label: "AI fallback", title: "No reviewer was available; AI review per your policy (disclosed)" },
-  unreviewed: { tone: "warn", label: "Unreviewed", title: "Delivered without the planned review per your policy (disclosed)" },
-  reviewed: { tone: "ok", label: "Reviewed", title: "A human decided" },
+  auto_approve: { tone: "ok", label: k("components.badge.auto"), title: k("components.badge.clearedTheThresholdShippedWithout") },
+  senate: { tone: "accent", label: k("components.badge.senate"), title: k("components.badge.decidedByTheAiSenate") },
+  review: { tone: "violet", label: k("components.badge.human"), title: k("components.badge.routedToAHumanReviewer") },
+  blocked: { tone: "danger", label: k("components.badge.blocked"), title: k("components.badge.aHardCheckFailedNeeds") },
+  ai_edit: { tone: "accent", label: k("components.badge.aiEdit"), title: k("components.badge.queuedForTheAiEditor") },
+  ai_reviewed: { tone: "accent", label: k("components.badge.aiReviewed"), title: k("components.badge.revisedByTheAiEditor") },
+  ai_fallback: { tone: "warn", label: k("components.badge.aiFallback"), title: k("components.badge.noReviewerWasAvailableAi") },
+  unreviewed: { tone: "warn", label: k("components.badge.unreviewed"), title: k("components.badge.deliveredWithoutThePlannedReview") },
+  reviewed: { tone: "ok", label: k("components.badge.reviewed"), title: k("components.badge.aHumanDecided") },
 };
 
 export function DecisionBadge({ decision }: { decision: Decision | string | null }) {
+  const { t } = useI18n();
   if (!decision) return <span className="text-faint">–</span>;
-  const d = DECISION[decision as Decision] ?? { tone: "neutral" as Tone, label: humanize(decision), title: decision };
+  const d = DECISION[decision as Decision];
   return (
-    <Badge tone={d.tone} title={d.title}>
-      {d.label}
+    <Badge tone={d?.tone ?? "neutral"} title={d ? t(d.title) : decision}>
+      {decisionLabel(t, decision)}
     </Badge>
   );
 }
 
-export function decisionLabel(d: string): string {
-  return DECISION[d as Decision]?.label ?? humanize(d);
+export function decisionLabel(t: Translator, d: string): string {
+  const known = DECISION[d as Decision];
+  return known ? t(known.label) : t.enumLabel(d);
 }
 
 /**
@@ -120,14 +127,15 @@ export function decisionLabel(d: string): string {
  * Green: clears threshold + band (auto zone). Amber: inside the senate band. Red: review zone.
  */
 export function QeBadge({ value, threshold, band = 8 }: { value: number | null; threshold?: number | null; band?: number }) {
+  const { t, f } = useI18n();
   if (value === null || value === undefined) return <span className="text-faint">–</span>;
   const v = qe100(value);
-  const t = qe100(threshold ?? 78);
-  const tone: Tone = v >= t + band ? "ok" : v > t - band ? "warn" : "danger";
-  const label = tone === "ok" ? "clears threshold + band" : tone === "warn" ? "inside the senate band" : "below the band, human review";
+  const thr = qe100(threshold ?? 78);
+  const tone: Tone = v >= thr + band ? "ok" : v > thr - band ? "warn" : "danger";
+  const label = tone === "ok" ? t("components.badge.qe.clears") : tone === "warn" ? t("components.badge.qe.inBand") : t("components.badge.qe.belowBand");
   return (
-    <Badge tone={tone} className="tabular font-mono" title={`QE ${fmtScore(v)}: ${label} (threshold ${fmtScore(t)}, band ±${band})`}>
-      {fmtScore(v)}
+    <Badge tone={tone} className="tabular font-mono" title={t("components.badge.qeThresholdBand", { v: f.score(v), label, thr: f.score(thr), band })}>
+      {f.score(v)}
     </Badge>
   );
 }
@@ -137,18 +145,20 @@ export function qe100(v: number): number {
 }
 
 const KIND: Record<TermKind, { tone: Tone; label: string }> = {
-  mandatory: { tone: "accent", label: "Mandatory" },
-  preferred: { tone: "info", label: "Preferred" },
-  forbidden: { tone: "danger", label: "Forbidden" },
-  do_not_translate: { tone: "neutral", label: "Do not translate" },
+  mandatory: { tone: "accent", label: k("components.badge.mandatory") },
+  preferred: { tone: "info", label: k("components.badge.preferred") },
+  forbidden: { tone: "danger", label: k("components.badge.forbidden") },
+  do_not_translate: { tone: "neutral", label: k("components.badge.doNotTranslate") },
 };
 
 export function TermKindBadge({ kind }: { kind: TermKind }) {
-  const k = KIND[kind] ?? { tone: "neutral" as Tone, label: humanize(kind) };
-  return <Badge tone={k.tone}>{k.label}</Badge>;
+  const { t } = useI18n();
+  const known = KIND[kind];
+  return <Badge tone={known?.tone ?? "neutral"}>{known ? t(known.label) : t.enumLabel(kind)}</Badge>;
 }
 
 export function StatusBadge({ status }: { status: string }) {
+  const { t } = useI18n();
   const s = status.toLowerCase();
   const tone: Tone = ["active", "passed", "paid", "answered", "decided", "upheld", "available", "settled", "sent"].includes(s)
     ? "ok"
@@ -157,5 +167,5 @@ export function StatusBadge({ status }: { status: string }) {
       : ["testing", "pending", "open", "applied", "held", "accrued", "demoted"].includes(s)
         ? "warn"
         : "neutral";
-  return <Badge tone={tone}>{humanize(status)}</Badge>;
+  return <Badge tone={tone}>{t.enumLabel(status)}</Badge>;
 }

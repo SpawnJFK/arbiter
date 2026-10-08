@@ -1,37 +1,41 @@
+import { getI18n } from "@/lib/i18n/server";
 import type { Metadata } from "next";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, Stat } from "@/components/ui/card";
 import { EmptyState, PageHeader } from "@/components/ui/misc";
 import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { Time } from "@/components/ui/time";
-import { humanize, money } from "@/lib/format";
 import { withAuth } from "@/lib/server-api";
 import { PayoutForm } from "./payout-form";
 
-export const metadata: Metadata = { title: "Earnings & payouts" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t("reviewer.earnings.earningsPayouts") };
+}
 
 export default async function EarningsPage() {
+  const { f, t } = await getI18n();
   const [earnings, me] = await withAuth((api) => Promise.all([api.earnings(), api.reviewerMe()]), "/reviewer/earnings");
   return (
     <>
-      <PageHeader title="Earnings & payouts" description="Every decision you submit is a ledger entry. Disputed entries are adjusted, never deleted." />
+      <PageHeader title={t("reviewer.earnings.earningsPayouts")} description={t("reviewer.earnings.everyDecisionYouSubmitIs")} />
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
-        <Stat tone="ok" label="Available" value={money(earnings.balance)} hint={`Paid out from ${money(me.payout_threshold)}`} />
-        <Stat tone="warn" label="In payout" value={money(earnings.pending)} hint="Accrued or sent, not yet settled" />
-        <Stat label="Paid to date" value={money(earnings.paid)} />
+        <Stat tone="ok" label={t("reviewer.earnings.available")} value={f.money(earnings.balance)} hint={t("reviewer.earnings.paidOutFrom", { payout_threshold: f.money(me.payout_threshold) })} />
+        <Stat tone="warn" label={t("reviewer.earnings.inPayout")} value={f.money(earnings.pending)} hint={t("reviewer.earnings.accruedOrSentNotYet")} />
+        <Stat label={t("reviewer.earnings.paidToDate")} value={f.money(earnings.paid)} />
       </div>
       <div className="grid gap-4 xl:grid-cols-[1.3fr_1fr]">
         <Card>
-          <CardHeader title="Ledger" />
+          <CardHeader title={t("reviewer.earnings.ledger")} />
           {earnings.entries.length === 0 ? (
-            <EmptyState title="No entries yet" description="Accept, edit or escalate a task to earn your first entry." />
+            <EmptyState title={t("reviewer.earnings.noEntriesYet")} description={t("reviewer.earnings.acceptEditOrEscalateA")} />
           ) : (
             <Table>
               <THead>
                 <tr>
-                  <Th>Date</Th>
-                  <Th>Entry</Th>
-                  <Th className="text-right">Amount</Th>
+                  <Th>{t("reviewer.earnings.date")}</Th>
+                  <Th>{t("reviewer.earnings.entry")}</Th>
+                  <Th className="text-right">{t("reviewer.earnings.amount")}</Th>
                 </tr>
               </THead>
               <TBody>
@@ -41,11 +45,11 @@ export default async function EarningsPage() {
                       <Time iso={e.created_at} />
                     </Td>
                     <Td>
-                      <Badge>{humanize(e.kind)}</Badge>
+                      <Badge>{t.enumLabel(e.kind)}</Badge>
                       {e.ref && <div className="font-mono text-[11.5px] text-faint">{e.ref}</div>}
                     </Td>
                     <Td className={`tabular whitespace-nowrap text-right font-medium ${Number(e.amount) < 0 ? "text-danger" : ""}`}>
-                      {money(e.amount, e.currency ?? earnings.currency ?? "EUR")}
+                      {f.money(e.amount, e.currency ?? earnings.currency ?? "EUR")}
                     </Td>
                   </Tr>
                 ))}

@@ -1,18 +1,23 @@
+import { getI18n } from "@/lib/i18n/server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AuthCard } from "@/components/auth-card";
 import { RegisterForm } from "./register-form";
 
-export const metadata: Metadata = { title: "Create a company account" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t("register.createACompanyAccount") };
+}
 
-export default function RegisterPage() {
+export default async function RegisterPage() {
+  const { t } = await getI18n();
   return (
     <AuthCard
-      title="Create a company account"
-      description="You will be the project manager for your organisation and can invite colleagues later."
+      title={t("register.createACompanyAccount")}
+      description={t("register.youWillBeTheProject")}
       footer={
         <>
-          Already have an account? <Link href="/login" className="font-medium text-accent hover:underline">Sign in</Link>
+          {t("register.alreadyHaveAnAccount")} <Link href="/login" className="font-medium text-accent hover:underline">{t("register.signIn")}</Link>
         </>
       }
     >

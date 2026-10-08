@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
 from arbiter.agency import assistant
+from arbiter.agency.common import normalize_locale
 from arbiter.api.deps import DB, PM, Paging, Principal, listing
 from arbiter.api.routes.projects import idempotent_post
 from arbiter.errors import NotFound
@@ -34,6 +35,8 @@ class ThreadIn(BaseModel):
 class MessageIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     content: str = Field(min_length=1, max_length=20_000)
+    # BCP-47 UI locale: the reply and every name the assistant picks are in this language.
+    locale: str = Field(default="en", min_length=2, max_length=35)
 
 
 class ApplyIn(BaseModel):
@@ -89,7 +92,8 @@ def post_message(
     def make() -> dict[str, Any]:
         assert p.org is not None
         t = assistant.get_thread(db, p.org_id, thread_id, lock=True)
-        user_msg, bot = assistant.post_message(db, p.org, t, body.content.strip(), _uid(p))
+        locale = normalize_locale(body.locale)
+        user_msg, bot = assistant.post_message(db, p.org, t, body.content.strip(), _uid(p), locale)
         return {
             "user_message": assistant.message_view(user_msg),
             "assistant_message": assistant.message_view(bot),

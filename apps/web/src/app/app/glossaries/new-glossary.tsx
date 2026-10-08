@@ -1,5 +1,6 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Icons } from "@/components/icons";
@@ -8,9 +9,10 @@ import { Dialog } from "@/components/ui/dialog";
 import { Field, Input, Select } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { api, errorMessage } from "@/lib/api";
-import { CONTENT_TYPES } from "@/lib/langs";
+import { CONTENT_TYPES, contentTypeLabel } from "@/lib/langs";
 
 export function NewGlossaryButton() {
+  const { t } = useI18n();
   const router = useRouter();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -23,11 +25,11 @@ export function NewGlossaryButton() {
     setBusy(true);
     try {
       const g = await api.createGlossary({ name: name.trim(), content_type: contentType || undefined });
-      toast.success("Glossary created");
+      toast.success(t("app.glossaries.newGlossary.glossaryCreated"));
       setOpen(false);
       router.push(`/app/glossaries/${g.id}`);
     } catch (err) {
-      toast.error("Could not create glossary", errorMessage(err));
+      toast.error(t("app.glossaries.newGlossary.couldNotCreateGlossary"), errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -36,18 +38,18 @@ export function NewGlossaryButton() {
   return (
     <>
       <Button variant="primary" onClick={() => setOpen(true)}>
-        <Icons.plus className="size-4" /> New glossary
+        <Icons.plus className="size-4" /> {t("app.glossaries.newGlossary.newGlossary")}
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title="New glossary" size="sm">
+      <Dialog open={open} onClose={() => setOpen(false)} title={t("app.glossaries.newGlossary.newGlossary")} size="sm">
         <form id="new-glossary" onSubmit={create} className="space-y-4">
-          <Field label="Name">{(id) => <Input id={id} required value={name} onChange={(e) => setName(e.target.value)} autoFocus />}</Field>
-          <Field label="Content type" hint="Limit the glossary to one content type, or apply it to everything.">
+          <Field label={t("app.glossaries.newGlossary.name")}>{(id) => <Input id={id} required value={name} onChange={(e) => setName(e.target.value)} autoFocus />}</Field>
+          <Field label={t("app.glossaries.newGlossary.contentType")} hint={t("app.glossaries.newGlossary.limitTheGlossaryToOne")}>
             {(id, d) => (
               <Select id={id} aria-describedby={d} value={contentType} onChange={(e) => setContentType(e.target.value)}>
-                <option value="">All content</option>
+                <option value="">{t("app.glossaries.newGlossary.allContent")}</option>
                 {CONTENT_TYPES.map((c) => (
                   <option key={c.value} value={c.value}>
-                    {c.label}
+                    {contentTypeLabel(t, c.value)}
                   </option>
                 ))}
               </Select>
@@ -55,10 +57,10 @@ export function NewGlossaryButton() {
           </Field>
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="ghost" onClick={() => setOpen(false)}>
-              Cancel
+              {t("app.glossaries.newGlossary.cancel")}
             </Button>
             <Button type="submit" variant="primary" loading={busy} disabled={!name.trim()}>
-              Create
+              {t("app.glossaries.newGlossary.create")}
             </Button>
           </div>
         </form>

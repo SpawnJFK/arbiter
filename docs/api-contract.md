@@ -310,11 +310,35 @@ Revenue is recognised at delivery. Rates are null without data. Money is null fo
 | POST | /assistant/threads | `{title?}` | 201 `Thread` |
 | GET | /assistant/threads | | list of `Thread` |
 | GET | /assistant/threads/{id} | | `Thread` with `messages[]` |
-| POST | /assistant/threads/{id}/messages | `{content}` | 201 `{user_message, assistant_message}` |
+| POST | /assistant/threads/{id}/messages | `{content, locale?}` | 201 `{user_message, assistant_message}` |
 | POST | /assistant/messages/{id}/apply | `{actions?: int[]}` (indices; default all) | `{results: [{index, type, ok, id?, error?, skipped?, note?, warnings?}], message}` |
 
 `Thread`: `{id, title, user_id, created_at, updated_at, messages?}`.
 `Message`: `{id, thread_id, role: user|assistant, content, plan: Action[] | null, applied: int[], results: {"<index>": {id}}, created_at}`.
 `Action`: `{type, summary, data}` with type in `create_workflow, create_price_list, create_account, create_contact, create_deal, create_activity, create_dashboard, update_org, create_glossary, add_terms, create_webhook`. `data` is validated with the same models as the matching endpoint. An id field may reference an earlier action of the same plan as `"@<index>"` (e.g. `account_id: "@0"`).
 
+`locale` is a BCP-47 tag (default `"en"`; the web app sends the UI locale; invalid tag = 422). The reply, every action `summary` and every name the assistant chooses (workflow, price list and dashboard names, descriptions, widget titles) are in that locale, whatever language the user wrote in; proper names the user gave (agency, clients, contacts, e-mails) are kept verbatim. The built-in planner (used when no AI model is configured) understands English and Serbian input but always answers in English; for any other locale its reply ends with a note that only the AI model localizes replies (D-045).
+
 The assistant never changes anything by itself: posting a message only proposes a plan; a human applies all or selected actions. Each action runs in its own savepoint (one failure does not undo the others); already applied indices are skipped; workflows, price lists and dashboards with an existing name are reused (`note` says so). Apply on a message without a plan is 409. The assistant also answers questions about the org's data from a context summary.
+
+# UI string localization (platform-wide)
+
+The product is English-first (D-045). The English UI catalog lives in the web repo and is the source; translations are stored here per locale and edited or imported by the platform admin without a redeploy (D-046). Locales are BCP-47, normalised on input (`pt-br` -> `pt-BR`, `sr-latn` -> `sr-Latn`); a malformed tag is 422.
+
+| Method | Path | Auth | Body | Returns |
+|---|---|---|---|---|
+| GET | /i18n/locales | none (admin sees disabled too) | | `{items: [Locale]}`, `en` always first |
+| GET | /i18n/messages/{locale} | none (admin can read disabled) | | `{locale, messages: {key: value}}`, `Cache-Control: public, max-age=60`; 404 for unknown or disabled; `en` returns `{}` |
+| PUT | /admin/i18n/locales/{locale} | admin | `{name, enabled?}` | `Locale` (created disabled unless `enabled: true`) |
+| PUT | /admin/i18n/messages/{locale} | admin | `{messages: {key: value}, mode?: merge\|replace, source?: {key: english}}` | `{locale, upserted, deleted, total}` |
+| DELETE | /admin/i18n/locales/{locale} | admin | | 204 (messages deleted too) |
+
+`Locale`: `{locale, name, enabled, message_count, updated_at}`; for `en`: `{locale: "en", name: "English", enabled: true, message_count: null, updated_at: null}`.
+
+Messages import rules:
+- `merge` (default) upserts the given keys; `replace` leaves the locale with exactly the given keys. An empty string value removes that key. `upserted` counts new or changed values only.
+- Key 1-200 characters, value at most 5000 characters, at most 20,000 keys per request (422 otherwise).
+- A locale without a row is created on import, disabled, named after its tag.
+- `en` cannot be written (422): it is the source catalog.
+- Placeholder safety: when `source` is given, every key present in both must use the same set of top-level ICU arguments (`{name}`, and the argument of `{count, plural, ...}` / `{x, select, ...}`; text inside plural branches is not an argument; `'{...}'` is quoted literal text). Otherwise 422 with `details.placeholders: {key: {expected: [...], got: [...]}}` and nothing is written.
+

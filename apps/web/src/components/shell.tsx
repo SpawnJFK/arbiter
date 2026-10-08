@@ -1,11 +1,13 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { IS_MOCK } from "@/lib/config";
 import { Icons, Logo } from "./icons";
+import { LocaleSwitcher } from "./locale-switcher";
 
 export type IconName = keyof typeof Icons;
 export interface NavItem {
@@ -30,6 +32,7 @@ export function AppShell({
   context?: string;
   children: ReactNode;
 }) {
+  const { t } = useI18n();
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -52,7 +55,7 @@ export function AppShell({
   const isActive = (item: NavItem) => best?.href === item.href;
 
   const nav = (
-    <nav aria-label="Main" className="flex flex-1 flex-col gap-4 overflow-y-auto px-2 py-3">
+    <nav aria-label={t("components.shell.main")} className="flex flex-1 flex-col gap-4 overflow-y-auto px-2 py-3">
       {sections.map((s, i) => (
         <div key={i}>
           {s.label && <div className="px-2 pb-1 text-[11.5px] font-medium uppercase tracking-wide text-faint">{s.label}</div>}
@@ -92,7 +95,7 @@ export function AppShell({
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13px] font-medium text-fg">{user.name}</div>
           <div className="truncate text-[12px] text-faint">
-            {user.email} · {user.role}
+            {user.email} · {t.enumLabel(user.role)}
           </div>
         </div>
         <button
@@ -100,12 +103,13 @@ export function AppShell({
           onClick={signOut}
           disabled={signingOut}
           className="rounded-md p-1.5 text-faint hover:bg-hover hover:text-fg"
-          aria-label="Sign out"
-          title="Sign out"
+          aria-label={t("components.shell.signOut")}
+          title={t("components.shell.signOut")}
         >
           <Icons.logout className="size-4" />
         </button>
       </div>
+      <LocaleSwitcher />
     </div>
   );
 
@@ -121,7 +125,7 @@ export function AppShell({
       {/* Mobile drawer */}
       {open && (
         <div className="fixed inset-0 z-40 md:hidden">
-          <button className="absolute inset-0 bg-black/40" aria-label="Close menu" onClick={() => setOpen(false)} />
+          <button className="absolute inset-0 bg-black/40" aria-label={t("components.shell.closeMenu")} onClick={() => setOpen(false)} />
           <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-border bg-surface shadow-pop">
             <Brand context={context} />
             {nav}
@@ -136,18 +140,18 @@ export function AppShell({
             type="button"
             onClick={() => setOpen(true)}
             className="rounded-md p-1.5 text-muted hover:bg-hover"
-            aria-label="Open menu"
+            aria-label={t("components.shell.openMenu")}
             aria-expanded={open}
           >
             <Icons.menu className="size-5" />
           </button>
           <Logo className="size-5" />
-          <span className="text-sm font-semibold">Arbiter</span>
+          <span className="text-sm font-semibold">{t("components.shell.arbiter")}</span>
           {context && <span className="truncate text-[13px] text-muted">· {context}</span>}
         </header>
         {IS_MOCK && (
           <div className="border-b border-warn/30 bg-warn-subtle px-4 py-1 text-center text-[12px] text-warn">
-            Demo mode: data comes from local fixtures, nothing is sent to the API.
+            {t("components.shell.demoModeDataComesFrom")}
           </div>
         )}
         <main id="main" className="mx-auto w-full max-w-[1280px] flex-1 px-4 py-6 md:px-8">
@@ -159,10 +163,11 @@ export function AppShell({
 }
 
 function Brand({ context }: { context?: string }) {
+  const { t } = useI18n();
   return (
     <div className="flex h-12 items-center gap-2 border-b border-border px-4">
       <Logo className="size-5" />
-      <span className="text-[14px] font-semibold tracking-tight">Arbiter</span>
+      <span className="text-[14px] font-semibold tracking-tight">{t("components.shell.arbiter")}</span>
       {context && <span className="ml-auto max-w-[110px] truncate text-[12px] text-faint">{context}</span>}
     </div>
   );

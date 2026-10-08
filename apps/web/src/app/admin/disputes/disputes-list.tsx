@@ -1,5 +1,6 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/client";
 import { useState } from "react";
 import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import { cn } from "@/lib/cn";
 import type { Dispute } from "@/lib/types";
 
 export function DisputesList({ initial }: { initial: Dispute[] }) {
+  const { t } = useI18n();
   const toast = useToast();
   const [rows, setRows] = useState(initial);
   const [deciding, setDeciding] = useState<{ d: Dispute; outcome: "upheld" | "overturned" } | null>(null);
@@ -26,11 +28,11 @@ export function DisputesList({ initial }: { initial: Dispute[] }) {
     try {
       const res = await api.decideDispute(deciding.d.id, { outcome: deciding.outcome, note: note.trim() });
       setRows((xs) => xs.map((x) => (x.id === res.id ? { ...x, ...res } : x)));
-      toast.success(`Dispute ${deciding.outcome}`);
+      toast.success(t("admin.disputes.disputesList.dispute", { outcome: deciding.outcome }));
       setDeciding(null);
       setNote("");
     } catch (e) {
-      toast.error("Could not decide", errorMessage(e));
+      toast.error(t("admin.disputes.disputesList.couldNotDecide"), errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -43,7 +45,7 @@ export function DisputesList({ initial }: { initial: Dispute[] }) {
     <div className="space-y-4">
       <Card>
         {open.length === 0 ? (
-          <EmptyState title="No open disputes" />
+          <EmptyState title={t("admin.disputes.disputesList.noOpenDisputes")} />
         ) : (
           <ul className="divide-y divide-border">
             {open.map((d) => (
@@ -59,15 +61,15 @@ export function DisputesList({ initial }: { initial: Dispute[] }) {
                   </div>
                   <p className="mt-1 text-[14px]">{d.reason}</p>
                   <p className="mt-1 text-[12.5px] text-muted">
-                    Due <Time iso={d.due_at} mode="relative" />
+                    {t("admin.disputes.disputesList.due")} <Time iso={d.due_at} mode="relative" />
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-1.5">
                   <Button size="sm" onClick={() => setDeciding({ d, outcome: "upheld" })}>
-                    Uphold
+                    {t("admin.disputes.disputesList.uphold")}
                   </Button>
                   <Button size="sm" variant="outline-danger" onClick={() => setDeciding({ d, outcome: "overturned" })}>
-                    Overturn
+                    {t("admin.disputes.disputesList.overturn")}
                   </Button>
                 </div>
               </li>
@@ -77,7 +79,7 @@ export function DisputesList({ initial }: { initial: Dispute[] }) {
       </Card>
       {closed.length > 0 && (
         <Card>
-          <div className="border-b border-border px-4 py-2.5 text-[13px] font-medium text-muted">Decided</div>
+          <div className="border-b border-border px-4 py-2.5 text-[13px] font-medium text-muted">{t("admin.disputes.disputesList.decided")}</div>
           <ul className="divide-y divide-border">
             {closed.map((d) => (
               <li key={d.id} className="px-4 py-2.5 text-[13.5px]">
@@ -94,15 +96,15 @@ export function DisputesList({ initial }: { initial: Dispute[] }) {
       <Dialog
         open={deciding !== null}
         onClose={() => setDeciding(null)}
-        title={deciding?.outcome === "upheld" ? "Uphold dispute (reviewer is right)" : "Overturn dispute (original decision stands)"}
-        description="The note is shown to the reviewer and kept with the ledger correction."
+        title={deciding?.outcome === "upheld" ? t("admin.disputes.disputesList.upholdDisputeReviewerIsRight") : t("admin.disputes.disputesList.overturnDisputeOriginalDecisionStands")}
+        description={t("admin.disputes.disputesList.theNoteIsShownTo")}
         footer={
           <>
             <Button variant="ghost" onClick={() => setDeciding(null)}>
-              Cancel
+              {t("admin.disputes.disputesList.cancel")}
             </Button>
             <Button variant={deciding?.outcome === "overturned" ? "danger" : "primary"} onClick={decide} loading={busy} disabled={!note.trim()}>
-              {deciding?.outcome === "upheld" ? "Uphold" : "Overturn"}
+              {deciding?.outcome === "upheld" ? t("admin.disputes.disputesList.uphold") : t("admin.disputes.disputesList.overturn")}
             </Button>
           </>
         }
@@ -110,7 +112,7 @@ export function DisputesList({ initial }: { initial: Dispute[] }) {
         {deciding && (
           <div className="space-y-3">
             <p className={cn("rounded-md bg-subtle p-3 text-[13.5px]")}>{deciding.d.reason}</p>
-            <Field label="Decision note">{(id) => <Textarea id={id} required value={note} onChange={(e) => setNote(e.target.value)} />}</Field>
+            <Field label={t("admin.disputes.disputesList.decisionNote")}>{(id) => <Textarea id={id} required value={note} onChange={(e) => setNote(e.target.value)} />}</Field>
           </div>
         )}
       </Dialog>

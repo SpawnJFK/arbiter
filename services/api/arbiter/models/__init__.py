@@ -14,6 +14,7 @@ from arbiter.models.agency import (
 from arbiter.models.assets import Glossary, StyleCard, Term, TermQuestion, TmEntry
 from arbiter.models.common import new_id, utcnow
 from arbiter.models.content import FileAsset, Job, Project, Segment
+from arbiter.models.i18n import UiLocale, UiMessage
 from arbiter.models.integrations import IdempotencyRecord, Webhook, WebhookDelivery, WorkItem
 from arbiter.models.money import Invoice, LedgerEntry, Payout, Quote, UsageRecord
 from arbiter.models.provenance import ProvenanceEvent
@@ -76,6 +77,8 @@ __all__ = [
     "TestAttempt",
     "Threshold",
     "TmEntry",
+    "UiLocale",
+    "UiMessage",
     "UsageRecord",
     "User",
     "Webhook",

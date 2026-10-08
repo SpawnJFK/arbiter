@@ -1,5 +1,7 @@
 "use client";
 
+import { k } from "@/lib/i18n/core";
+import { useI18n } from "@/lib/i18n/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -10,13 +12,14 @@ import { IS_MOCK } from "@/lib/config";
 import { startSession } from "@/lib/session-client";
 
 const DEMO = [
-  { email: "pm@demo.test", label: "PM" },
-  { email: "client@demo.test", label: "Client" },
-  { email: "reviewer@demo.test", label: "Reviewer" },
-  { email: "admin@demo.test", label: "Admin" },
+  { email: "pm@demo.test", label: k("login.loginForm.pm") },
+  { email: "client@demo.test", label: k("login.loginForm.client") },
+  { email: "reviewer@demo.test", label: k("login.loginForm.reviewer") },
+  { email: "admin@demo.test", label: k("login.loginForm.admin") },
 ];
 
 export function LoginForm() {
+  const { t } = useI18n();
   const router = useRouter();
   const params = useSearchParams();
   const [email, setEmail] = useState("");
@@ -46,12 +49,12 @@ export function LoginForm() {
       }}
     >
       {error && <Callout tone="danger">{error}</Callout>}
-      <Field label="Email">
+      <Field label={t("login.loginForm.email")}>
         {(id) => (
           <Input id={id} type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         )}
       </Field>
-      <Field label="Password">
+      <Field label={t("login.loginForm.password")}>
         {(id) => (
           <Input
             id={id}
@@ -64,15 +67,15 @@ export function LoginForm() {
         )}
       </Field>
       <Button type="submit" variant="primary" className="w-full" loading={busy}>
-        Sign in
+        {t("login.loginForm.signIn")}
       </Button>
       {IS_MOCK && (
         <div className="border-t border-border pt-4">
-          <p className="mb-2 text-[12.5px] text-muted">Demo mode: sign in as</p>
+          <p className="mb-2 text-[12.5px] text-muted">{t("login.loginForm.demoModeSignInAs")}</p>
           <div className="grid grid-cols-4 gap-1.5">
             {DEMO.map((d) => (
               <Button key={d.email} size="sm" disabled={busy} onClick={() => void login(d.email, "demo")}>
-                {d.label}
+                {t(d.label)}
               </Button>
             ))}
           </div>

@@ -1,20 +1,25 @@
+import { getI18n } from "@/lib/i18n/server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { AuthCard } from "@/components/auth-card";
 import { LoginForm } from "./login-form";
 
-export const metadata: Metadata = { title: "Sign in" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t("login.signIn") };
+}
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const { t } = await getI18n();
   return (
     <AuthCard
-      title="Sign in"
-      description="Customers, reviewers and operators all sign in here."
+      title={t("login.signIn")}
+      description={t("login.customersReviewersAndOperatorsAll")}
       footer={
         <>
-          New company? <Link href="/register" className="font-medium text-accent hover:underline">Create an account</Link> ·{" "}
-          <Link href="/reviewers/apply" className="font-medium text-accent hover:underline">Apply as a reviewer</Link>
+          {t("login.newCompany")} <Link href="/register" className="font-medium text-accent hover:underline">{t("login.createAnAccount")}</Link> ·{" "}
+          <Link href="/reviewers/apply" className="font-medium text-accent hover:underline">{t("login.applyAsAReviewer")}</Link>
         </>
       }
     >

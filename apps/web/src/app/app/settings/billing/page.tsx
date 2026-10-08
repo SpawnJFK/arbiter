@@ -1,8 +1,12 @@
+import { getI18n } from "@/lib/i18n/server";
 import type { Metadata } from "next";
 import { withAuth } from "@/lib/server-api";
 import { Billing } from "./billing";
 
-export const metadata: Metadata = { title: "Usage & invoices" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t("app.settings.billing.metaTitle") };
+}
 
 export default async function BillingPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
   const { period: p } = await searchParams;

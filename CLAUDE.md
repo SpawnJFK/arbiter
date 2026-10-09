@@ -41,7 +41,7 @@ apps/web/e2e/        real-flow.mjs (npm run e2e, browser test against a real API
 deploy/              compose, Caddy, backup.sh, Hetzner guide
 ```
 
-System design: `docs/DESIGN.md`. Decisions: `docs/decisions.md`. API: `docs/api-contract.md`.
+System design: `docs/DESIGN.md`. Decisions: `docs/decisions.md`. API: `docs/api-contract.md`. Acceptance journeys and integration checkpoints: `ACCEPTANCE.md`. Project manifest (runtimes, commands, tools): `hyperpower.json`. Cursor: `.cursor/rules/arbiter-laws.mdc` (always on), `.cursor/mcp.json` (Context7, hosted HTTP), commands `/status` and `/end` (also in `.claude/commands/`).
 
 ## Commands
 

@@ -1,0 +1,37 @@
+{
+  "$comment": "Project manifest for the hyperpower workflow. All project-specific values live here, never in shared tooling.",
+  "project": "arbiter",
+  "repo": "SpawnJFK/arbiter",
+  "capabilities": ["api", "web", "ai", "infra"],
+  "runtimes": {
+    "python": "3.13",
+    "node": "22",
+    "postgres": "16",
+    "upgrade_window": "Node 26 becomes Active LTS on 2026-10-28; move web to 26 in the first phase after that date, not mid-phase"
+  },
+  "phases": { "dir": "docs/phases", "current": "phase-0" },
+  "memory": {
+    "canonical": ["memory-bank/activeContext.md", "memory-bank/progress.md", "docs/decisions.md"],
+    "contracts": ["docs/api-contract.md", "services/api/arbiter/contracts.py"]
+  },
+  "acceptance": "ACCEPTANCE.md",
+  "commands": {
+    "lint": "make lint",
+    "test": "make test",
+    "e2e": "cd apps/web && npm run e2e",
+    "i18n_check": "cd apps/web && npm run i18n:check",
+    "session_close": ".claude/commands/end.md"
+  },
+  "mcp": { "context7": "hosted HTTP, .cursor/mcp.json" },
+  "tools": {
+    "beads": "pending: install when the hyperpower v2 core is vendored",
+    "graphify": "pending: install when the hyperpower v2 core is vendored",
+    "hindsight": "off"
+  },
+  "storage": {
+    "repo_root": ".",
+    "runtime_files": "services/api/var/ (gitignored)",
+    "big_artifacts": "never in git; screenshots under apps/web/screenshots only"
+  },
+  "human_only": ["provider API keys", "Hetzner account + server", "DNS records", "payout provider account", "legal and tax review before public launch"]
+}

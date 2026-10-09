@@ -16,13 +16,20 @@ Previous session (docs only, no code changes):
 - `docs/decisions.md` D-016..D-044 added.
 - README, CLAUDE.md architecture map, ROADMAP status, phase checklists, `.env.example` (new settings: CORS origins, seller country, VAT rate, 32-char JWT secret, web API_URL / mock flag).
 
-## Open items found while documenting
+## Open items found while documenting (1, 2, 3 and 6 resolved on 2026-10-09)
 1. `deploy/docker-compose.yml` does not pass `ARBITER_CORS_ORIGINS`, `ARBITER_SELLER_COUNTRY`, `ARBITER_VAT_RATE`, and the web service has no `API_URL` (should be `http://api:8000`). `ARBITER_JWT_SECRET` must now be at least 32 characters.
 2. `apps/web` now has its own `Dockerfile`; compose and CI still build the web image from `deploy/web.Dockerfile`. Pick one and remove the other.
 3. No automated test that `alembic upgrade head` equals `metadata.create_all` (D-037 relies on it). It was checked by hand with a scratch DB for 0002 and 0003.
 4. Payouts in prod only accrue: no payout provider integration.
 5. Context7 was not used while building; library calls were not checked against current docs.
 6. The web E2E script's assistant prompt uses fictional company names; keep any agency-like name in fixtures clearly fictional.
+
+## Session 2026-10-09
+- Repo pushed to github.com/SpawnJFK/arbiter (private, main). GitHub Actions green on first run: api (ruff + pytest), web (lint + tsc + build), docker build api + web, compose config.
+- Compose passes CORS / seller country / VAT rate, web gets API_URL=http://api:8000; single web Dockerfile (apps/web/Dockerfile).
+- Automated D-037 check: tests/db/test_db_migrations_match.py builds two scratch DBs (alembic head vs create_all) and compares them.
+- Cursor layer: .cursor/rules/arbiter-laws.mdc, .cursor/mcp.json (Context7 hosted HTTP), /status and /end commands, ACCEPTANCE.md (J-01..J-09 automated, INT-01..INT-06 open), hyperpower.json manifest, .nvmrc 22, .python-version 3.13.
+- Beads and Graphify are not installed yet: they arrive with the hyperpower v2 core.
 
 ## Next steps (in order)
 1. Fix open items 1-3 (small, infra). Web: send the UI `locale` to the assistant, load `/v1/i18n/messages/{locale}` with English fallback, admin screen for locales and imports.

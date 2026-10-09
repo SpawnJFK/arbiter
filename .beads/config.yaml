@@ -1,0 +1,17 @@
+# Beads configuration for Arbiter.
+# The work graph travels between machines as the git-tracked .beads/issues.jsonl.
+# The local Dolt store is per machine and gitignored (.beads/.gitignore).
+# Settings can be overridden with BD_* environment variables or flags.
+
+# Issue ids look like arbiter-abc.
+issue-prefix: "arbiter"
+
+# sync.remote is intentionally unset. A Dolt remote that is never verified as populated
+# fails silently; the git-tracked JSONL export is the transport instead (D-047).
+
+# Write .beads/issues.jsonl on every change; read it on bootstrap of a fresh clone.
+export:
+    auto: true
+    path: issues.jsonl
+import:
+    path: issues.jsonl

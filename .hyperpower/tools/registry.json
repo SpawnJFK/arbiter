@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "updatedUtc": "2026-10-06T16:00:00.000Z",
+  "tools": [
+    {
+      "name": "graphify",
+      "purpose": "Local AST structural code graph (graphify CLI, code-only extract)",
+      "required": true,
+      "licence": "Apache-2.0/MIT",
+      "commercialUsePermitted": true,
+      "pinnedVersion": "0.9.28",
+      "pypiDistribution": "graphifyy",
+      "cliCommand": "graphify",
+      "package": "graphifyy==0.9.28",
+      "maintainer": "Graphify-Labs",
+      "repository": "https://github.com/Graphify-Labs/graphify",
+      "homepage": "https://github.com/Graphify-Labs/graphify",
+      "source": "https://pypi.org/project/graphifyy/0.9.28/",
+      "sha256": "F9D336E7C17818D9B76A790E6F503E16387A4729E567F5D12A63CCCA18E8818B",
+      "installPath": ".hyperpower/tools/bin/graphify.exe",
+      "installNotes": "pip install graphifyy==0.9.28 into .hyperpower/tools/graphify-venv; copy Scripts/graphify.exe to bin/. Hooks resolve via scripts/githook-locate-graphify.sh.",
+      "exitPlan": "Remove venv + graphify.exe; drop graphify-out/ from manifest workflow; remove from hyperpower.json required tools."
+    },
+    {
+      "name": "osv-scanner",
+      "purpose": "Dependency vulnerability scanning (OSV database)",
+      "required": true,
+      "licence": "Apache-2.0",
+      "commercialUsePermitted": true,
+      "pinnedVersion": "2.6.0",
+      "sha256": "E0ED7644118B717B028C249EE9D3515024E55E8510747CA08906EB96765354D6",
+      "installPath": ".hyperpower/tools/bin/osv-scanner.exe",
+      "exitPlan": "Remove binary, delete npm/osv wrapper scripts, drop from hyperpower.json required tools."
+    },
+    {
+      "name": "beads",
+      "purpose": "Distributed graph issue tracker for agent work state (bd CLI)",
+      "required": true,
+      "licence": "MIT",
+      "commercialUsePermitted": true,
+      "pinnedVersion": "1.3.1",
+      "sha256": "AC5B60114E5E7EF9DE8878B45FC35941937341D3447366C99BC91C81557BE7A4",
+      "installPath": ".hyperpower/tools/bin/bd.exe",
+      "exitPlan": "Remove bd.exe, delete .beads/ if migrating away, drop from hyperpower.json required tools."
+    },
+    {
+      "name": "betterleaks",
+      "purpose": "Secret detection in files and git history",
+      "required": true,
+      "licence": "MIT",
+      "commercialUsePermitted": true,
+      "pinnedVersion": "1.9.0",
+      "sha256": "41A3DC5E75712D52D25AA7203B0B6BC2FA9C796FE5109D3835C60226A9A69352",
+      "installPath": ".hyperpower/tools/bin/betterleaks.exe",
+      "exitPlan": "Remove binary and registry entry; rely on CI secret scan only if replaced."
+    }
+  ]
+}

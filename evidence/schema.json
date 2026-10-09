@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Arbiter evidence ledger record (written by npm run hp -- evidence append)",
+  "type": "object",
+  "required": [
+    "id",
+    "claim",
+    "tier",
+    "verifier",
+    "artifact",
+    "sha256",
+    "commit",
+    "observedUtc",
+    "status"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^EV-[0-9a-f]{8}$",
+      "description": "EV- plus first 8 hex chars of sha256(claim + artifact bytes)"
+    },
+    "claim": {
+      "type": "string"
+    },
+    "tier": {
+      "type": "string",
+      "enum": [
+        "self-hashed",
+        "replayable",
+        "attested"
+      ]
+    },
+    "verifier": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "http",
+            "playwright",
+            "sql",
+            "cli",
+            "commit-exists",
+            "ci-run",
+            "manual"
+          ]
+        },
+        "command": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "artifact": {
+      "type": "string",
+      "description": "Repo-relative path to evidence file"
+    },
+    "sha256": {
+      "type": "string",
+      "description": "SHA-256 hex of artifact file contents"
+    },
+    "commit": {
+      "type": "string"
+    },
+    "observedUtc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "VERIFIED",
+        "DEFERRED",
+        "BROKEN"
+      ]
+    },
+    "supersedes": {
+      "type": "string",
+      "pattern": "^EV-[0-9a-f]{8}$",
+      "description": "Id of an earlier record this one replaces; the ledger is append-only"
+    }
+  },
+  "additionalProperties": false
+}

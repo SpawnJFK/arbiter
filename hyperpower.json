@@ -1,37 +1,305 @@
 {
-  "$comment": "Project manifest for the hyperpower workflow. All project-specific values live here, never in shared tooling.",
+  "schemaVersion": 2,
   "project": "arbiter",
-  "repo": "SpawnJFK/arbiter",
-  "capabilities": ["api", "web", "ai", "infra"],
-  "runtimes": {
-    "python": "3.13",
-    "node": "22",
-    "postgres": "16",
-    "upgrade_window": "Node 26 becomes Active LTS on 2026-10-28; move web to 26 in the first phase after that date, not mid-phase"
+  "displayName": "Arbiter",
+  "displayNameNote": "working name; the product name is not final",
+  "domain": null,
+  "domainNote": "not chosen yet; the owner picks it in P02 (staging) and P04 (production)",
+  "owner": "Djordje Radulovic",
+  "commercial": true,
+  "commercialNote": "paid SaaS sold globally (per-word service tiers, Agency OS), so no noncommercial-licensed tool may be used",
+  "mode": {
+    "operating": "manual",
+    "relayEnabled": false
   },
-  "phases": { "dir": "docs/phases", "current": "phase-0" },
-  "memory": {
-    "canonical": ["memory-bank/activeContext.md", "memory-bank/progress.md", "docs/decisions.md"],
-    "contracts": ["docs/api-contract.md", "services/api/arbiter/contracts.py"]
+  "repo": {
+    "remote": "SpawnJFK/arbiter",
+    "defaultBranch": "main",
+    "productionBranch": "main",
+    "topology": "single-repo",
+    "topologyNote": "one git repo holding a monorepo: services/api (Python 3.13, FastAPI) and apps/web (Next.js 16). The root package.json only carries the control plane and the cross-platform ship check; no npm workspaces."
   },
-  "acceptance": "ACCEPTANCE.md",
-  "commands": {
-    "lint": "make lint",
-    "test": "make test",
-    "e2e": "cd apps/web && npm run e2e",
-    "i18n_check": "cd apps/web && npm run i18n:check",
-    "session_close": ".claude/commands/end.md"
+  "runtime": {
+    "node": {
+      "major": 24,
+      "pinnedBy": ".node-version",
+      "upgradeWindow": "2026-11-15",
+      "upgradeTo": 26,
+      "note": "the owner's machine has fnm with 24 as default. Move to 26 in the first phase that starts after the upgrade window, never mid-phase."
+    },
+    "python": {
+      "version": "3.13",
+      "pinnedBy": ".python-version",
+      "manager": "uv",
+      "venv": "services/api/.venv",
+      "note": "doctor checks only Node; npm run check:runtime (first step of npm run verify) checks the venv Python against .python-version"
+    },
+    "postgres": {
+      "major": 16,
+      "extensions": [
+        "vector",
+        "pg_trgm"
+      ],
+      "local": "docker compose -f deploy/docker-compose.dev.yml (pgvector/pgvector:pg16), databases arbiter and arbiter_test"
+    },
+    "packageManager": "npm",
+    "devPort": 3000,
+    "devPorts": {
+      "api": 8000,
+      "web": 3000
+    }
   },
-  "mcp": { "context7": "hosted HTTP, .cursor/mcp.json" },
+  "storagePolicy": {
+    "current": "/home/claude/arbiter",
+    "intendedRepoRoot": "E:/arbiter",
+    "cacheRoot": "E:/.caches",
+    "artifactRoot": "E:/.artifacts",
+    "status": "PENDING_MOVE_P00",
+    "reason": "The owner's C: drive is nearly full. Repo, npm and uv caches, Python installs, Playwright browsers, Docker data, Graphify output and measurement artifacts all live on E:.",
+    "doctorBehaviour": "warn until P00 records the real path, then fail on drift",
+    "currentNote": "Path of the cloud build session. P00 replaces it with the real Windows path after the clone."
+  },
+  "locales": {
+    "public": "en",
+    "admin": "en",
+    "code": "en",
+    "supported": [
+      "en"
+    ],
+    "rtl": [],
+    "note": "English-first product (D-045). More UI locales are added without a deploy by exporting the English catalog and importing translations (JSON, CSV, XLIFF) into the database (D-046); they fall back to English. The Serbian content in the repo is measurement and test data only."
+  },
+  "capabilities": [
+    "web",
+    "api",
+    "ai-runtime"
+  ],
+  "excluded": [
+    "mobile-native",
+    "pwa",
+    "desktop",
+    "payments",
+    "email",
+    "analytics",
+    "cms",
+    "relay-bridge"
+  ],
+  "excludedNote": "payments leaves the excluded list in P03 (payment and payout providers). email is not built: nothing sends mail today.",
   "tools": {
-    "beads": "pending: install when the hyperpower v2 core is vendored",
-    "graphify": "pending: install when the hyperpower v2 core is vendored",
-    "hindsight": "off"
+    "required": [
+      "graphify",
+      "beads",
+      "osv",
+      "betterleaks"
+    ],
+    "requiredOutsideRegistry": [
+      {
+        "name": "playwright",
+        "where": "apps/web/node_modules/@playwright/test, used by apps/web/e2e/real-flow.mjs",
+        "proof": "npm run verify:e2e"
+      },
+      {
+        "name": "impeccable",
+        "where": ".cursor/skills/impeccable (launcher; engine downloaded with SHA256 sidecar check into IMPECCABLE_HOME)",
+        "proof": "P00 item 13, a real Cursor edit through the preToolUse hook"
+      }
+    ],
+    "requiredNote": "core 1.0.0 status looks for playwright and impeccable at the repo root (node_modules), which a monorepo does not have, so they are listed outside tools.required to keep status honest",
+    "optional": [
+      "hindsight",
+      "headroom"
+    ],
+    "forbidden": [
+      {
+        "name": "gitnexus",
+        "reason": "PolyForm Noncommercial 1.0.0, and this project is commercial"
+      }
+    ],
+    "mcp": {
+      "frozenPerPhase": true,
+      "set": [
+        {
+          "name": "context7",
+          "form": "hosted-http",
+          "url": "https://mcp.context7.com/mcp",
+          "auth": "CONTEXT7_API_KEY header",
+          "required": true
+        },
+        {
+          "name": "github",
+          "form": "hosted-http",
+          "url": "https://api.githubcopilot.com/mcp/",
+          "auth": "fine-grained token in the Authorization header",
+          "required": false,
+          "note": "only when a phase needs it; the gh CLI covers most GitHub work"
+        }
+      ],
+      "template": ".cursor/mcp.json.example",
+      "note": "Hosted HTTP forms only. The npx/stdio forms failed on two earlier projects with errors that looked like bad keys. .cursor/mcp.json is gitignored."
+    }
   },
-  "storage": {
-    "repo_root": ".",
-    "runtime_files": "services/api/var/ (gitignored)",
-    "big_artifacts": "never in git; screenshots under apps/web/screenshots only"
+  "canonicalTruth": {
+    "versioned": true,
+    "files": [
+      "CLAUDE.md",
+      "AGENTS.md",
+      "HYPERPOWER.md",
+      "PRODUCT.md",
+      "SECURITY.md",
+      "ACCEPTANCE.md",
+      "README.md",
+      "ROADMAP.md",
+      "hyperpower.json",
+      ".env.example",
+      ".node-version",
+      ".python-version",
+      "docs/decisions.md",
+      "docs/api-contract.md",
+      "docs/DESIGN.md",
+      "services/api/arbiter/contracts.py"
+    ],
+    "dirs": [
+      "memory-bank/",
+      "phases/",
+      "evidence/",
+      ".githooks/",
+      ".beads/",
+      ".cursor/rules/",
+      ".cursor/commands/",
+      ".cursor/agents/",
+      ".cursor/skills/",
+      ".claude/commands/",
+      "docs/runbooks/"
+    ],
+    "note": "Hooks and the Beads export are project truth and are tracked. Local tool binaries, .cursor/mcp.json, env files and graphify-out/ are not."
   },
-  "human_only": ["provider API keys", "Hetzner account + server", "DNS records", "payout provider account", "legal and tax review before public launch"]
+  "gates": {
+    "evidenceTier": {
+      "phase": "replayable",
+      "verticalSlice": "attested",
+      "launch": "attested"
+    },
+    "shipScript": "verify",
+    "note": "Core 1.0.0 refuses to write attested records (no CI signer yet). Every phase uses gateKind phase, so replayable is the bar. Attested is declared for when CI build provenance exists. The gate runs `npm run verify` with a 900 s limit; e2e is separate (npm run verify:e2e) and enters a gate through ledger records."
+  },
+  "spend": {
+    "currency": "EUR",
+    "monthlyRecurring": 0,
+    "items": [],
+    "planned": [
+      {
+        "what": "Provider API usage for the measurement (Anthropic, DeepL and/or Google, optional OpenAI)",
+        "phase": "P01",
+        "ceiling": "the budget the owner names with apply (suggested 50 EUR for the phase)",
+        "recurring": false
+      },
+      {
+        "what": "Hetzner Cloud server (CX32 or CPX31 class) and Hetzner Object Storage for backups",
+        "phase": "P02",
+        "ceiling": "25 EUR per month combined; exact prices read from the Hetzner API and written here before creation",
+        "recurring": true
+      }
+    ],
+    "note": "Nothing is paid today. A planned item moves to items with its exact monthly price when it is created."
+  },
+  "shipped": {
+    "status": "nothing deployed",
+    "staging": {
+      "status": "not deployed",
+      "plannedPhase": "P02",
+      "appUrl": null,
+      "apiUrl": null,
+      "server": null,
+      "deploy": "planned: GitHub Action on push to main after CI, SSH with a forced-command key that only runs deploy/deploy.sh",
+      "verifyDeployed": "npm run verify:deployed reads apiUrl/healthz commit and compares it with HEAD (healthz gets commit in P02)"
+    },
+    "production": {
+      "status": "not deployed",
+      "plannedPhase": "P04"
+    }
+  },
+  "phases": {
+    "P00": {
+      "slug": "install-and-verify-windows",
+      "file": "phases/phase-00-install-and-verify.md",
+      "bead": "to be created in P00",
+      "beadId": "",
+      "gateKind": "phase",
+      "evidenceIds": [],
+      "status": "next"
+    },
+    "P01": {
+      "slug": "measurement-harness",
+      "file": "phases/phase-01-measurement-harness.md",
+      "bead": "to be created in P00",
+      "beadId": "",
+      "gateKind": "phase",
+      "evidenceIds": [],
+      "status": "planned"
+    },
+    "P02": {
+      "slug": "staging-deploy-hetzner",
+      "file": "phases/phase-02-staging-deploy.md",
+      "bead": "to be created in P00",
+      "beadId": "",
+      "gateKind": "phase",
+      "evidenceIds": [],
+      "status": "planned"
+    },
+    "P03": {
+      "slug": "money-and-legal-readiness",
+      "file": "phases/phase-03-money-and-legal.md",
+      "bead": "to be created in P00",
+      "beadId": "",
+      "gateKind": "phase",
+      "evidenceIds": [],
+      "status": "planned"
+    },
+    "P04": {
+      "slug": "self-serve-launch",
+      "file": "phases/phase-04-self-serve-launch.md",
+      "bead": "to be created in P00",
+      "beadId": "",
+      "gateKind": "phase",
+      "evidenceIds": [],
+      "status": "planned"
+    },
+    "P05": {
+      "slug": "integrations",
+      "file": "phases/phase-05-integrations.md",
+      "bead": "to be created in P00",
+      "beadId": "",
+      "gateKind": "phase",
+      "evidenceIds": [],
+      "status": "planned"
+    },
+    "P06": {
+      "slug": "okapi-formats",
+      "file": "phases/phase-06-okapi-formats.md",
+      "bead": "to be created in P00",
+      "beadId": "",
+      "gateKind": "phase",
+      "evidenceIds": [],
+      "status": "planned"
+    },
+    "P07": {
+      "slug": "enterprise",
+      "file": "phases/phase-07-enterprise.md",
+      "bead": "to be created in P00",
+      "beadId": "",
+      "gateKind": "phase",
+      "evidenceIds": [],
+      "status": "planned"
+    },
+    "P08": {
+      "slug": "white-label",
+      "file": "phases/phase-08-white-label.md",
+      "bead": "to be created in P00",
+      "beadId": "",
+      "gateKind": "phase",
+      "evidenceIds": [],
+      "status": "planned"
+    }
+  },
+  "phasesNote": "Order is frozen (phases/README.md). P00 fills each beadId; each phase appends its evidence record ids before running the gate."
 }

@@ -1,38 +1,41 @@
 # Active context
 
-Last updated: 2026-10-08. Phase position: **P0 Measurement harness, foundation complete; measurement not started** (docs/phases/phase-0.md: foundation 10/10, measurement 0/5, ops 0/2). Several P1 and P2 product items are already built (see progress.md); their exit criteria are not met because nothing has run in production.
+Last updated: 2026-10-09. Phase position: **P00 next, item 1 of 18** (`phases/phase-00-install-and-verify.md`). HYPERPOWER v2 is installed in the repo (uncommitted at the end of the install session; the owner commits). Nothing in the HYPERPOWER layer is proven on the owner's Windows machine yet.
 
-## Where things stand
-The whole system is built and tested locally: file formats, linguistic assets, engines, QE + senate, pipeline and worker, reviewer community, billing, API (~100 endpoints), Agency OS (CRM, price lists, workflow templates, dashboards, AI setup assistant) and the web app with an end-to-end browser test. 432 backend tests. Everything runs on mock providers by default; no real provider key has been used and no measurement exists.
+Next gate: `npm run hp -- gate P00 --product`.
 
-Session 2026-10-08 (backend, English-first, D-045 / D-046):
-- Assistant: `locale` on POST /assistant/threads/{id}/messages; prompt version 2026-10-08.1; built-in planner output is English only (Serbian still parsed), note for other locales.
-- UI string store: `ui_locales` / `ui_messages` (migration 0003_ui_i18n, hand-written; alembic == create_all verified on a scratch DB), public `GET /v1/i18n/locales`, `GET /v1/i18n/messages/{locale}`, admin `PUT/DELETE /v1/admin/i18n/...` with merge/replace and ICU placeholder checks.
-- `docs/api-contract.md` changed (assistant `locale`, new "UI string localization" section): the web app must send `locale` and load translations from `/v1/i18n`.
-- 439 backend tests green, ruff clean.
+## Session 2026-10-09 (HYPERPOWER v2 install, Linux cloud session)
 
-Previous session (docs only, no code changes):
-- `docs/api-contract.md` rewritten to match `services/api/arbiter/api/routes/*.py` (roles per endpoint, error codes, idempotency scope, score scales, Agency OS shapes, DELETE semantics).
-- `docs/decisions.md` D-016..D-044 added.
-- README, CLAUDE.md architecture map, ROADMAP status, phase checklists, `.env.example` (new settings: CORS origins, seller country, VAT rate, 32-char JWT secret, web API_URL / mock flag).
+What changed:
+- `.hyperpower/core/` copied byte for byte from the HYPERPOWER v2 pilot (core 1.0.0, 14 files, `core.lock.json` unchanged; doctor reports no drift), plus `schemas/`, the tool registry (bd 1.3.1, OSV-Scanner 2.6.0, Betterleaks 1.9.0, Graphify 0.9.28 with SHA256 and licences) and a fresh `state/phase-sync.json` (D-047).
+- `hyperpower.json` rewritten to schema 2 (runtime Node 24 + Python 3.13 + Postgres 16, storage policy on E:, MCP set context7 required and github optional, phases P00..P08 with empty bead ids, spend 0 EUR with planned items for P01 and P02).
+- Plan moved from `docs/phases/` to root `phases/` and renumbered P00..P08 (D-048); `docs/phases/` removed; ROADMAP.md, README, docs and the tenancy docstring point to the new numbers.
+- `ACCEPTANCE.md` rewritten in the journey format: J-01..J-09 with `cli` verifiers through `scripts/verify-e2e.mjs`, INT-01..INT-06 with phase and verifier.
+- Root `package.json` (no workspaces): `hp`, `verify` (= `check:runtime` + `verify:api` + `verify:web`), `verify:e2e`, `verify:deployed`. Scripts in `scripts/`: run-api-checks, run-web-checks, check-runtime, verify-e2e, verify-deployed-version, run-sql-verifier (psycopg in the API venv), cursor-shell-guard, githook-pre-commit, graphify and beads pre-push hooks, githook-locate-node/graphify, impeccable-pre-edit-hook (not wired).
+- `.cursor/`: one always-on law file `rules/standing-rules.mdc` (old `arbiter-laws.mdc` merged and removed), `security.mdc`, `design.mdc`; commands start, next, status, resume, plan, end (`.claude/commands/end.md` identical); agents gate-reviewer, design-reviewer, security-reviewer; skills rigor, graphiphy (Arbiter tokens), impeccable (engine not vendored), audit, polish, design-taste-frontend; `hooks.json` with the shell guard only; `mcp.json.example`.
+- `.cursor/mcp.json` untracked and gitignored (D-050): pulling this commit deletes the owner's local copy; P00 item 16 writes the new one with the Context7 key.
+- Node pin 22 -> 24 (`.node-version` replaces `.nvmrc`; CI web job and `apps/web/Dockerfile` follow; D-049).
+- `.githooks/` (pre-commit, pre-push), `.beads/` skeleton (empty `issues.jsonl`), `evidence/` (ledger + schema), `.graphifyignore`, `docs/runbooks/bootstrap-fresh-clone.md`, `HYPERPOWER.md`, `PRODUCT.md`, `SECURITY.md` agent section, `CLAUDE.md` in the law style with the startup order and session close through `npm run hp -- end`.
+- One em dash removed from a docstring in `services/api/arbiter/models/integrations.py`. No API or contract change: `docs/api-contract.md` and `contracts.py` are unchanged.
 
-## Open items found while documenting (1, 2, 3 and 6 resolved on 2026-10-09)
-1. `deploy/docker-compose.yml` does not pass `ARBITER_CORS_ORIGINS`, `ARBITER_SELLER_COUNTRY`, `ARBITER_VAT_RATE`, and the web service has no `API_URL` (should be `http://api:8000`). `ARBITER_JWT_SECRET` must now be at least 32 characters.
-2. `apps/web` now has its own `Dockerfile`; compose and CI still build the web image from `deploy/web.Dockerfile`. Pick one and remove the other.
-3. No automated test that `alembic upgrade head` equals `metadata.create_all` (D-037 relies on it). It was checked by hand with a scratch DB for 0002 and 0003.
-4. Payouts in prod only accrue: no payout provider integration.
-5. Context7 was not used while building; library calls were not checked against current docs.
-6. The web E2E script's assistant prompt uses fictional company names; keep any agency-like name in fixtures clearly fictional.
+Verified in the cloud session (Linux, Node 24.21 from npm, Python 3.13):
+- VERIFIED `npm run verify` exit 0 in 2m23s (ruff clean, 441 pytest passed, web lint + i18n:check, tsc, build). `make lint` exit 0.
+- VERIFIED evidence record **EV-c769e975** (API ship check, `cli` `node scripts/run-api-checks.mjs`), replayed with `npm run hp -- verify` = VERIFIED. It is a baseline, not assigned to a phase.
+- VERIFIED `npm run verify:e2e` against a local stack: `J-01 PASS` .. `J-09 PASS`, `E2E JOURNEYS J-01..J-09 PASS` (not written to the ledger: its replay needs a running stack; P00 records it on Windows).
+- VERIFIED git hooks through a real `git commit` and `git push` in a throwaway clone: pre-commit printed `[ruff]`, `[i18n]`, `[env]`, `[dash]` warnings and exited 0; pre-push printed the graphify and beads skip lines (tools not installed) and exited 0.
+- VERIFIED core zero-project-strings grep; core identical to the pilot; doctor core integrity clean; shell guard denies reset --hard, force push, curl|sh, literal tokens, unreadable payloads, allows `git status` (by script, not yet through Cursor).
+- Doctor on Linux: runtime pin VERIFIED, storage policy WARNING (expected until P00), graphify guard BROKEN (no `graphify.exe`, expected until P00 item 12). `beads health` exits 1 (bd not installed, expected until P00 item 11).
 
-## Session 2026-10-09
-- Repo pushed to github.com/SpawnJFK/arbiter (private, main). GitHub Actions green on first run: api (ruff + pytest), web (lint + tsc + build), docker build api + web, compose config.
-- Compose passes CORS / seller country / VAT rate, web gets API_URL=http://api:8000; single web Dockerfile (apps/web/Dockerfile).
-- Automated D-037 check: tests/db/test_db_migrations_match.py builds two scratch DBs (alembic head vs create_all) and compares them.
-- Cursor layer: .cursor/rules/arbiter-laws.mdc, .cursor/mcp.json (Context7 hosted HTTP), /status and /end commands, ACCEPTANCE.md (J-01..J-09 automated, INT-01..INT-06 open), hyperpower.json manifest, .nvmrc 22, .python-version 3.13.
-- Beads and Graphify are not installed yet: they arrive with the hyperpower v2 core.
+DEFERRED to P00: everything Windows (paths, fnm, uv, Docker Desktop), tool installs, Cursor hook proof, Impeccable engine and its hook, Betterleaks flag check, Beads init and phase beads, Graphify index, Context7 key and convention re-check, journey records.
+
+## Open items carried forward
+1. Context7 was not used while building; P00 item 16 re-checks the conventions.
+2. Payouts in prod only accrue: no payout provider integration (P03).
+3. `/healthz` has no `commit` yet; `npm run verify:deployed` needs it (P02 item 6).
+4. `apps/web/e2e/ensure_reviewer.py` writes to a local database; running e2e against staging needs a remote path (P02 item 11).
+5. Core `status` cannot see Playwright and Impeccable in a monorepo; they are listed under `tools.requiredOutsideRegistry` instead of being patched into the core.
 
 ## Next steps (in order)
-1. Fix open items 1-3 (small, infra). Web: send the UI `locale` to the assistant, load `/v1/i18n/messages/{locale}` with English fallback, admin screen for locales and imports.
-2. P0 measurement: get real provider keys from the owner, assemble the EN to SR reference set with human MQM labels, write the harness script, run threshold sweeps, record numbers.
-3. Staging deploy on Hetzner per deploy/README.md, backups in cron, one restore drill.
-4. Then P1 gaps: payment provider, real payout provider, legal and tax review, error tracking.
+1. Owner reviews and commits the install (one commit is fine; message without employer or agency names).
+2. P00 on Windows, item 1 onward: clone to `E:\arbiter`, runtimes, Docker Postgres, `npm run verify`, stack + `npm run verify:e2e`, tools from the registry, Beads, Graphify, Impeccable, hooks, Cursor hooks, Context7, ledger records, doctor clean, gate.
+3. Then P01 measurement (needs provider keys and the EN to SR reference set).

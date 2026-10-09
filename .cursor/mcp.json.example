@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "PASTE_CONTEXT7_KEY"
+      }
+    },
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer PASTE_GITHUB_FINE_GRAINED_TOKEN"
+      }
+    }
+  },
+  "_notes": [
+    "Copy to .cursor/mcp.json (gitignored) and fill the placeholders. Never commit real keys.",
+    "context7 (required): key from the owner's Context7 dashboard (https://context7.com/dashboard, API Keys). Keep it out of every tracked file.",
+    "github (optional): only when a phase needs GitHub through MCP; the gh CLI covers most needs. Remove the entry when not needed so the tool set stays small.",
+    "Hosted HTTP forms only. The npx/stdio forms failed on two earlier projects with errors that looked like bad keys.",
+    "Fully quit and reopen Cursor after any change; MCP servers load only at startup."
+  ]
+}

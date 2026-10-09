@@ -683,3 +683,63 @@ Date: 2026-10-08. Status: accepted.
 
 **Consequences.** The web app must fall back to the bundled English string for missing keys and must send its English catalog as `source` when importing to get placeholder checks.
 
+---
+
+## D-047 Adopt the HYPERPOWER v2 agent operating system, core vendored unchanged
+Date: 2026-10-09. Status: accepted.
+
+**Context.** Agents work this repo from zero chat history. Until now the workflow was prose (CLAUDE.md, a Cursor law file, /status and /end) plus a small manifest; nothing could replay a claim of done, nothing tracked executable work across machines, and no guard stopped destructive shell commands. The owner's HYPERPOWER v2 pilot (his EVHub v2 repository) has a working control plane: a project-agnostic, hash-locked core (`.hyperpower/core/`, version 1.0.0) driven by `hyperpower.json` schema 2, an append-only evidence ledger with replayable verifiers, a phase gate that closes a Beads issue and reads it back, soft git hooks and a Cursor shell guard.
+
+**Decision.** Copy `.hyperpower/core/` byte for byte (14 files, `core.lock.json` unchanged, doctor reports no drift) together with `schemas/` and the tool registry (bd 1.3.1, OSV-Scanner 2.6.0, Betterleaks 1.9.0, Graphify 0.9.28, each with SHA256 and licence). Everything project specific lives outside the core: `hyperpower.json`, `phases/`, `ACCEPTANCE.md`, `evidence/`, `.beads/`, `.githooks/`, `.cursor/` and the scripts the hooks and verifiers call. Monorepo adaptations are made in those scripts, never in the core: `npm run verify` chains a runtime check, the API checks (ruff, pytest in the venv) and the web checks (lint with i18n, tsc, build); verifier scripts take no arguments because the core's `cli` verifier rewrites node arguments into paths; the `sql` verifier runs through psycopg in the API venv instead of a Node driver; Playwright and Impeccable are listed under `tools.requiredOutsideRegistry` because core status only looks at the repo root. The Impeccable engine binary is not vendored (the skill's launcher downloads it with a SHA256 sidecar check), so its pre-edit hook is written but not wired until P00 installs the engine.
+
+**Rejected.**
+- *Patch the core for the monorepo* (status lookup in `apps/web/node_modules`, a Python runtime check in doctor). Breaks the hash lock and the promise that one core serves every project; the same effect is reachable from project files.
+- *Write a lighter Arbiter-only workflow.* Re-learns the pilot's failures (guards that skipped silently, phases closed by chat claims).
+- *Vendor the 14 MB Windows Impeccable binary.* Large binary in git for a tool the launcher installs verifiably.
+
+**Consequences.** Every phase closes through `npm run hp -- gate P0x --product`. Nothing in the layer is proven on the owner's Windows machine until P00. A future core release is copied whole and re-locked with a new decision entry.
+
+---
+
+## D-048 Phase plan moves to root `phases/`, renumbered P00 to P08
+Date: 2026-10-09. Status: accepted.
+
+**Context.** The plan lived in `docs/phases/phase-0..6.md` with ROADMAP numbers P0 to P6, where P0 mixed built foundation, open measurement and ops, and P1/P2 mixed built features with launch work. The HYPERPOWER format needs one file per gateable phase with Goal, Scope, Human-only steps, Declared spend, Acceptance, Exit gate, Out of scope, and an order table.
+
+**Decision.** `phases/README.md` holds the frozen order: P00 install and verify on Windows, P01 measurement harness, P02 staging deploy on Hetzner, P03 money and legal readiness, P04 self-serve launch, P05 integrations, P06 Okapi formats, P07 enterprise, P08 white-label. Everything already built is listed as built in `phases/README.md` and in the phase files' "Already built" sections, not as open scope. The README maps earlier numbers to new ones; older decision entries keep their original numbers. `docs/phases/` is removed and every live reference points to `phases/`.
+
+**Rejected.**
+- *Keep P0 to P6 and add HYPERPOWER sections to the old files.* P0 would never pass a gate: its ops items need a server that P0 has no reason to create, and its foundation items are long done.
+- *One phase for deploy plus money plus legal.* Too many human steps and too much spend under one "apply".
+
+**Consequences.** ROADMAP.md uses the new numbers. Payment provider, payout provider, legal and tax review moved earlier as one phase (P03) before the launch phase (P04).
+
+---
+
+## D-049 Node 24 pinned by `.node-version`; Python 3.13 checked by `check:runtime`
+Date: 2026-10-09. Status: accepted.
+
+**Context.** `.nvmrc` pinned Node 22 while the owner's machine runs fnm with Node 24 as default, and the HYPERPOWER doctor fails on a Node major that differs from `hyperpower.json`. Python was pinned in `.python-version` but nothing checked it.
+
+**Decision.** `.node-version` with `24` replaces `.nvmrc` (fnm reads both; one file only). `hyperpower.json` `runtime.node.major` is 24 with an upgrade window to 26 on 2026-11-15, taken at the start of a phase, never mid-phase. CI's web job reads `.node-version`, the web Docker image moves to `node:24-alpine`, root `package.json` declares `engines.node >=24 <25`. `npm run check:runtime` (first step of `npm run verify`) checks Node against `.node-version` and the API venv's Python against `.python-version`.
+
+**Rejected.**
+- *Stay on Node 22.* Doctor would report BROKEN on the owner's machine every session.
+- *Move straight to Node 26.* Not LTS on the date of this decision.
+
+**Consequences.** The web build and lint were re-run on Node 24 in the cloud session. P00 proves the pins on Windows.
+
+---
+
+## D-050 `.cursor/mcp.json` is untracked; only `.cursor/mcp.json.example` is in git
+Date: 2026-10-09. Status: accepted.
+
+**Context.** `.cursor/mcp.json` was tracked with the hosted Context7 entry and no key. Context7 works best with a key, and a key must never be committed.
+
+**Decision.** `git rm --cached .cursor/mcp.json`, gitignore it, track `.cursor/mcp.json.example` with placeholders (Context7 required, GitHub optional, hosted HTTP forms only). The agent writes the real file with the key in P00 and the owner restarts Cursor.
+
+**Rejected.**
+- *Keep the tracked file without a key.* Invites someone to add the key to a tracked file.
+- *Read the key from an environment variable in the file.* Cursor's support for env interpolation in MCP headers differs across versions; a gitignored file is predictable.
+
+**Consequences.** Pulling the commit that untracks the file deletes the owner's local copy; Context7 in Cursor is off until P00 item 16 writes the new file.

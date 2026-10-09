@@ -1,0 +1,15 @@
+---
+description: Design rule for any web UI file. Read before changing what a customer, reviewer or operator sees.
+globs: apps/web/src/app/**/*.tsx,apps/web/src/components/**/*.tsx,apps/web/src/app/globals.css,apps/web/messages/en.json
+alwaysApply: false
+---
+
+# Design
+
+- The visual source of truth is `apps/web/src/app/globals.css` (tokens, light and dark) and the primitives in `apps/web/src/components/ui/`. There is no visual `DESIGN.md` yet; `docs/DESIGN.md` is the system design. Use the `graphiphy` skill for tokens.
+- Arbiter is a work tool for three audiences: customers and PMs (`/app`), reviewers (`/reviewer`, keyboard-first cockpit), operators (`/admin`). Dense, calm, legible screens; data in tables and lists, not decorative card grids. Show only what needs a human (the Exceptions principle).
+- Every visible string through `t()` with a key in `apps/web/messages/en.json`; English is the source, other locales come from the database (D-046) and fall back to English.
+- No raw colours, no extra shadows, gradients or glow, no webfonts. Dark mode works for every new token.
+- Keyboard: every action in the reviewer cockpit has a shortcut and a visible focus state; never break existing shortcuts (`A`, `E`, `Ctrl+Enter`).
+- Server components by default; client components only where interaction needs them. TypeScript strict.
+- Before you call a UI change done: look at it at 1440 and 390 wide in light and dark, run the impeccable `detect` and the `design-taste-frontend` skill on changed files, run `npm run verify:e2e` if a flow changed, and hand it to the `design-reviewer` subagent.

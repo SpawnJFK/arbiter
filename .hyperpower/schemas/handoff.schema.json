@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HyperPower planner handoff",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "generatedUtc",
+    "project",
+    "repo",
+    "commitSha",
+    "currentPhase",
+    "buckets",
+    "changes",
+    "tests",
+    "acceptanceImpact",
+    "memoryChanges",
+    "cost",
+    "humanActionRequired"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "generatedUtc": { "type": "string" },
+    "project": { "type": "string" },
+    "repo": { "type": "object" },
+    "commitSha": { "type": "string" },
+    "deployedSha": { "type": ["string", "null"] },
+    "currentPhase": { "type": ["string", "null"] },
+    "buckets": {
+      "type": "object",
+      "properties": {
+        "VERIFIED": { "type": "array" },
+        "DEFERRED": { "type": "array" },
+        "BROKEN": { "type": "array" }
+      }
+    },
+    "changes": { "type": "array" },
+    "tests": { "type": "object" },
+    "acceptanceImpact": { "type": "string" },
+    "memoryChanges": { "type": "array" },
+    "cost": { "type": "object" },
+    "humanActionRequired": { "type": "array" }
+  }
+}

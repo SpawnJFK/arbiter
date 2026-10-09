@@ -1,0 +1,27 @@
+node_modules/
+.next/
+.venv/
+out/
+dist/
+build/
+graphify-out/
+reports/
+test-results/
+screenshots/
+var/
+.git/
+
+# index product code and the repo scripts only
+*
+!services/
+!services/api/
+!services/api/arbiter/
+!services/api/arbiter/**
+!services/api/migrations/
+!services/api/migrations/**
+!apps/
+!apps/web/
+!apps/web/src/
+!apps/web/src/**
+!scripts/
+!scripts/**

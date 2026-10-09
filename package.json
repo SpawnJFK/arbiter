@@ -1,0 +1,19 @@
+{
+  "name": "arbiter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Monorepo root for Arbiter: HYPERPOWER control plane and the cross-platform ship check. App code lives in services/api (Python) and apps/web (Next.js).",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "hp": "node .hyperpower/core/control.mjs",
+    "check:runtime": "node scripts/check-runtime.mjs",
+    "verify:api": "node scripts/run-api-checks.mjs",
+    "verify:web": "node scripts/run-web-checks.mjs",
+    "verify": "npm run check:runtime && npm run verify:api && npm run verify:web",
+    "verify:e2e": "node scripts/verify-e2e.mjs",
+    "verify:deployed": "node scripts/verify-deployed-version.mjs"
+  }
+}

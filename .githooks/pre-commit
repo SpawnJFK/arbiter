@@ -1,0 +1,27 @@
+#!/bin/sh
+# Arbiter pre-commit: soft and loud. Never blocks a commit (always exit 0).
+# Staged-file checks: ruff (API), i18n catalog (web), env files, em dashes, Betterleaks.
+set +e
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export GITHOOK_ROOT="$ROOT"
+. "$ROOT/scripts/githook-locate-node.sh"
+
+run_mjs() {
+  label=$1
+  script=$2
+  if [ ! -f "$script" ]; then
+    printf '[githook] pre-commit skipped %s: missing %s\n' "$label" "${script#"$ROOT"/}" >&2
+    return 0
+  fi
+  if [ -z "$GIT_HOOK_NODE" ]; then
+    printf '[githook] pre-commit skipped %s: node not found (fnm/.node-version); hook guards inactive\n' "$label" >&2
+    return 0
+  fi
+  "$GIT_HOOK_NODE" "$script"
+  return 0
+}
+
+run_mjs checks "$ROOT/scripts/githook-pre-commit.mjs"
+
+exit 0

@@ -1,0 +1,5 @@
+{
+  "phases": {},
+  "updatedUtc": "2026-10-09T00:00:00.000Z",
+  "note": "Fresh install for Arbiter. No phase has run a gate yet. The gate writes entries here after a Beads read-back."
+}

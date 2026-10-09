@@ -1,0 +1,32 @@
+---
+description: Arbiter standing rules, always on. The one law file for Cursor; full text in CLAUDE.md, which wins on any difference.
+alwaysApply: true
+---
+
+# Standing rules (compressed from CLAUDE.md)
+
+1. Read `CLAUDE.md`, `hyperpower.json`, `memory-bank/activeContext.md`, `memory-bank/progress.md` and the current phase file in `phases/` before any work. The repo is the source of truth, not chat history.
+2. Autonomy: you install, run, test, build, migrate, commit and push yourself. Never hand the owner a command. Human-only steps (accounts, API keys, DNS, payments, browser logins, OAuth clicks) come as numbered click paths with exact URLs and what success looks like.
+3. Before asking a human anything, try in order: repo config, env templates and code, local CLI, provider CLI, MCP, API. Read how something is configured instead of asking.
+4. Context7 before any library call (FastAPI, SQLAlchemy 2, Alembic, pydantic v2, psycopg, pgvector, Next.js 16, React 19, Tailwind 4, Playwright, provider SDKs), at the pinned version, logged in `memory-bank/context7-log.md`. Next.js 16 uses `proxy.ts`, never `middleware.ts`.
+5. Only the current phase in `phases/`, in order. A phase closes only through `npm run hp -- gate P0x --product`. State the phase position ("P01, item 3 of 7") in every report.
+6. English-first product. Every user-visible web string goes through `t()` with a key in `apps/web/messages/en.json`; `npm run i18n:check` passes. Backend user-visible strings are English.
+7. Never write the name of any employer of the owner, past or present, or of any specific translation agency, into code, docs, fixtures or commits. Competitor products may be named. Legal items are neutral ("Legal review before public launch"). Never invent customers, revenue or metrics.
+8. Keys only via `ARBITER_*` env vars, every setting listed in `.env.example` with an empty or dev-only value. Tests never call real providers.
+9. Proof is a replayable ledger record (`evidence/ledger.jsonl`). Reports use three buckets: VERIFIED (record id or command and result), DEFERRED (which phase), BROKEN (command, first error line). `npm run verify` before every push; `npm run verify:e2e` for UI or flow changes.
+10. Long operations print one newline-terminated status line every 5 % or 30 s (N/total, %, elapsed, ETA) inside the agent terminal. Never open extra console windows. One process per file.
+11. "apply" from the owner approves exactly the spend the phase file declares, nothing more, and no second confirmation.
+12. No em dashes in docs, comments, UI copy or commit messages (test fixtures and vendored skills exempt). No emoji.
+13. Structural questions go to Graphify (`graphify query "<concept>" --dfs --budget 1500`) before reading directories, once P00 has installed it.
+14. Session close per `CLAUDE.md` and `/end`: checks green, memory bank written, decisions logged, phase position stated, `npm run hp -- end`, clean tree.
+
+# Code conventions (non-negotiable, details in CLAUDE.md)
+
+- `services/api/arbiter/contracts.py` is the seam between modules; changing it is a `docs/decisions.md` entry plus every caller in the same change.
+- Money is `Decimal`, never float, serialized as decimal strings with the currency next to it.
+- States change only through `arbiter/domain/states.py`. Provenance is append-only (DB trigger); corrections are new events.
+- Tagged text model `⟦1⟧...⟦/1⟧`, `⟦2/⟧`; only `fileproc` converts to and from native formats.
+- Every customer query is scoped by `org_id`; reviewers see only the task they hold.
+- Queue work goes through `work_items` with an idempotency key, in the same transaction as the state change.
+- Regulated verticals never get `auto` or `ai_review`, enforced in the API. No silent AI substitution for a human.
+- Rule ids (`R-SEG-*`, `R-GL-*`, `R-TM-*`, `R-MT-*`, `R-IN-*`) in docstrings and tests; never renumber.

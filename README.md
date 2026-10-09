@@ -42,13 +42,16 @@ services/api/            Python 3.13, FastAPI, SQLAlchemy 2, Alembic, Postgres 1
   migrations/            Alembic
 apps/web/                Next.js 16: customers (/app), reviewers (/reviewer), operators (/admin); e2e/
 deploy/                  Docker Compose, Caddy, backups, Hetzner guide
-docs/                    design, decisions, runbook, phases, API contract
+docs/                    system design, decisions, runbooks, API contract
+phases/                  the phase plan (P00..P08) in HYPERPOWER format
 memory-bank/             current state for the next session (human or agent)
+evidence/                append-only evidence ledger (replayable proof)
+.hyperpower/             agent control plane (see HYPERPOWER.md)
 ```
 
 ## Local development
 
-Requirements: Python 3.13, Node 22, Docker (for Postgres only).
+Requirements: Python 3.13 (`.python-version`), Node 24 (`.node-version`), Docker (for Postgres only). On Windows use uv for Python and the root npm scripts instead of make: `docs/runbooks/bootstrap-fresh-clone.md`.
 
 ```bash
 cp .env.example services/api/.env      # dev defaults work as-is, provider keys can stay empty
@@ -78,7 +81,9 @@ Operator CLI (`python -m arbiter.cli ...` in services/api): `seed-demo`, `create
 ## Tests and lint
 
 ```bash
-make test     # 432 backend tests against arbiter_test; never calls a real provider
+npm run verify   # the ship check: runtime pins, ruff, pytest, web lint + i18n, typecheck, build (any OS)
+npm run verify:e2e   # J-01..J-09 against a running API + worker + web
+make test     # 439 backend tests against arbiter_test; never calls a real provider
 make lint     # ruff check + ruff format --check, eslint + tsc
 make fmt
 cd apps/web && npm run e2e   # browser end-to-end against a running API + worker (see apps/web/README.md)
@@ -93,8 +98,11 @@ Single Hetzner host in the EU with Docker Compose and Caddy. Step by step: [depl
 ## More
 
 - [docs/DESIGN.md](docs/DESIGN.md) system design
-- [docs/decisions.md](docs/decisions.md) architecture decision log (D-001..D-044)
-- [ROADMAP.md](ROADMAP.md) phases P0-P6 and exit criteria
+- [docs/decisions.md](docs/decisions.md) architecture decision log (D-001..D-050)
+- [ROADMAP.md](ROADMAP.md) phases P00-P08 and exit criteria; [phases/](phases/README.md) the working plan
+- [PRODUCT.md](PRODUCT.md) what Arbiter is and is not, who pays
+- [ACCEPTANCE.md](ACCEPTANCE.md) journeys and integration checkpoints
+- [HYPERPOWER.md](HYPERPOWER.md) the agent operating system (control plane, evidence, gates, hooks)
 - [memory-bank/progress.md](memory-bank/progress.md) what exists, what is missing, known limitations
 - [CLAUDE.md](CLAUDE.md) rules for AI coding agents working in this repo
 

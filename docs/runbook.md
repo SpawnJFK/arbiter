@@ -1,7 +1,7 @@
 # Operations runbook
 
 For the Hetzner deployment described in `deploy/README.md`. Commands run in `/opt/arbiter/deploy`.
-Status: written ahead of the code. Behaviours marked "the system does" are P0/P1 build targets; check `memory-bank/progress.md` for what is live.
+Status: written ahead of the code. Behaviours marked "the system does" are build targets of phases P01 to P04 (`phases/README.md`); check `memory-bank/progress.md` for what is live.
 Every incident gets a short note at the bottom of this file (date, what happened, what was done, follow-up).
 
 Handy queries:

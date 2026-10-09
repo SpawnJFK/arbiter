@@ -66,7 +66,7 @@ flowchart LR
 
 - **api** and **worker** are the same image (D-002). The API never calls a provider on the request path except for cheap synchronous checks; anything slow is a `work_items` row.
 - **Postgres** is the only stateful service besides file storage: relational data, TM vectors (pgvector, D-003), fuzzy search (pg_trgm), queue, idempotency records, provenance.
-- **Okapi Framework** sidecar is planned for P4 (D-004); until then file handling is pure Python behind `FormatHandler`.
+- **Okapi Framework** sidecar is planned for P06 (D-004); until then file handling is pure Python behind `FormatHandler`.
 
 ## 3. Pipeline
 
@@ -163,4 +163,4 @@ State machines for segments, jobs, review tasks and payouts are defined only in 
 - Quality signals (in `quality_metrics`, shown on `/quality/dashboard`): auto-approve rate, escaped-error rate vs `ARBITER_ESCAPED_ERROR_TARGET`, control-sample disagreement, drift alarm when the auto rate moves more than `ARBITER_DRIFT_ALARM_RATIO` against its baseline.
 - Provider health: error rate and latency per engine; the router skips unhealthy engines and the decide step adds a safety offset (runbook).
 - Money signals: per job revenue, cost, margin; payouts failed.
-- Error tracking and metrics export (e.g. Sentry, Prometheus) are P1 items, not yet wired.
+- Error tracking and metrics export (e.g. Sentry, Prometheus) are not wired yet: error tracking and uptime arrive in P02 (staging) and P04 (production).

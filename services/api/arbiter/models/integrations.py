@@ -1,7 +1,7 @@
 """Durable work queue, webhooks and API idempotency.
 
 The work queue lives in Postgres (FOR UPDATE SKIP LOCKED). One database, one backup,
-one transaction for "change state + enqueue next step" — no lost messages between a
+one transaction for "change state + enqueue next step": no lost messages between a
 broker and the DB. Temporal is the documented upgrade path if workflows outgrow this.
 """
 

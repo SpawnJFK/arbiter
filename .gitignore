@@ -25,3 +25,30 @@ apps/web/.env*.local
 # local tooling
 .claude/settings.local.json
 *.tsbuildinfo
+# HYPERPOWER local state and tool installs (law, hooks, beads export and evidence stay tracked)
+graphify-out/
+reports/
+.hyperpower/tools/bin/
+.hyperpower/tools/*-venv/
+.hyperpower/tools/*.zip
+.hyperpower/tools/**/__pycache__/
+.hyperpower/state/session.json
+.hyperpower/state/checkpoints/
+.beads/*.db
+.beads/embeddeddolt/
+.beads/dolt/
+.beads/proxieddb/
+.beads/.beads-credential-key
+# Cursor MCP config carries the Context7 key; only the .example is tracked
+.cursor/mcp.json
+# Impeccable runtime files
+.impeccable/config.local.json
+.impeccable/hook.cache.json
+.impeccable/hook.pending.json
+.impeccable/live/
+# secrets that are not env files
+keys/
+*.pem
+*.key
+*_ed25519*
+id_rsa*

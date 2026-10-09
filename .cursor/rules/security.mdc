@@ -1,0 +1,19 @@
+---
+description: Security rule for auth, tenancy, money, webhooks, file parsing, migrations, env and deploy files.
+globs: services/api/arbiter/api/**,services/api/arbiter/config.py,services/api/arbiter/webhooks.py,services/api/arbiter/storage.py,services/api/arbiter/fileproc/**,services/api/arbiter/billing/**,services/api/arbiter/community/pay*.py,services/api/arbiter/community/payouts.py,services/api/arbiter/models/**,services/api/arbiter/dbinit.py,services/api/migrations/**,apps/web/src/proxy.ts,apps/web/src/app/api/**,apps/web/src/lib/backend.ts,apps/web/src/lib/server-api.ts,deploy/**,scripts/**,.env.example,.github/workflows/**
+alwaysApply: false
+---
+
+# Security
+
+- Read `SECURITY.md` before changing anything here.
+- Tenancy: every query on customer data is filtered by `org_id` from the authenticated principal, never from the request body. Reviewers reach only the task they hold. A new endpoint gets a test that another org gets 404 (not 403, no existence leak) on its resources.
+- Roles: check the role in the route dependency (`api/deps.py`), not in the web app only. Platform-admin routes stay under `/v1/admin`.
+- Money paths (quotes, invoices, ledger, reviewer pay, payouts): `Decimal` only, idempotency keys on creates, ledger entries balance to the cent, no update or delete of posted entries.
+- Provenance and ledger are append-only; never add a code path that updates or deletes those rows.
+- Webhooks: HMAC SHA-256 with timestamp, constant-time compare, retries with backoff, auto-disable on repeated failure. Never send secrets in payloads.
+- File parsing: XML with entity resolution and network access off; size and count limits on uploads; never execute or render uploaded content.
+- Web: the API token stays in the httpOnly cookie and goes through `src/app/api/proxy` (D-036). Nothing secret in `NEXT_PUBLIC_*`.
+- Secrets live in env files that git ignores and in server env in the cloud. Never in code, logs, commits, evidence files or chat output. New settings go into `.env.example` as `ARBITER_<FIELD>` with an empty or dev-only value and a comment on where the value comes from.
+- Never paste a token into a shell command; the shell guard blocks it.
+- Hand changes here to the `security-reviewer` subagent before the gate.

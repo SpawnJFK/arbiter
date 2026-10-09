@@ -1,7 +1,7 @@
 """Organizations, users and API keys.
 
 An Organization is a paying customer (a company localizing its product) or an agency
-running the platform under its own brand (white-label, phase P6). Reviewers are users
+running the platform under its own brand (white-label, phase P08). Reviewers are users
 with role "reviewer"; they do not belong to a customer organization.
 """
 

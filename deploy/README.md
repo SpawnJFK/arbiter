@@ -14,8 +14,8 @@ Internet -> Caddy :443 -> app.<DOMAIN> -> web:3000   (Next.js)
 
 | Stage | Hetzner type | vCPU / RAM / disk | Notes |
 |---|---|---|---|
-| P0 measurement, private beta | CX32 or CPX31 | 4 / 8 GB / 80-160 GB | enough for one org, a few thousand segments a day |
-| P1 public self-serve | CPX41 or CCX23 (dedicated vCPU) | 8 / 16 GB / 240 GB | dedicated vCPU once LLM traffic and file conversion overlap |
+| P01 measurement and P02 staging, private beta | CX32 or CPX31 | 4 / 8 GB / 80-160 GB | enough for one org, a few thousand segments a day |
+| P04 public self-serve | CPX41 or CCX23 (dedicated vCPU) | 8 / 16 GB / 240 GB | dedicated vCPU once LLM traffic and file conversion overlap |
 | Later | split Postgres to its own CCX host or Hetzner managed option | | when DB CPU is the bottleneck |
 
 - Location: `fsn1`/`nbg1` (Germany) or `hel1` (Finland). Pick one and keep data there.
@@ -122,7 +122,7 @@ Cron as root:
 
 Run it once by hand and check the remote: `rclone ls $RCLONE_REMOTE`.
 
-## 9. Restore drill (do it monthly, and before P1 launch)
+## 9. Restore drill (do it monthly, and before the P04 launch)
 
 On a throwaway server or locally, never on production first:
 

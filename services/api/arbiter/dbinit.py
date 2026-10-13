@@ -75,6 +75,15 @@ LATER_TABLES: frozenset[str] = frozenset(
         "number_series",
         "purchase_orders",
         "vendor_invoices",
+        # 0010_billing
+        "plans",
+        "credit_packs",
+        "subscriptions",
+        "billing_customers",
+        "credit_ledger",
+        "billing_events",
+        "payout_accounts",
+        "payout_batches",
     }
 )
 LATER_COLUMNS: dict[str, frozenset[str]] = {
@@ -82,6 +91,10 @@ LATER_COLUMNS: dict[str, frozenset[str]] = {
     "jobs": frozenset({"account_id", "workflow", "client_approved_at", "senate_count", "cost_vendors"}),
     "users": frozenset({"role_id"}),  # 0005_platform
     "segments": frozenset({"locked_by", "locked_at"}),
+    # 0010_billing
+    "invoices": frozenset(
+        {"kind", "provider", "provider_ref", "provider_invoice_number", "provider_url", "due_at", "paid_at"}
+    ),
 }
 # Indexes a later migration adds to a table that 0001 already created.
 LATER_INDEXES: dict[str, frozenset[str]] = {

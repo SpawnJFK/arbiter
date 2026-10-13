@@ -1045,3 +1045,66 @@ Date: 2026-10-13. Status: accepted.
 - *Draft quotes as `quotes` rows without a file.* Quotes are file analyses (TM bands, repetitions); a deal holds a priced proposal honestly.
 
 **Consequences.** Without the pm module no pm facts reach the model and pm actions are dropped by validation.
+---
+
+## D-072 Subscription billing: Paddle as merchant of record, our database as source of truth
+Date: 2026-10-13. Status: accepted (owner approved).
+
+**Context.** Arbiter sells modules globally by card from day one and needs VAT and sales tax collected and filed in many jurisdictions, chargebacks handled and enterprise invoices with terms, PO numbers and bank transfer. There is no company yet in a country Stripe supports for this setup.
+
+**Decision.** Paddle Billing is the payment provider and merchant of record now; Stripe is a second rail added later. Plans, subscriptions, entitlements, usage, credits and invoice records live in our database (migration 0010: `plans`, `credit_packs`, `subscriptions`, `billing_customers`, `credit_ledger`, `billing_events`). Each provider is a thin adapter behind `billing/providers/base.py` (`create_checkout`, `create_credit_checkout`, `customer_portal_url`, `cancel`, `add_charge`, `report_usage`, `parse_webhook`, `invoice_document_url`): `paddle.py` (API v1 over httpx), `stripe.py` (same interface, off unless configured and selected), `manual.py` (our own invoice, admin marks it paid). Access starts only when the provider confirms payment through a signed webhook; every webhook is stored once per `(provider, event_id)` and applied in a savepoint, a failed one is kept with its error and answered 500 so the provider retries. Plans are data seeded with starter values (Starter, Team, Business, Enterprise) and edited in the admin plans editor. The registry picks: org override, then `ARBITER_BILLING_PROVIDER`, then auto (Paddle when configured, else manual).
+
+**Rejected.**
+- *Stripe first.* Needs a company in a supported country and leaves tax registration and filing to us.
+- *Provider as source of truth (read plans and entitlements from Paddle).* Ties every module check to a provider call and makes the Stripe rail a rewrite.
+- *Lemon Squeezy or similar resellers.* Weaker subscription and enterprise invoicing tooling for this use; Paddle covers invoices with terms.
+- *Plans in code.* Every price change would be a deploy.
+
+**Consequences.** Adding Stripe later is configuration plus price mapping, not a rewrite. Paddle needs a client-side token and an approved domain for the `/checkout/paddle` page (Paddle.js opens the overlay for `?_ptxn`). Live keys, the default payment link and the webhook destination are P03 human steps.
+
+---
+
+## D-073 Payout rails and the platform fee
+Date: 2026-10-13. Status: accepted (owner approved).
+
+**Context.** Reviewers and vendors are paid worldwide. Payout fees differ by rail, and the marketplace charges the paying customer a transparent fee on human work.
+
+**Decision.** `community/payout_rails/` adds Payoneer (Mass Payouts API style, payee registration link, payout request, status polling), PayPal (Payouts API batch, OAuth client credentials, polling) and a bank-file rail (SEPA pain.001.001.09 XML, plain CSV, Wise batch CSV for manual upload, admin confirms). `RailRouter` is the `PayoutProvider` in production and picks the rail by the payee's payout method. Rails never answer "settled" on send; only a poll or an admin confirmation settles, so the ledger never shows money that did not move. Payee accounts and onboarding status live in `payout_accounts` (payee kind reviewer now, vendor later); Payoneer payees are blocked until onboarding is active. Effective threshold = max(profile threshold, method minimum). The platform fee is a percent per org (default 5, range 0 to 8) of the human work: shown as an estimate on quotes for `hybrid` and `full`, and charged when the work is credited (`billing.fees.charge_fee`: ledger `platform:revenue:platform_fee` against the org receivable, usage unit `platform_fee`).
+
+**Rejected.**
+- *Wise payouts API as the first rail.* Business account onboarding for API payouts is slower; Wise stays a CSV fallback.
+- *Fee on the whole quote price.* Machine-only tiers would carry a marketplace fee for no human work.
+- *Fee hidden in the per-word rate.* Not transparent; the owner wants it shown.
+
+**Consequences.** The fee basis on quotes is an estimate (review words times the reviewer edit rate); the charged fee follows actual pay. Vendor payouts reuse the same tables once Agency OS vendors exist. Live credentials and a small test payout are P03.
+
+---
+
+## D-074 Invoices: records of the provider's documents, our own only for manual billing; credits and overage
+Date: 2026-10-13. Status: accepted.
+
+**Context.** With a merchant of record, the provider sells to the customer and issues the tax invoice. Issuing our own invoice for the same sale would double-document it.
+
+**Decision.** For Paddle (and later Stripe) payments the `invoices` table keeps a record: `kind`, `provider`, `provider_ref`, `provider_invoice_number`, totals as reported, and the document link is fetched fresh from the provider. Only the manual provider issues our numbered invoice (ARB sequence, D-029 tax rule, PDF, due date from the org's payment terms, PO number). Prepaid credit is a wallet of lots in `credit_ledger`, mirrored by double-entry txns on `org:<id>:credits`; spending order is earliest expiry first, expiry becomes breakage revenue, a provider refund refunds only unused credit. At period close, usage beyond the plan's included volume is priced at the plan's overage rate, credit is spent first and the rest is charged through the subscription's provider (Paddle one-time charge with our invoice id in custom data, so the payment webhook settles our record; manual: our invoice). One overage record per org and period makes the close idempotent.
+
+**Rejected.**
+- *Our own invoice for every payment.* Duplicates the merchant of record's tax document.
+- *Provider metering (Stripe meters, Paddle has none).* Would split usage truth between two systems; we report usage only where a provider bills meters.
+- *Credits as a balance column.* No lots, so no expiry or refund per purchase.
+
+**Consequences.** Invoice lists mix our invoices and provider records; the UI shows who issued each. Paddle has no idempotency header, so the period close relies on our record.
+
+---
+
+## D-075 Entitlements follow the subscription; legacy orgs keep every module
+Date: 2026-10-13. Status: accepted.
+
+**Context.** `platform/modules.py` reads `org.settings["modules"]` (default: every module). Billing must write it without breaking existing organizations.
+
+**Decision.** `billing/entitlements.refresh` is the only writer. Current subscription (active, trialing, past_due) gives its plan's modules; an org whose subscription lapsed gets none; an org that never had a subscription is left untouched (all modules) unless the admin sets overrides. Admin overrides (`module_overrides.add/remove`) apply on top; dependencies are added, and a module whose dependency is explicitly removed is dropped. A new paid provider subscription cancels the org's manual or admin one.
+
+**Rejected.**
+- *Switch every existing org to a free tier at migration.* Would cut features from current users without a decision.
+- *Compute entitlements on every request.* `modules.py` stays a cheap reader of org settings.
+
+**Consequences.** past_due keeps access while the provider retries. Seat limits are reported (`seats_used`) but not yet enforced at user creation.

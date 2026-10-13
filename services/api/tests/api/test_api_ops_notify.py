@@ -50,7 +50,9 @@ SAMPLE = {
 @pytest.mark.parametrize("name", sorted(TEMPLATES))
 def test_every_template_renders_text_and_html_from_one_source(name):
     tpl = TEMPLATES[name]
-    assert template_fields(name) <= set(tpl.required) | set(tpl.optional), "every placeholder must be declared"
+    assert template_fields(name) <= set(tpl.required) | set(tpl.optional), (
+        "every placeholder must be declared"
+    )
     out = render(name, SAMPLE, web_base_url="https://app.example.com/")
     assert out.subject and "\n" not in out.subject
     assert "Ana <b>" in out.text and "Ana &lt;b&gt;" in out.html and "<b>" not in out.html.split("<body")[1]

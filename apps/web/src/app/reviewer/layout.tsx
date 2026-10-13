@@ -17,6 +17,7 @@ export default async function ReviewerLayout({ children }: { children: React.Rea
       label: t("reviewer.layout.account"),
       items: [
         { href: "/reviewer/earnings", label: t("reviewer.layout.earningsPayouts"), icon: "wallet" },
+        { href: "/reviewer/payouts", label: t("reviewer.layout.payoutMethods"), icon: "send" },
         { href: "/reviewer/disputes", label: t("reviewer.layout.disputes"), icon: "flag" },
       ],
     },

@@ -64,15 +64,17 @@ services/api/arbiter/
   engines/           anthropic, openai, deepl, google (Basic v2), mock, llm_mt, tags, pricing, registry
   quality/           checks (hard QA), qe (decide), judge, senate, editor, mqm, calibration, prompts
   pipeline/          orchestrator (steps), queue (work_items), worker, events, evidence, hooks
-  community/         profiles, testing, queue, review, pay, scoring, disputes, payouts
-  billing/           quotes, pricing, usage, invoices, ledger
+  community/         profiles, testing, queue, review, pay, scoring, disputes, payouts, payout_accounts,
+                     payout_batches, payout_rails/ (payoneer, paypal, bank: D-073)
+  billing/           quotes, pricing, usage, invoices, ledger, catalog (plans), credits, fees, entitlements,
+                     subscriptions, period_close, providers/ (paddle, stripe, manual: D-072)
   agency/            Agency OS: crm, pricelists, workflows, dashboards, assistant (+ heuristic), schemas
   api/               app.py (arbiter.api.app:app, /healthz), deps.py (auth, roles, paging), security.py
   api/routes/        auth, files, quotes, projects (+ idempotency helpers), jobs, assets, quality,
                      integrations, reviewers, admin, crm, pricelists, workflows, dashboards, assistant, i18n
   cli.py             seed-demo, create-admin, calibrate, run-worker
   storage.py, webhooks.py
-services/api/migrations/versions/   0001_initial, 0002_agency_os, 0003_ui_i18n (hand-written)
+services/api/migrations/versions/   0001_initial, 0002_agency_os, 0003_ui_i18n, 0010_billing (hand-written)
 services/api/tests/  pytest, mock providers only; tests/db checks alembic head == create_all
 apps/web/            Next.js 16 App Router: /app (customers), /reviewer, /admin; src/lib (api client, types,
                      i18n), src/app/api/proxy (server proxy, token in httpOnly cookie, D-036), src/proxy.ts

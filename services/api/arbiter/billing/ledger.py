@@ -10,6 +10,15 @@ Accounts used here:
   platform:review_cost           expense side of review pay
   platform:payouts_in_transit    payout accrued or sent, not yet confirmed by the provider
   platform:cash                  money that actually left the platform
+
+Customer side (D-072, D-074):
+  org:<id>:credits               prepaid credit owed to the customer (wallet balance)
+  org:<id>:receivable            charges the customer owes (platform fee, overage)
+  platform:provider_clearing     money collected by the payment provider (merchant of
+                                 record) and not yet paid out to us
+  platform:revenue:usage         credits consumed by usage
+  platform:revenue:breakage      credits that expired unused
+  platform:revenue:platform_fee  platform fee on human review / vendor work
 """
 
 from __future__ import annotations
@@ -25,10 +34,22 @@ from arbiter.models import LedgerEntry, new_id
 REVIEW_COST = "platform:review_cost"
 IN_TRANSIT = "platform:payouts_in_transit"
 CASH = "platform:cash"
+PROVIDER_CLEARING = "platform:provider_clearing"
+REVENUE_USAGE = "platform:revenue:usage"
+REVENUE_BREAKAGE = "platform:revenue:breakage"
+REVENUE_PLATFORM_FEE = "platform:revenue:platform_fee"
 
 
 def reviewer_account(reviewer_id: str) -> str:
     return f"reviewer:{reviewer_id}:payable"
+
+
+def credits_account(org_id: str) -> str:
+    return f"org:{org_id}:credits"
+
+
+def receivable_account(org_id: str) -> str:
+    return f"org:{org_id}:receivable"
 
 
 def post(

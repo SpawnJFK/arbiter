@@ -24,6 +24,14 @@ for _k in (
     "VERTEX_SERVICE_ACCOUNT_JSON",
     "TOGETHER_API_KEY",
     "FIREWORKS_API_KEY",
+    "PADDLE_API_KEY",
+    "PADDLE_WEBHOOK_SECRET",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+    "PAYONEER_CLIENT_ID",
+    "PAYONEER_CLIENT_SECRET",
+    "PAYPAL_CLIENT_ID",
+    "PAYPAL_CLIENT_SECRET",
 ):
     os.environ[f"ARBITER_{_k}"] = ""
 # Secrets at rest use the built-in dev-only key in tests (never a real one).
@@ -77,3 +85,7 @@ def db() -> Iterator[Session]:
         session.commit()
     finally:
         session.close()
+
+
+# Billing provider fixtures (mock HTTP transport, provider env); helpers live in billing_fixtures.py.
+from billing_fixtures import mock_http, paddle_env, stripe_env  # noqa: E402, F401

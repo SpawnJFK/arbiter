@@ -11,7 +11,13 @@ The ledger is the only source of truth for what a reviewer is owed (balance = su
                          the next run_payouts moves it back to accrued and re-sends it
                          with the SAME idempotency key, so the provider never pays twice.
 
-Blocked payouts (tax info incomplete, required for DAC7-style platform reporting) carry no
+Rails (D-073): the PayoutProvider used in production is community.payout_rails.RailRouter,
+which picks Payoneer, PayPal or the bank-file rail by the payee's payout method. Rails answer
+"pending"; refresh_pending polls them and settles or fails the payout. A payee is paid once
+the balance reaches max(profile threshold, method minimum) (payout_accounts).
+
+Blocked payouts (tax info incomplete, required for DAC7-style platform reporting, or a
+payout method whose onboarding is not finished, e.g. Payoneer) carry no
 ledger movement: the money stays in the reviewer's payable balance. One blocked payout per
 reviewer at most; it is re-evaluated on every run and moves to accrued once the info is there.
 
@@ -30,6 +36,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from arbiter.billing import ledger
+from arbiter.community import payout_accounts
 from arbiter.community.profiles import tax_info_complete
 from arbiter.community.transitions import move
 from arbiter.config import get_settings
@@ -207,7 +214,12 @@ def run_payouts(
 
     profiles = list(session.execute(select(ReviewerProfile).order_by(ReviewerProfile.id)).scalars())
     for profile in profiles:
-        complete = tax_info_complete(profile)
+        tax_ok = tax_info_complete(profile)
+        acct_ok, acct_reason = payout_accounts.account_ready(session, profile)
+        complete = tax_ok and acct_ok
+        block_reason = (
+            "tax information incomplete (required for platform reporting)" if not tax_ok else acct_reason
+        )
         # 1) failed payouts: money is back in the balance; re-accrue under the same key.
         failed = session.execute(
             select(Payout).where(Payout.reviewer_id == profile.id, Payout.state == "failed").with_for_update()
@@ -234,10 +246,11 @@ def run_payouts(
                 created.append(existing_blocked)
             else:
                 existing_blocked.amount = max(bal, Decimal("0"))
+                existing_blocked.failure_reason = block_reason
                 blocked += 1
             continue
 
-        if bal <= 0 or bal < Decimal(profile.payout_threshold):
+        if bal <= 0 or bal < payout_accounts.effective_threshold(profile):
             continue
         key = f"payout:{profile.id}:{day}"
         if session.execute(select(Payout.id).where(Payout.idempotency_key == key)).first() is not None:
@@ -254,7 +267,7 @@ def run_payouts(
         session.flush()
         if not complete:
             move(p, "payout", "blocked")
-            p.failure_reason = "tax information incomplete (required for platform reporting)"
+            p.failure_reason = block_reason
             blocked += 1
             continue
         _accrue(session, p, bal)
@@ -323,6 +336,40 @@ def send_payouts(session: Session, provider: PayoutProvider) -> dict[str, int]:
         from arbiter import notify
 
         notify.payout_sent(session, p)
+        if res.status == "settled":
+            complete_payout(session, p, ok=True)
+            summary["settled"] += 1
+        elif res.status == "failed":
+            complete_payout(session, p, ok=False, reason=res.reason)
+            summary["failed"] += 1
+        else:
+            summary["pending"] += 1
+    session.flush()
+    return summary
+
+
+def refresh_pending(session: Session, provider: Any) -> dict[str, int]:
+    """Poll the rail of every sent payout and settle / fail it. Providers without poll are skipped."""
+    poll = getattr(provider, "poll", None)
+    summary = {"checked": 0, "settled": 0, "failed": 0, "pending": 0}
+    if poll is None:
+        return summary
+    rows = list(
+        session.execute(
+            select(Payout)
+            .where(Payout.state == "sent")
+            .order_by(Payout.sent_at)
+            .with_for_update(skip_locked=True)
+        ).scalars()
+    )
+    for p in rows:
+        if not p.provider_ref or p.provider_ref.startswith("bank:"):
+            continue  # bank transfers are confirmed by the admin
+        summary["checked"] += 1
+        try:
+            res = poll(p.provider_ref, p.method)
+        except Exception as e:  # noqa: BLE001  (a rail outage must not stop the other payouts)
+            res = PayoutResult("pending", p.provider_ref, str(e)[:200])
         if res.status == "settled":
             complete_payout(session, p, ok=True)
             summary["settled"] += 1

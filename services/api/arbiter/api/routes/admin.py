@@ -1,10 +1,11 @@
 """Platform-operator endpoints: reviewers, disputes, payouts, organizations, reviewer tests.
 
 Payouts: POST /admin/payouts/run accrues what is owed (run_payouts) and sends it through
-the configured PayoutProvider (send_payouts). No real provider exists yet. In dev, test and
-staging the MockPayoutProvider is used; in prod nothing is sent (payouts stay accrued) until
-a real provider integration (e.g. Wise payouts API) is built and wired into
-`payout_provider()`. Real payouts need that integration before launch.
+`payout_provider()`: the RailRouter (Payoneer, PayPal, bank-file rail by payout method, D-073)
+in production or whenever a Payoneer / PayPal key is configured; the in-memory
+MockPayoutProvider in dev, test and staging without keys. Rails answer "pending";
+POST /admin/payouts/refresh polls them, bank transfers are confirmed by the admin
+(billing_admin.py).
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from arbiter.api.deps import DB, Admin, Paging, listing
 from arbiter.api.routes.auth import org_view
 from arbiter.billing.usage import current_period
 from arbiter.community import disputes, payouts, profiles, testing
+from arbiter.community.payout_rails import RailRouter, any_api_rail_configured
 from arbiter.community.payouts import MockPayoutProvider, PayoutProvider
 from arbiter.config import get_settings
 from arbiter.models import Job, Organization, UsageRecord
@@ -30,13 +32,10 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 def payout_provider() -> PayoutProvider | None:
-    """The provider that actually moves money. None = accrue only, send nothing.
-
-    There is no real integration yet: production returns None so no payout is ever marked
-    settled without money moving. Everything else uses the in-memory mock.
-    """
-    if get_settings().env == "prod":
-        return None
+    """The provider that moves money. Rails never report settled on send, only after a poll
+    or an admin confirmation, so no payout is marked settled without money moving."""
+    if get_settings().env == "prod" or any_api_rail_configured():
+        return RailRouter()
     return MockPayoutProvider()
 
 

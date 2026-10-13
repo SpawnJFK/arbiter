@@ -5,6 +5,9 @@ Commands:
   seed-demo [--password P]              idempotent DEMO data for local development
   run-worker                            the pipeline worker (same as python -m arbiter.pipeline.worker)
   calibrate [--dry-run]                 weekly threshold calibration from control samples
+  seed-plans                            insert the starter plans and credit packs (never overwrites)
+  close-billing-period --period YYYY-MM overage charges for a finished month (idempotent)
+  refresh-payouts                       poll payout rails for sent payouts
 
 Everything seed-demo creates is fictional sample data under the .test domain, for
 development and demos only. It never runs implicitly.
@@ -150,6 +153,11 @@ def seed_demo(session: Session, password: str = DEMO_PASSWORD) -> dict[str, Any]
         raise ValueError("password must be at least 8 characters")
     created: list[str] = []
     pw_hash = security.hash_password(password)
+    from arbiter.billing.catalog import seed_starter_catalog
+
+    cat = seed_starter_catalog(session)
+    if cat["plans"] or cat["packs"]:
+        created.append(f"{cat['plans']} starter plans, {cat['packs']} credit packs")
 
     org = session.execute(select(Organization).where(Organization.slug == DEMO_ORG_SLUG)).scalar_one_or_none()
     if org is None:
@@ -344,6 +352,10 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("run-worker", help="run the pipeline worker")
     c = sub.add_parser("calibrate", help="calibrate auto-approval thresholds from control samples")
     c.add_argument("--dry-run", action="store_true", help="print proposals without saving")
+    sub.add_parser("seed-plans", help="insert the starter plans and credit packs (never overwrites)")
+    b = sub.add_parser("close-billing-period", help="overage charges for a finished month (idempotent)")
+    b.add_argument("--period", required=True, help="YYYY-MM, a finished month")
+    sub.add_parser("refresh-payouts", help="poll payout rails (Payoneer, PayPal) for sent payouts")
     return p
 
 
@@ -368,6 +380,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"logins: {', '.join(out['logins'])} (password: {args.password})")
         elif args.command == "calibrate":
             _print_table(calibrate(session, dry_run=args.dry_run))
+        elif args.command == "seed-plans":
+            from arbiter.billing.catalog import seed_starter_catalog
+
+            out = seed_starter_catalog(session)
+            print(f"plans added: {out['plans']}, credit packs added: {out['packs']}")
+        elif args.command == "close-billing-period":
+            from arbiter.billing.period_close import close_period
+            from arbiter.billing.usage import current_period
+
+            if args.period >= current_period():
+                raise ValueError("only a finished period can be closed")
+            res = close_period(session, args.period)
+            total = len(res["orgs"])
+            for i, o in enumerate(res["orgs"], 1):
+                print(f"[{i}/{total}] {o['org_id']}: {o['status']} due {o.get('due', '0.00')}")
+            print(f"period {args.period}: {total} orgs, {res['expired_lots']} credit lots expired")
+        elif args.command == "refresh-payouts":
+            from arbiter.api.routes.admin import payout_provider
+            from arbiter.community.payouts import refresh_pending
+
+            print(refresh_pending(session, payout_provider()))
         if getattr(args, "dry_run", False):
             session.rollback()
         else:

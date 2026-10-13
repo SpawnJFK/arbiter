@@ -22,12 +22,16 @@ class Settings(BaseSettings):
     storage_dir: str = "./var/storage"
     public_base_url: str = "http://localhost:8000"
     cors_origins: str = "http://localhost:3000"  # comma separated
-    # Where the web app runs: links in vendor offer e-mails (no-login vendor workbench).
-    web_base_url: str = "http://localhost:3000"
 
     # Seller (for invoices). Tax treatment needs legal/tax review before public launch.
     seller_country: str = ""
     vat_rate: str = "0"
+    # Seller details printed on OUR invoices (manual provider only; Paddle issues its own, D-074).
+    seller_name: str = ""
+    seller_address: str = ""
+    seller_vat_id: str = ""
+    seller_iban: str = ""
+    seller_bic: str = ""
 
     # Auth
     jwt_secret: str = Field(default="dev-only-change-me-not-for-production-use", min_length=32)
@@ -37,8 +41,8 @@ class Settings(BaseSettings):
     # (urlsafe base64 of 32 bytes) or any passphrase of 32+ characters (derived with HKDF).
     secrets_key: str = Field(default="dev-only-secrets-key-change-me-not-for-production", min_length=32)
     # Origin of the web app; SSO redirect_uri is <web_base_url>/api/sso/callback, invite
-    # links point at <web_base_url>/accept-invite, and emails link back to it (password reset,
-    # job pages).
+    # links point at <web_base_url>/accept-invite, emails link back to it (password reset,
+    # job pages, vendor offers), and billing uses it for checkout return and portal links.
     web_base_url: str = "http://localhost:3000"
     invite_ttl_hours: int = 24 * 7
     sso_state_ttl_seconds: int = 600
@@ -97,6 +101,34 @@ class Settings(BaseSettings):
     # Money
     currency: str = "EUR"
     quote_validity_days: int = 14
+
+    # Billing (D-072). Our database is the source of truth; providers sit behind adapters.
+    # billing_provider: which adapter sells subscriptions and credit packs. "auto" = paddle when
+    # configured, else manual (bank transfer invoices). Stripe is only used when chosen AND
+    # configured (second rail, later).
+    billing_provider: Literal["auto", "paddle", "stripe", "manual"] = "auto"
+    paddle_api_key: str = ""
+    paddle_webhook_secret: str = ""
+    paddle_environment: Literal["sandbox", "production"] = "sandbox"
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    # Platform fee on human review and vendor work, percent, charged to the paying customer.
+    platform_fee_percent_default: str = "5"
+    platform_fee_percent_max: str = "8"
+
+    # Payout rails (D-073). Payoneer and PayPal first; bank transfer / Wise files as fallback.
+    payoneer_client_id: str = ""
+    payoneer_client_secret: str = ""
+    payoneer_program_id: str = ""
+    payoneer_environment: Literal["sandbox", "production"] = "sandbox"
+    paypal_client_id: str = ""
+    paypal_client_secret: str = ""
+    paypal_environment: Literal["sandbox", "production"] = "sandbox"
+    # JSON object method -> minimum payout, e.g. {"paypal": "10"}; merged over the defaults.
+    payout_minimums: str = ""
+    payout_debtor_name: str = ""
+    payout_debtor_iban: str = ""
+    payout_debtor_bic: str = ""
 
     # Webhooks
     webhook_max_attempts: int = 10

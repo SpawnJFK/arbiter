@@ -485,7 +485,7 @@ export interface ReviewerApplyResponse {
   profile: ReviewerProfile;
 }
 
-export type PayoutMethod = "sepa" | "wise" | "paypal";
+export type PayoutMethod = "sepa" | "wise" | "paypal" | "payoneer";
 
 export interface PayoutInfo {
   legal_name?: string;
@@ -687,6 +687,8 @@ export interface Usage {
   ai_units: string | number;
   review_decisions: number;
   storage_gb?: string;
+  /** Platform fee on human review / vendor work this period (D-073). */
+  platform_fee?: Money;
   amount: Money;
 }
 
@@ -701,6 +703,172 @@ export interface Invoice {
   status: string;
   issued_at?: ISODate | null;
   created_at?: ISODate | null;
+  /** usage | subscription | credit_pack | overage | manual */
+  kind?: string;
+  /** internal (our invoice) | paddle | stripe (a record of the provider's document, D-074) */
+  provider?: string;
+  provider_ref?: string | null;
+  provider_invoice_number?: string | null;
+  /** Path under /v1: our PDF, or {url} of the provider's document. */
+  document_url?: string | null;
+  issued_by?: string;
+  due_at?: ISODate | null;
+  paid_at?: ISODate | null;
+}
+
+// ====================================================================== Billing (D-072..D-074)
+
+export type ModuleKey = "tms" | "engine" | "ai" | "pm" | "auditor" | "strings" | "community";
+export type BillingInterval = "month" | "year";
+export type PriceTable = Partial<Record<BillingInterval, Record<string, Money>>>;
+
+export interface Plan {
+  key: string;
+  name: string;
+  description: string;
+  modules: ModuleKey[];
+  prices: PriceTable;
+  seat_prices: PriceTable;
+  included: Partial<Record<"word" | "ai_unit", string>>;
+  overage: Record<string, Partial<Record<"word" | "ai_unit", string>>>;
+  seats_included: number;
+  max_seats: number | null;
+  interval: BillingInterval;
+  custom: boolean;
+  currencies: string[];
+  // admin view only
+  id?: string;
+  public?: boolean;
+  active?: boolean;
+  sort?: number;
+  provider_prices?: Record<string, Record<string, string>>;
+  updated_at?: ISODate | null;
+}
+
+export interface CreditPack {
+  key: string;
+  name: string;
+  credit_amount: Money;
+  price: Money;
+  currency: string;
+  valid_days: number;
+}
+
+export interface PlansResponse {
+  items: Plan[];
+  credit_packs: CreditPack[];
+  currencies: string[];
+  platform_fee: { default_percent: string; max_percent: string };
+}
+
+export interface SubscriptionInfo {
+  id: string;
+  plan: string;
+  provider: string;
+  provider_subscription_id: string | null;
+  status: string;
+  interval: BillingInterval;
+  currency: string;
+  seats: number;
+  current_period_start: ISODate | null;
+  current_period_end: ISODate | null;
+  cancel_at: ISODate | null;
+  canceled_at: ISODate | null;
+}
+
+export interface Meter {
+  unit: "word" | "ai_unit";
+  used: string;
+  included: string;
+  overage: string;
+}
+
+export interface BillingOverview {
+  subscription: SubscriptionInfo | null;
+  pending: SubscriptionInfo | null;
+  plan: Plan | null;
+  modules: ModuleKey[];
+  seats_used: number;
+  period: string;
+  meters: Meter[];
+  platform_fee_percent: string;
+  credits_balance: Money;
+  currency: string;
+  provider: string;
+  // admin view only
+  org_id?: string;
+  overrides?: { add: ModuleKey[]; remove: ModuleKey[] };
+  payment_terms_days?: number;
+  po_number?: string;
+  provider_override?: string | null;
+  history?: SubscriptionInfo[];
+}
+
+export interface CheckoutResult {
+  url: string;
+  provider: string;
+  provider_ref: string | null;
+}
+
+export interface CreditLot {
+  id: string;
+  kind: string;
+  amount: Money;
+  remaining: Money;
+  currency: string;
+  expires_at: ISODate | null;
+  ref: string;
+  created_at: ISODate | null;
+}
+
+export interface CreditWallet {
+  balance: Money;
+  currency: string;
+  lots: CreditLot[];
+  entries: { id: string; kind: string; amount: Money; currency: string; lot_id: string | null; ref: string; created_at: ISODate | null }[];
+  packs: CreditPack[];
+}
+
+export interface ProviderStatus {
+  paddle: { configured: boolean; environment: string };
+  stripe: { configured: boolean; enabled: boolean };
+  manual: { configured: boolean };
+  selected: { setting: string };
+}
+
+export interface AdminOverride {
+  plan?: string;
+  status?: string;
+  seats?: number;
+  interval?: BillingInterval;
+  modules_add?: ModuleKey[];
+  modules_remove?: ModuleKey[];
+  platform_fee_percent?: string;
+  payment_terms_days?: number;
+  po_number?: string;
+  provider?: "paddle" | "stripe" | "manual" | "";
+  note?: string;
+}
+
+export type RailMethod = "payoneer" | "paypal" | "sepa" | "wise";
+
+export interface PayoutAccountView {
+  method: RailMethod;
+  status: "not_set_up" | "pending" | "active" | "rejected";
+  onboarding_required: boolean;
+  onboarding_url: string | null;
+  details: Record<string, string>;
+  fields: string[];
+  minimum_payout: Money;
+  updated_at: ISODate | null;
+  available?: boolean;
+  selected?: boolean;
+}
+
+export interface PayoutMethodsView {
+  selected: RailMethod | null;
+  effective_threshold: Money | null;
+  items: PayoutAccountView[];
 }
 
 // ====================================================================== Agency OS

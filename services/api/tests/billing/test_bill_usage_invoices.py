@@ -40,6 +40,7 @@ def test_ai_units_and_usage_view(db):
         "ai_units": "5.00",
         "review_decisions": 4,
         "storage_gb": "0.00",
+        "platform_fee": "0.00",
         "amount": "7.50",
         "currency": "EUR",
     }

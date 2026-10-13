@@ -12,7 +12,12 @@
 // Exceptions; admin sees reviewers and payouts; the assistant sets up an agency from an English
 // description; CRM, deals, a pharma job with two reviews and client approval; admin exports the UI
 // catalog as XLIFF for "de", fills targets, imports (placeholder errors first), enables "de", and the
-// PM switches language and sees German strings with English fallback. Screenshots: screenshots/real-*.png.
+// PM switches language and sees German strings with English fallback. Then every section added by
+// the module builds opens once: engines, own models, software strings (create, push JSON, translate,
+// release, OTA bundle), the workbench editor (edit and confirm a segment), the auditor (XLIFF
+// audit), vendors (create, suggested for a job), capacity, billing, pricing, settings team, audit
+// log and modules with add-ons, queries, purchase orders, vendor invoices, admin billing and
+// engines. Screenshots: screenshots/real-*.png.
 import { chromium } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync, readFileSync } from "node:fs";
@@ -22,6 +27,7 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
+const API_ORIGIN = process.env.API_ORIGIN ?? "http://localhost:8000"; // public OTA bundles
 const SHOTS = path.resolve(process.env.SHOTS_DIR ?? path.join(here, "..", "screenshots"));
 const PYTHON = process.env.PYTHON ?? path.resolve(here, "../../../services/api/.venv/bin/python");
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "demo-password-123";
@@ -58,6 +64,24 @@ writeFileSync(leafletPath, "# Patient leaflet\n\nTake one tablet twice a day wit
 execFileSync(PYTHON, [path.join(here, "ensure_reviewer.py"), SECOND_REVIEWER, DEMO_PASSWORD], { stdio: ["ignore", "ignore", "inherit"] });
 const glossaryMdPath = path.join(work, "billing-faq.md");
 writeFileSync(glossaryMdPath, "# Billing\n\nYou can download every invoice from the billing page.\n");
+
+const plainPath = path.join(work, "welcome.txt");
+writeFileSync(plainPath, "Welcome to the new dashboard.\n\nYour reports are ready.\n");
+const xliffPath = path.join(work, "audit-sample.xlf");
+writeFileSync(
+  xliffPath,
+  `<?xml version="1.0" encoding="UTF-8"?>
+<xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
+  <file original="ui.txt" source-language="en" target-language="de" datatype="plaintext">
+    <body>
+      <trans-unit id="1"><source>Save your changes.</source><target>Speichern Sie Ihre Änderungen.</target></trans-unit>
+      <trans-unit id="2"><source>Download the invoice.</source><target>Laden Sie die Rechnung herunter.</target></trans-unit>
+      <trans-unit id="3"><source>Open the settings page.</source><target>Open the settings page.</target></trans-unit>
+    </body>
+  </file>
+</xliff>
+`,
+);
 
 // ---------------------------------------------------------------- helpers
 const steps = [];
@@ -125,6 +149,35 @@ async function order(page, tier) {
 async function firstJobUrl(page) {
   const href = await page.locator('a[href^="/app/jobs/"]').first().getAttribute("href");
   return new URL(href, BASE).toString();
+}
+/** Open a page and check it rendered: an h1 (or the given heading), no error boundary. */
+async function visit(page, url, heading) {
+  await page.goto(url);
+  await page.waitForLoadState("networkidle").catch(() => null);
+  if (await page.getByText("Something went wrong", { exact: true }).count()) throw new Error(`error page at ${url}`);
+  if (heading) await page.getByRole("heading", { name: heading, level: 1 }).waitFor({ timeout: 15_000 });
+  else await page.locator("h1").first().waitFor({ timeout: 15_000 });
+}
+/** Call the API as the signed-in user through the web app's server proxy (cookie session). */
+async function apiCall(page, method, apiPath, { json, multipart } = {}) {
+  const r = await page.request.fetch(`/api/proxy${apiPath}`, {
+    method,
+    headers: { Accept: "application/json" },
+    ...(json !== undefined ? { data: json } : {}),
+    ...(multipart ? { multipart } : {}),
+  });
+  const text = await r.text();
+  if (!r.ok()) throw new Error(`${method} ${apiPath} -> ${r.status()}: ${text.slice(0, 300)}`);
+  return text ? JSON.parse(text) : null;
+}
+async function until(fn, { timeout = T, every = 1500, what = "condition" } = {}) {
+  const end = Date.now() + timeout;
+  for (;;) {
+    const v = await fn();
+    if (v) return v;
+    if (Date.now() > end) throw new Error(`timed out waiting for ${what}`);
+    await new Promise((r) => setTimeout(r, every));
+  }
 }
 const stateBadge = (page, label) => page.locator("h1").getByText(label, { exact: true });
 
@@ -514,6 +567,118 @@ try {
   await page.getByLabel("Oberflächensprache").or(page.getByLabel("Interface language")).selectOption("en");
   await nav.getByRole("link", { name: "Projects", exact: true }).waitFor({ timeout: 15_000 });
   step("PM switched to Deutsch: translated nav with English fallback, then back to English");
+
+  // 14. Modules merged in parallel: every new section opens and its main flow works.
+  // Engines and own models (module engine)
+  await visit(page, "/app/engines", "Engines");
+  await visit(page, "/app/training", "Own models");
+  step("engines and own models pages render");
+
+  // Software strings: create a project in the UI, push a JSON file, translate, release, OTA
+  await visit(page, "/app/strings", "Software strings");
+  await page.getByRole("button", { name: "New string project" }).first().click();
+  const sd = page.getByRole("dialog");
+  await sd.getByLabel("Name", { exact: true }).fill(`App strings ${stamp}`);
+  await sd.getByRole("checkbox", { name: /\(de\)$/ }).check();
+  await sd.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText("String project created").first().waitFor({ timeout: 15_000 });
+  const sp = (await apiCall(page, "GET", "/strings/projects")).items.find((x) => x.name === `App strings ${stamp}`);
+  if (!sp) throw new Error("string project not found after create");
+  const pushed = await apiCall(page, "POST", `/strings/projects/${sp.id}/push`, {
+    multipart: {
+      file: { name: "en.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify({ "home.title": "Welcome back", "home.cta": "Open your reports" })) },
+      format: "json",
+    },
+  });
+  if (pushed.created !== 2) throw new Error(`push created ${pushed.created} keys, expected 2`);
+  const batch = await apiCall(page, "POST", `/strings/projects/${sp.id}/translate`, { json: { mode: "translate" } });
+  await until(async () => ["done", "failed"].includes((await apiCall(page, "GET", `/strings/projects/${sp.id}/batches/${batch.id}`)).status), { what: "strings batch" });
+  const keys = await apiCall(page, "GET", `/strings/projects/${sp.id}/keys?langs=de`);
+  const missing = keys.items.filter((k) => !k.translations?.de?.value);
+  if (missing.length) throw new Error(`untranslated after translate: ${missing.map((k) => k.name).join(", ")}`);
+  const rel = await apiCall(page, "POST", `/strings/projects/${sp.id}/releases`, { json: { version_label: "1.0.0", publish: true } });
+  if (rel.status !== "published") throw new Error(`release status ${rel.status}`);
+  const ota = await fetch(`${API_ORIGIN}/ota/${sp.public_id}/latest/de.json`);
+  const bundle = ota.ok ? await ota.json() : null;
+  if (!bundle || !bundle["home.title"]) throw new Error(`OTA bundle missing keys (${ota.status})`);
+  await visit(page, `/app/strings/${sp.id}`);
+  await shot(page, "strings-project", false);
+  step(`strings: project created, 2 keys pushed, translated, release ${rel.version_label} published, OTA bundle served`);
+
+  // Workbench editor: a full-tier job waiting for review, edit and confirm one segment
+  await quote(page, plainPath, { name: "Editor check" });
+  await order(page, "full");
+  const editorJobUrl = await firstJobUrl(page);
+  const editorJobId = editorJobUrl.split("/").pop();
+  await until(async () => (await apiCall(page, "GET", `/jobs/${editorJobId}`)).state === "review", { what: "editor job in review" });
+  await visit(page, `/app/jobs/${editorJobId}/editor`);
+  const box = page.getByRole("textbox", { name: "Translation" });
+  await box.waitFor({ timeout: 20_000 });
+  await box.click();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type("Willkommen im neuen Dashboard.");
+  await page.getByRole("button", { name: /^Confirm/ }).click();
+  await until(
+    async () => (await apiCall(page, "GET", `/jobs/${editorJobId}/segments`)).items.some((x) => (x.target_tagged ?? "").includes("Willkommen im neuen Dashboard.")),
+    { what: "edited segment saved" },
+  );
+  await shot(page, "editor", false);
+  step("workbench editor opened and saved an edited segment");
+
+  // Auditor: upload a small XLIFF, the audit completes
+  await visit(page, "/app/auditor", "Quality auditor");
+  await page.getByLabel("Bilingual file").setInputFiles(xliffPath);
+  await page.getByLabel("Name", { exact: true }).fill("E2E audit");
+  await page.getByRole("button", { name: "Start audit" }).click();
+  await page.waitForURL(/\/app\/auditor\/[^/]+$/, { timeout: 20_000 });
+  const auditId = page.url().split("/").pop();
+  const audit = await until(
+    async () => {
+      const a = await apiCall(page, "GET", `/audits/${auditId}`);
+      if (a.state === "failed") throw new Error(`audit failed: ${a.error ?? ""}`);
+      return a.state === "done" ? a : null;
+    },
+    { what: "audit done" },
+  );
+  await visit(page, `/app/auditor/${auditId}`);
+  await shot(page, "auditor-report", false);
+  step(`auditor: XLIFF audited (${audit.segments_total} segments, MQM ${audit.mqm_score ?? "-"}, ${audit.verdict ?? "no verdict"})`);
+
+  // Vendors: create one in the UI, then it is suggested for the editor job's review step
+  await visit(page, "/app/vendors");
+  await page.getByRole("button", { name: "New vendor" }).first().click();
+  const vd = page.getByRole("dialog");
+  await vd.getByLabel("Name", { exact: true }).fill(`Vera Vendor ${stamp}`);
+  await vd.getByLabel("E-mail").fill(`vera-${stamp}@vendors.example`);
+  await vd.getByLabel("Language pairs").fill("en>de");
+  await vd.getByRole("button", { name: "Create vendor" }).click();
+  await page.getByText("Vendor created").first().waitFor({ timeout: 15_000 });
+  const sugg = await apiCall(page, "GET", `/jobs/${editorJobId}/assignment-suggestions?step=human_review`);
+  if (!sugg.items.some((r) => (r.name ?? "").includes(`Vera Vendor ${stamp}`))) {
+    throw new Error(`vendor not suggested: ${JSON.stringify(sugg.items.map((r) => r.name))}`);
+  }
+  await visit(page, "/app/capacity");
+  step("vendor created and suggested for the review step; capacity page renders");
+
+  // Billing and pricing, settings team / audit log / modules
+  await visit(page, "/app/settings/billing");
+  await shot(page, "settings-billing", false);
+  const pub = await newUser(browser, "public");
+  await visit(pub.page, "/pricing", "Pricing");
+  await pub.page.getByText("Business", { exact: true }).first().waitFor({ timeout: 15_000 });
+  await pub.ctx.close();
+  step("billing settings and the public pricing page render");
+  await visit(page, "/app/settings/team");
+  await visit(page, "/app/settings/audit");
+  await page.getByRole("cell", { name: "project.created" }).or(page.getByText("project.created")).first().waitFor({ timeout: 15_000 });
+  await visit(page, "/app/settings/modules");
+  await page.getByText("Add-ons", { exact: true }).first().waitFor({ timeout: 15_000 });
+  await shot(page, "settings-modules", false);
+  step("settings: team, audit log, modules with add-ons render");
+  for (const url of ["/app/queries", "/app/purchase-orders", "/app/vendor-invoices"]) await visit(page, url);
+  await visit(ap, "/admin/billing");
+  await visit(ap, "/admin/engines");
+  step("queries, purchase orders, vendor invoices, admin billing and admin engines render");
 } catch (e) {
   failed = e;
   for (const [who, p] of openPages) await p.screenshot({ path: path.join(SHOTS, `failure-${who}.png`), fullPage: true }).catch(() => null);

@@ -483,7 +483,7 @@ class CsvHandler:
     """
 
     name = "csv"
-    extensions: tuple[str, ...] = ("csv", "tsv")
+    extensions: tuple[str, ...] = ("csv",)
 
     def __init__(
         self,
@@ -632,3 +632,23 @@ class CsvHandler:
         if merged == decoded.text:
             return original
         return decoded.encode(merged)
+
+
+class TsvHandler(CsvHandler):
+    """Tab separated values: the CSV machinery with the delimiter fixed to a tab.
+
+    Sniffing is not used because prose cells often contain commas or semicolons that
+    would be mistaken for the delimiter.
+    """
+
+    name = "tsv"
+    extensions: tuple[str, ...] = ("tsv", "tab")
+
+    def __init__(
+        self,
+        delimiter: str | None = "\t",
+        quotechar: str = '"',
+        columns: Sequence[int | str] | None = None,
+        skip_header: bool = False,
+    ) -> None:
+        super().__init__(delimiter or "\t", quotechar, columns, skip_header)

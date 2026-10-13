@@ -22,6 +22,7 @@ export default async function CustomerLayout({ children }: { children: React.Rea
             { href: "/app/projects", label: t("app.layout.projects"), icon: "folder", module: "tms" },
             { href: "/app/projects/new", label: t("app.layout.newProject"), icon: "plus", module: "tms" },
             { href: "/app/exceptions", label: t("app.layout.exceptions"), icon: "alert", module: "tms" },
+            { href: "/app/strings", label: t("app.layout.strings"), icon: "globe", module: "strings" },
           ],
         },
         {
@@ -58,6 +59,7 @@ export default async function CustomerLayout({ children }: { children: React.Rea
             { href: "/app", label: t("app.layout.dashboard"), icon: "grid", exact: true, module: "pm" },
             { href: "/app/projects", label: t("app.layout.projects"), icon: "folder", module: "tms" },
             { href: "/app/projects/new", label: t("app.layout.newProject"), icon: "plus", module: "tms" },
+            { href: "/app/strings", label: t("app.layout.strings"), icon: "globe", module: "strings" },
           ],
         },
         {

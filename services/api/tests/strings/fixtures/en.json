@@ -1,0 +1,8 @@
+{
+  "app.title": "Acme Notes",
+  "home.greeting": "Hello {name}, welcome back!",
+  "home.files": "{count, plural, =0 {No files yet} one {# file} other {# files}}",
+  "home.summary": "You have {count, plural, one {# unread message} other {# unread messages}} in {folder}.",
+  "settings.price": "Price: {amount, number, ::currency/EUR}",
+  "weekdays": ["Mon", "Tue", "Wed"]
+}

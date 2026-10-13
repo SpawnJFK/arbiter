@@ -18,6 +18,7 @@ import arbiter.models  # noqa: F401  (registers every table on Base.metadata)
 from arbiter.db import Base
 from arbiter.models.platform import AUDIT_APPEND_ONLY_TRIGGER_SQL
 from arbiter.models.provenance import APPEND_ONLY_TRIGGER_SQL
+from arbiter.models.strings import STRING_HISTORY_TRIGGER_SQL
 
 EXTENSIONS_SQL = ("CREATE EXTENSION IF NOT EXISTS vector", "CREATE EXTENSION IF NOT EXISTS pg_trgm")
 
@@ -53,6 +54,14 @@ LATER_TABLES: frozenset[str] = frozenset(
         "engine_budgets",
         "training_jobs",
         "custom_models",
+        # 0007_strings
+        "string_projects",
+        "string_branches",
+        "string_keys",
+        "string_translations",
+        "string_history",
+        "string_releases",
+        "string_batches",
     }
 )
 LATER_COLUMNS: dict[str, frozenset[str]] = {
@@ -95,9 +104,12 @@ def create_schema(conn: Connection, revision: str | None = None) -> None:
     conn.execute(text(APPEND_ONLY_TRIGGER_SQL))
     if revision != "0001":  # migration 0005 creates audit_events and its trigger
         conn.execute(text(AUDIT_APPEND_ONLY_TRIGGER_SQL))
+    if revision != "0001":  # string_history arrives with migration 0007, which adds its trigger itself
+        conn.execute(text(STRING_HISTORY_TRIGGER_SQL))
 
 
 def drop_schema(conn: Connection) -> None:
     Base.metadata.drop_all(conn)
     conn.execute(text("DROP FUNCTION IF EXISTS provenance_append_only() CASCADE"))
     conn.execute(text("DROP FUNCTION IF EXISTS audit_append_only() CASCADE"))
+    conn.execute(text("DROP FUNCTION IF EXISTS string_history_append_only() CASCADE"))

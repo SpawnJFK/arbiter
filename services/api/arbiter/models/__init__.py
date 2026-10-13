@@ -38,6 +38,15 @@ from arbiter.models.reviewers import (
     ReviewTask,
     TestAttempt,
 )
+from arbiter.models.strings import (
+    StringBatch,
+    StringBranch,
+    StringHistory,
+    StringKey,
+    StringProject,
+    StringRelease,
+    StringTranslation,
+)
 from arbiter.models.tenancy import ApiKey, Organization, User
 
 __all__ = [
@@ -86,6 +95,13 @@ __all__ = [
     "ReviewerTest",
     "Segment",
     "SenateRun",
+    "StringBatch",
+    "StringBranch",
+    "StringHistory",
+    "StringKey",
+    "StringProject",
+    "StringRelease",
+    "StringTranslation",
     "StyleCard",
     "Term",
     "TermQuestion",

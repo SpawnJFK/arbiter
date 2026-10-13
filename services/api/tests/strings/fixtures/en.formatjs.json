@@ -1,0 +1,10 @@
+{
+  "checkout.pay": {
+    "defaultMessage": "Pay {total}",
+    "description": "Primary button on the checkout page"
+  },
+  "checkout.items": {
+    "defaultMessage": "{itemCount, plural, one {# item} other {# items}}",
+    "description": "Cart summary"
+  }
+}

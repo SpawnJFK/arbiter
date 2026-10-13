@@ -464,3 +464,59 @@ Every route of a product module carries `require_module("<module>")`; when the o
 `/me` also returns `permissions` (granted patterns) and `user.role_id`.
 
 Audited actions so far: `org.created`, `org.updated`, `auth.login`, `auth.sso_login`, `api_key.created|revoked`, `webhook.created|deleted`, `module.changed`, `role.created|updated|deleted`, `user.invited|invite_accepted|updated|deactivated|reactivated|provisioned`, `sso.created|updated|deleted|domain_verified`, `audit.exported`, `glossary.imported`, `tm.imported`, `project.created`, `job.cancelled`, `segment.edited|approved`.
+
+
+# Software strings (module `strings`)
+
+Key-value localization for apps and websites, on the same engines, TM, glossary, QE and reviewer community as documents (D-060, D-061, D-062). Every `/v1/strings` route requires the `strings` module (404 `module_disabled` otherwise) and a permission: `strings.read` (pm, client, API key), `strings.write` (pm, API key), `strings.publish` (pm, API key; releases and distribution tokens). Branch parameters accept a branch id or name; omitted means `main`. Language codes are BCP-47 (`pt_br` -> `pt-BR`).
+
+| Method | Path | Body / query | Returns |
+|---|---|---|---|
+| GET | /strings/formats | | `{items: [{name, label, extension, multilingual, bilingual}]}` |
+| GET | /strings/projects | `offset, limit` | list of `StringProject` (with `stats`) |
+| POST | /strings/projects | `{name, base_lang, target_langs[], platforms[], tier?, settings?}` (Idempotency-Key) | 201 `StringProject` |
+| GET / PATCH / DELETE | /strings/projects/{id} | PATCH `{name?, target_langs?, platforms?, tier?, settings?}` | `StringProject`; DELETE archives (204) |
+| GET | /strings/projects/{id}/keys | `branch, q, tag, namespace, lang, state (untranslated\|machine\|reviewed\|approved\|blocked\|needs_review), langs (comma list), include_archived, offset, limit<=1000` | `{items: [StringKey], total, next_offset, branch}` |
+| POST | /strings/projects/{id}/keys | `?branch`; `{name, namespace?, kind: string\|plural\|array, description?, max_length?, tags?, screenshot_url?, translatable?, value? \| forms?}` | 201 `StringKey` |
+| GET / PATCH | /strings/projects/{id}/keys/{key_id} | PATCH `{name?, namespace?, kind?, description?, max_length?, tags?, screenshot_url?, translatable?, archived?}` | `StringKey` |
+| GET | /strings/projects/{id}/keys/{key_id}/history | `?lang` | `{items: [{event, lang, version, value, forms, state, actor_type, actor_id, at}]}` (append-only) |
+| PUT | /strings/projects/{id}/keys/{key_id}/translations/{lang} | `?branch`; `{value \| forms, state?: machine\|reviewed\|approved}` | `StringKey` (QA runs; a blocking issue sets `blocked`) |
+| DELETE | /strings/projects/{id}/keys/{key_id}/translations/{lang} | `?branch` | `StringKey` |
+| POST | /strings/projects/{id}/keys/{key_id}/translations/{lang}/suggest | `?branch` | `{outcome, key}`: TM + engine + QA + QE for one empty translation |
+| POST | /strings/projects/{id}/translate | `{branch?, langs?, mode: translate\|tm_only, key_ids?}` | 202 `StringBatch` (409 when one is running on the branch) |
+| GET | /strings/projects/{id}/batches, /batches/{batch_id} | | `StringBatch` (`progress` 0-100, `counts`) |
+| POST | /strings/projects/{id}/bulk | `{action: approve\|clear\|pretranslate_tm\|translate\|archive\|unarchive\|tag\|untag, branch?, key_ids?, langs?, tag?}` | `{action, changed}` or `{action, batch}` |
+| GET / POST | /strings/projects/{id}/branches | POST `{name}` | `{items: [StringBranch]}` / 201 `StringBranch` |
+| GET | /strings/projects/{id}/branches/{branch}/merge-preview | | `{branch, conflicts: [{key_id, key, lang, branch_value, main_value}]}` |
+| POST | /strings/projects/{id}/branches/{branch}/merge | `{resolutions: {"<key_id>:<lang>": "branch"\|"main"}}` | `{applied, keys_moved, conflicts_resolved, branch}`; unresolved conflicts 409 `conflict` with `details.conflicts` |
+| DELETE | /strings/projects/{id}/branches/{branch} | | 204 (not main) |
+| GET / POST | /strings/projects/{id}/releases | POST `{branch?, version_label?, langs?, formats?: [format], publish=true}` (Idempotency-Key; `publish` needs strings.publish) | list / 201 `StringRelease` |
+| GET | /strings/projects/{id}/releases/{release} | id or version label | `StringRelease` |
+| POST | /strings/projects/{id}/releases/{release}/publish | | `StringRelease`, emits webhook `strings.release.published` |
+| GET | /strings/projects/{id}/releases/{release}/files/{lang}/{format} | `lang` may be `_all` for multilingual formats | the stored file |
+| POST | /strings/projects/{id}/distribution-token | | `{token, private: true}` (shown once; the project becomes private) |
+| POST | /strings/projects/{id}/push | multipart `file`, `format?` (detected from the extension/content), `lang?` (default base), `branch?`, `namespace?`, `create_keys?` (default true for the base language), `update_changed=true`, `archive_missing=false`, `tag?`, `state=reviewed` | `{format, lang, branch, keys_in_file, created, updated, unchanged, archived, skipped, blocked, warnings[]}` |
+| GET | /strings/projects/{id}/pull | `lang?, format?, branch?, namespace?, min_state=machine, fallback=false, include_blocked=false` | the file (multilingual formats without `lang`: every language) |
+
+Public, no auth (mounted at the root, not under `/v1`):
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | /ota/{public_id}/{version_label\|release_id}/{lang}.json | published releases only; `Cache-Control: public, max-age=31536000, immutable`; `ETag` = bundle SHA-256; `If-None-Match` -> 304 |
+| GET | /ota/{public_id}/latest/{lang}.json | newest published release; `Cache-Control: public, max-age=60, stale-while-revalidate=300` |
+| GET | /ota/{public_id}/{ref}/manifest.json | `{project, release, version_label, published_at, content_hash, base_lang, langs: {lang: {url, sha256}}}` |
+
+Private projects: send the distribution token as `X-Distribution-Token` or `?token=`; without it every OTA path is 404 and caching is `private`. `Access-Control-Allow-Origin: *` on all OTA responses.
+
+Shapes:
+- `StringProject`: `{id, name, public_id, base_lang, target_langs, platforms, tier, settings: {placeholder_style, plural_rules, human_review, release_min_state, fallback_to_base, private, default_format, engine}, has_distribution_token, ota_base, created_at, stats?: {keys, archived, languages: {lang: {untranslated, machine, reviewed, approved, blocked, progress}}}}`.
+- `StringKey`: `{id, namespace, name, kind, description, screenshot_url, max_length, tags, translatable, archived, branch_local, placeholders[], plural_forms: {lang: [category]} | null, translations: {lang: StringTranslation | null}}`.
+- `StringTranslation`: `{value, forms, state: untranslated|machine|reviewed|approved, origin: import|human|tm|mt|review, engine, qe_score, qa: [{code, severity, message, blocking, form?}], blocked, needs_review, version, updated_by, updated_at, branch_local}`. `forms` holds CLDR plural categories (and explicit `=N` selectors) or array indexes.
+- `StringRelease`: `{id, version_label, status: draft|published, branch_id, langs, content_hash, key_count, files: {lang: {format: {sha256, bytes}}}, ota: {manifest, latest_manifest, langs: {lang: {versioned, latest}}} | null, created_at, published_at}`.
+- OTA bundle: `{"<key>": "text", "<plural key>": {"one": "...", "other": "..."}, "<array key>": ["..."]}`; keys in a namespace are `"<namespace>:<key>"`.
+
+Formats (`format` names): `json` (flat), `json_nested` (next-intl, vue-i18n), `i18next`, `formatjs`, `arb` (Flutter), `android` (strings.xml), `ios_strings`, `stringsdict`, `xcstrings` (multilingual), `yaml` (Rails), `po`, `pot`, `xliff12`, `xliff21` (bilingual), `csv`, `xlsx` (multilingual).
+
+String QA codes (blocking unless noted): `empty_value`, `placeholder_changed` (a missing placeholder in a plural form is a warning), `icu_syntax`, `icu_structure`, `plural_forms_missing`, `length_exceeded`, `array_length` (warning). Machine output also gets the document hard checks (`tag_missing` etc.; placeholders travel as standalone codes). Blocked translations never ship in pulls (unless `include_blocked`) or releases.
+
+CLI for CI: `cli/arbiter-strings.mjs` (`push`, `pull`, `release`, `status`; zero dependencies), documented in `cli/README.md`.

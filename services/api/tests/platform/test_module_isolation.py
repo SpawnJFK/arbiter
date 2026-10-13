@@ -40,6 +40,14 @@ KNOWN_DEBT: set[tuple[str, str]] = {
     ("quality/checks.py", "arbiter.engines.tags"),
     ("engines/llm_mt.py", "arbiter.quality.prompts"),
     ("agency/assistant.py", "arbiter.engines.registry"),
+    # strings module, merged in parallel with this check (integration debt, D-060):
+    ("strings/placeholders.py", "arbiter.engines.tags"),
+    ("strings/review.py", "arbiter.community.queue"),
+    ("strings/review.py", "arbiter.engines.tags"),
+    ("strings/translate.py", "arbiter.engines.registry"),
+    ("strings/translate.py", "arbiter.engines.tags"),
+    ("strings/translate.py", "arbiter.quality.checks"),
+    ("strings/translate.py", "arbiter.quality.qe"),
 }
 
 

@@ -77,10 +77,12 @@ def create_app() -> FastAPI:
         # `commit` lets scripts/verify-deployed-version.mjs prove what is running.
         return {"ok": True, "commit": settings.git_sha, "version": settings.version}
 
-    from arbiter.api.routes import ROUTERS
+    from arbiter.api.routes import PUBLIC_ROUTERS, ROUTERS
 
     for router in ROUTERS:
         app.include_router(router, prefix="/v1")
+    for router in PUBLIC_ROUTERS:
+        app.include_router(router)
     if observability.setup_tracing("arbiter-api", app=app):
         from arbiter import db
 

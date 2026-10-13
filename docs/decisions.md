@@ -1342,3 +1342,15 @@ Date: 2026-10-13. Status: accepted. Supersedes D-048.
 - *Merging P02 and P04 (deploy production straight away).* Staging must prove the stack, backups, restore drill and attested deploys before customer data arrives.
 
 **Consequences.** `hyperpower.json` phases map, `phases/README.md`, `ROADMAP.md` and `ACCEPTANCE.md` follow the new numbers. P00 creates ten beads, not nine.
+
+## D-091: Dev-only secrets refused outside dev and test; SECRETS_KEY wired into deploys
+
+**Context.** `ARBITER_SECRETS_KEY` encrypts BYOK engine keys and SSO client secrets (D-055, D-056). The Kamal configs and `release.yml` did not pass it, and the startup check refused dev defaults only when `ARBITER_ENV=prod`, so staging would have encrypted real keys under the public dev key.
+
+**Decision.** `Settings.assert_deployable()` refuses the built-in `dev-only` values of `ARBITER_JWT_SECRET` and `ARBITER_SECRETS_KEY` whenever `ARBITER_ENV` is not `dev` or `test`; both the API (`create_app`) and the worker (`main`) call it. `ARBITER_SECRETS_KEY` is in `deploy/kamal/config/deploy.yml` `env.secret`, `.kamal/secrets-common` and the `release.yml` preflight and deploy env. Test: `tests/platform/test_platform_deployable.py`.
+
+**Rejected.**
+- *Check only in prod.* Staging carries real provider keys and real SSO configs.
+- *Generate a key on first boot.* A lost or rotated container would make every stored secret unreadable.
+
+**Consequences.** P02 item 7's code part is done; the owner-side step (generating the key and setting the GitHub environment secret) remains.

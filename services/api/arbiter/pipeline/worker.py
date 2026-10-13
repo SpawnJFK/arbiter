@@ -164,6 +164,9 @@ def run_until_idle(factory: sessionmaker[Session] | None = None, *, max_items: i
 
 def main() -> None:
     logging.basicConfig(level=os.environ.get("ARBITER_LOG_LEVEL", "INFO"))
+    from arbiter.config import get_settings
+
+    get_settings().assert_deployable()
     worker_id = f"{socket.gethostname()}:{os.getpid()}"
     factory = db.session_factory()
     stop = False

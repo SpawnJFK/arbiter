@@ -147,6 +147,7 @@ jobs:
           TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
           ARBITER_DATABASE_URL: ${{ secrets.ARBITER_DATABASE_URL }}
           ARBITER_JWT_SECRET: ${{ secrets.ARBITER_JWT_SECRET }}
+          ARBITER_SECRETS_KEY: ${{ secrets.ARBITER_SECRETS_KEY }}
           ARBITER_S3_BUCKET: ${{ secrets.ARBITER_S3_BUCKET }}
           ARBITER_S3_ACCESS_KEY_ID: ${{ secrets.ARBITER_S3_ACCESS_KEY_ID }}
           ARBITER_S3_SECRET_ACCESS_KEY: ${{ secrets.ARBITER_S3_SECRET_ACCESS_KEY }}
@@ -155,7 +156,7 @@ jobs:
           API_URL: ${{ vars.API_URL }}
         run: |
           missing=""
-          for name in TS_OAUTH_CLIENT_ID TS_OAUTH_SECRET ARBITER_DATABASE_URL ARBITER_JWT_SECRET \
+          for name in TS_OAUTH_CLIENT_ID TS_OAUTH_SECRET ARBITER_DATABASE_URL ARBITER_JWT_SECRET ARBITER_SECRETS_KEY \
                       ARBITER_S3_BUCKET ARBITER_S3_ACCESS_KEY_ID ARBITER_S3_SECRET_ACCESS_KEY \
                       ARBITER_SMTP_HOST ARBITER_DOMAIN API_URL; do
             if [ -z "${!name:-}" ]; then missing="$missing $name"; fi
@@ -194,6 +195,7 @@ jobs:
           KAMAL_REGISTRY_PASSWORD: ${{ secrets.KAMAL_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
           ARBITER_DATABASE_URL: ${{ secrets.ARBITER_DATABASE_URL }}
           ARBITER_JWT_SECRET: ${{ secrets.ARBITER_JWT_SECRET }}
+          ARBITER_SECRETS_KEY: ${{ secrets.ARBITER_SECRETS_KEY }}
           ARBITER_S3_ENDPOINT_URL: ${{ secrets.ARBITER_S3_ENDPOINT_URL }}
           ARBITER_S3_REGION: ${{ secrets.ARBITER_S3_REGION }}
           ARBITER_S3_BUCKET: ${{ secrets.ARBITER_S3_BUCKET }}

@@ -176,6 +176,18 @@ class Settings(BaseSettings):
     git_sha: str = "unknown"
     version: str = "0.1.0"
 
+    def assert_deployable(self) -> None:
+        """Refuse to run outside dev/test with the built-in dev-only secrets.
+
+        Staging holds real customer-like data and real BYOK keys, so it gets the same rule
+        as production (D-091).
+        """
+        if self.env in ("dev", "test"):
+            return
+        for name in ("jwt_secret", "secrets_key"):
+            if str(getattr(self, name)).startswith("dev-only"):
+                raise RuntimeError(f"ARBITER_{name.upper()} must be set outside dev and test")
+
     @property
     def is_test(self) -> bool:
         return self.env == "test"

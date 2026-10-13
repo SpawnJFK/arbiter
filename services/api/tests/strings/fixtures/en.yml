@@ -1,0 +1,15 @@
+en:
+  users:
+    index:
+      title: "All users"
+      greeting: "Hello %{name}"
+    count:
+      one: "1 user"
+      other: "%{count} users"
+  date:
+    abbr_day_names:
+      - Sun
+      - Mon
+      - Tue
+  number:
+    precision: 2

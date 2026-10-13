@@ -32,7 +32,16 @@ def _webhook(session: Session, payload: dict[str, Any]) -> None:
     webhooks.deliver(session, payload["delivery_id"])
 
 
+# Work item kinds owned by product modules: "<prefix>" -> "module:function" (imported lazily).
+MODULE_HANDLERS: dict[str, str] = {"strings.translate": "arbiter.strings.translate:process"}
+
+
 def _handler(kind: str) -> Callable[[Session, dict[str, Any]], None] | None:
+    if kind in MODULE_HANDLERS:
+        import importlib
+
+        mod, fn = MODULE_HANDLERS[kind].split(":")
+        return getattr(importlib.import_module(mod), fn)
     if kind in orchestrator.HANDLERS:
         fn = orchestrator.HANDLERS[kind]
         return lambda s, p: fn(s, p["job_id"])

@@ -22,8 +22,9 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "vendors.manage",
         "audit.read",
         "org.manage",
+        "strings.publish",
     },
-    "api": {"*.read", "*.write"},
+    "api": {"*.read", "*.write", "strings.publish"},
     "client": {"*.read", "jobs.write", "files.write", "quotes.write"},
     "reviewer": {"tasks.read", "tasks.write"},
 }

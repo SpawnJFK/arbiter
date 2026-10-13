@@ -1,0 +1,14 @@
+{
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "submit": "Continue with {provider}"
+    },
+    "errors": {
+      "invalid": "Wrong email or password"
+    }
+  },
+  "cart": {
+    "items": "{n, plural, one {# item} other {# items}}"
+  }
+}

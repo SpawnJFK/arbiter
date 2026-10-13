@@ -1,0 +1,33 @@
+# German translation for Acme Notes.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: de\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#. Shown in the toolbar
+#: src/toolbar.c:12
+msgid "Save"
+msgstr "Speichern"
+
+#: src/files.c:40
+#, c-format
+msgid "Deleted %d file"
+msgid_plural "Deleted %d files"
+msgstr[0] "%d Datei gelöscht"
+msgstr[1] "%d Dateien gelöscht"
+
+msgctxt "menu"
+msgid "Open"
+msgstr "Öffnen"
+
+msgctxt "verb"
+msgid "Open"
+msgstr ""
+
+#, fuzzy
+msgid ""
+"A long message that "
+"spans two lines.\n"
+"And a second line."
+msgstr "Eine lange Nachricht.\nUnd eine zweite Zeile."

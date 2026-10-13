@@ -1,0 +1,8 @@
+/* Title of the main screen */
+"main.title" = "Notes";
+
+/* Greeting, %@ is the user name */
+"main.greeting" = "Hello, %@!";
+"quote" = "She said \"hi\"\nthen left";
+// line comment
+unquoted_key = "Value";

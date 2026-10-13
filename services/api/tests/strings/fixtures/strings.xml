@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="app_name" translatable="false">Acme Notes</string>
+    <!-- Title of the welcome screen -->
+    <string name="welcome_title">Welcome, %1$s!</string>
+    <string name="dont_forget">Don\'t forget to \"save\" &amp; sync</string>
+    <string name="tap_save">Tap <b>Save</b> to keep <xliff:g id="count" example="3">%d</xliff:g> notes</string>
+    <string name="email_hint">\@username or email</string>
+    <string name="two_lines">First line\nSecond line</string>
+    <string name="padded">"  spaced out  "</string>
+    <string name="percent" formatted="false">100% sure</string>
+    <plurals name="notes_count">
+        <item quantity="one">%d note</item>
+        <item quantity="other">%d notes</item>
+    </plurals>
+    <string-array name="sort_options">
+        <item>Newest first</item>
+        <item>Oldest first</item>
+        <item>By title</item>
+    </string-array>
+</resources>

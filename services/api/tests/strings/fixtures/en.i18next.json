@@ -1,0 +1,11 @@
+{
+  "nav": {
+    "home": "Home",
+    "inbox_one": "{{count}} new message",
+    "inbox_other": "{{count}} new messages"
+  },
+  "welcome": "Welcome, {{name}}!",
+  "trash_zero": "Trash is empty",
+  "trash_one": "One item in trash",
+  "trash_other": "{{count}} items in trash"
+}

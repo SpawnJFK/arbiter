@@ -62,10 +62,12 @@ def create_app() -> FastAPI:
     def healthz() -> dict:
         return {"ok": True}
 
-    from arbiter.api.routes import ROUTERS
+    from arbiter.api.routes import PUBLIC_ROUTERS, ROUTERS
 
     for router in ROUTERS:
         app.include_router(router, prefix="/v1")
+    for router in PUBLIC_ROUTERS:
+        app.include_router(router)
     return app
 
 

@@ -743,3 +743,50 @@ Date: 2026-10-09. Status: accepted.
 - *Read the key from an environment variable in the file.* Cursor's support for env interpolation in MCP headers differs across versions; a gitignored file is predictable.
 
 **Consequences.** Pulling the commit that untracks the file deletes the owner's local copy; Context7 in Cursor is off until P00 item 16 writes the new file.
+
+---
+
+## D-051 Software strings: own key-value model, copy-on-write branches, merge by base version
+Date: 2026-10-13. Status: accepted. (Parallel branches may also use this number; renumber at merge.)
+
+**Context.** The `strings` module (the Lokalise / Phrase Strings / Crowdin category) needs keys with values per language, plurals, branches for feature work and releases. The document pipeline (files, jobs, segments) models paragraphs of one file in one language pair per job, which fits neither keys that live for years nor many target languages per key.
+
+**Decision.** New tables (migration 0007): `string_projects`, `string_branches` (a real `main` row per project), `string_keys` (unique per project + namespace + name, created in a branch), `string_translations` (one row per key, branch and language; the base-language text is a translation row too; plural and array values in `forms`), append-only `string_history` (trigger like provenance), `string_releases`, `string_batches`. Parsers live in `arbiter/strings/formats/`, separate from `fileproc` (document formats). Branches are copy-on-write: writing in a branch copies the main row and records `base_version`; reads prefer the branch row. Merge applies branch rows whose main row is still at `base_version`; a main row that moved on is a conflict the user resolves per key and language (keep branch or keep main). Key metadata (description, max length, tags) is shared by every branch; only key creation and values are branch scoped. Branches are created from main only.
+
+**Rejected.**
+- *Reuse jobs and segments for strings.* One job per language pair and file and a segment state machine built for delivering a file; keys would be duplicated per job and their history scattered.
+- *Snapshot (full copy) branches.* Simple reads, but a project with 20k keys and 30 languages copies 600k rows per branch.
+- *Git-style three-way text merge.* Translations are short values; a per-value conflict with both versions shown is clearer and enough.
+- *Nested branches.* Row versions in different branches are not comparable; main-only parents keep conflict detection exact.
+
+**Consequences.** Key renames and metadata edits made in a branch are visible in main at once. Two branches cannot create the same key name (the second gets 409 until the first is merged).
+
+---
+
+## D-052 Human review of strings through carrier jobs, not a second task type
+Date: 2026-10-13. Status: accepted.
+
+**Context.** Strings need the same reviewer community (routing by pair and level, holds, pay, control grading, disputes). `review_tasks.segment_id` is a foreign key to `segments`, and every community flow reads the segment.
+
+**Decision.** `arbiter/strings/review.py` creates, per string project and target language, a carrier `Project` + `FileAsset` (format `strings`, no file) + `Job` whose workflow snapshot is `{"adapter": "strings", "steps": []}`, and one `Segment` per translation and form holding the placeholder-protected source and the machine target. `review_queue.create_task()` queues it like any pipeline segment. `pipeline/hooks.segment_reviewed` dispatches segments of adapter jobs to the module (`hooks.ADAPTERS`, imported lazily); the module restores placeholders, writes the value back (reviewed once every form is reviewed), stores it in the TM and closes the carrier job. The worker gained `MODULE_HANDLERS` for module-owned work items (`strings.translate`).
+
+**Rejected.**
+- *A `string_translation_id` column on review_tasks (nullable segment_id).* Touches every community query, the reviewer cockpit, pay and disputes; high risk for the existing flows.
+- *A strings-only reviewer queue.* Duplicates routing, holds, scoring and payouts.
+
+**Consequences.** Carrier projects show in the customer's project list as "Strings review: <name>". Carrier jobs never get pipeline steps, deadlines or invoices; reviewer pay is booked to the carrier job's `cost_reviewers`. The no-reviewer policy is not applied to strings yet (translations stay `machine` with `needs_review`).
+
+---
+
+## D-053 Strings translation flow, states and what ships
+Date: 2026-10-13. Status: accepted.
+
+**Context.** Strings must use the same engines, TM, glossary, hard QA, QE judge and tier rules as documents, but an app string ships continuously, not as a delivered file, and a broken placeholder crashes the app.
+
+**Decision.** Placeholders (ICU, printf, iOS, Android, Rails, mustache, template literals, inline markup) become standalone codes before TM and engines, so the document hard checks (`tag_missing`, ...) catch a dropped or invented placeholder; string QA adds placeholder, ICU, plural-form and length checks on the restored value. TM context for a string is the key itself (101 = same key, same source). `quality.qe.decide` with the project tier maps to states: `auto_approve` -> `reviewed`; `senate` and `review` -> `machine` + `needs_review` (+ a review task when `human_review` is on and the org has the community module); blocking QA -> `blocked`. `approved` is a human sign-off (editor or bulk approve). Releases and pulls take `release_min_state` (default `machine`) and never ship blocked translations; with `fallback_to_base` (default) the base text fills gaps so an app never shows a raw key. Changing a base text drops reviewed and approved translations of that key back to `machine`. `strings.publish` was added to the built-in pm and api roles. The senate band is not convened for strings yet; it is treated as needs review.
+
+**Rejected.**
+- *Ship only reviewed translations by default.* Most software teams ship machine output early and review later; the setting covers stricter teams.
+- *Treat placeholders as plain text and rely on regex QA only.* Engines then see and sometimes translate `{name}`; codes make them untouchable.
+
+**Consequences.** OTA bundles are immutable per version (cached for a year) and `latest` is short-cached with ETag revalidation. Private projects use a distribution token (only its hash is stored); the internal project id never appears in public URLs.

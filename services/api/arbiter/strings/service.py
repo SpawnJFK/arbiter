@@ -736,7 +736,9 @@ def key_view(
         "translatable": key.translatable,
         "archived": key.archived_at is not None,
         "branch_local": key.branch_id == branch.id and not branch.is_main,
-        "placeholders": ph.chips(sample, style) if sample else [],
+        "placeholders": [c for c in dict.fromkeys(ph.chips(sample, style)) if not _icu_piece(c)]
+        if sample
+        else [],
         "plural_forms": {
             lang: list(plurals.categories(lang, settings_of(proj)["plural_rules"])) for lang in langs
         }
@@ -744,6 +746,11 @@ def key_view(
         else None,
         "translations": {lang: translation_view(eff.get((key.id, lang)), branch) for lang in langs},
     }
+
+
+def _icu_piece(code: str) -> bool:
+    """Selector and brace codes of an ICU plural/select (not something a translator inserts)."""
+    return code.startswith("}") or bool(re.match(r"\{\s*\w+\s*,\s*(plural|select|selectordinal)\s*,", code))
 
 
 @dataclass
@@ -863,7 +870,9 @@ def merge_branch(
         if k.branch_id == branch.id:
             k.branch_id = main.id
             moved_keys += 1
-            history(db, proj, k, main, "", "merged", actor_type="human", actor_id=actor, from_branch=branch.name)
+            history(
+                db, proj, k, main, "", "merged", actor_type="human", actor_id=actor, from_branch=branch.name
+            )
     db.flush()
     for r in list(
         db.execute(select(StringTranslation).where(StringTranslation.branch_id == branch.id)).scalars()

@@ -20,6 +20,7 @@ const EVENT_HELP: Record<WebhookEvent, string> = {
   "job.failed": k("app.settings.webhooks.event.job_failed"),
   "job.needs_attention": k("app.settings.webhooks.event.job_needs_attention"),
   "quote.expired": k("app.settings.webhooks.event.quote_expired"),
+  "strings.release.published": k("app.settings.webhooks.event.strings_release_published"),
 };
 
 export function Webhooks({ initial }: { initial: Webhook[] }) {

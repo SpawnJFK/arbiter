@@ -640,6 +640,7 @@ export const WEBHOOK_EVENTS = [
   "job.failed",
   "job.needs_attention",
   "quote.expired",
+  "strings.release.published",
 ] as const;
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
 

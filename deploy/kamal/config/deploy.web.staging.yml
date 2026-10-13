@@ -1,0 +1,9 @@
+# Staging destination for the web service.
+
+servers:
+  web:
+    hosts:
+      - arbiter-stg-1
+
+proxy:
+  host: app.staging.<%= ENV.fetch("ARBITER_DOMAIN") %>

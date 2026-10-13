@@ -1,0 +1,207 @@
+name: backup
+
+# Nightly logical dump of the managed Postgres to Backblaze B2 (EU), on top of the
+# provider's point-in-time recovery, so a copy exists at a different provider.
+# Monthly restore drill: restore the newest dump into a scratch Postgres, check row counts
+# against the manifest written at dump time, and keep a JSON evidence artifact.
+#
+# Environment "backup" holds: ARBITER_BACKUP_DATABASE_URL (libpq URL, ideally a read-only
+# role, postgresql://user:pass@host:5432/db?sslmode=require), B2_KEY_ID, B2_APP_KEY,
+# B2_BUCKET, B2_ENDPOINT (https://s3.eu-central-003.backblazeb2.com), BACKUP_PASSPHRASE
+# (symmetric encryption of the dump). Optional variables: PG_MAJOR (default 16),
+# BACKUP_SSH_HOST (tailnet host that runs pg_dump when the database only accepts the VMs;
+# then TS_OAUTH_CLIENT_ID / TS_OAUTH_SECRET secrets are needed too).
+# Missing configuration: the jobs print what is missing and skip.
+
+on:
+  schedule:
+    - cron: "17 2 * * *"   # nightly dump, 02:17 UTC
+    - cron: "41 4 3 * *"   # restore drill, 04:41 UTC on the 3rd of each month
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "What to run"
+        type: choice
+        options: [dump, restore-drill, both]
+        default: dump
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  dump:
+    name: nightly dump to B2
+    if: (github.event_name == 'schedule' && github.event.schedule == '17 2 * * *') || (github.event_name == 'workflow_dispatch' && inputs.job != 'restore-drill')
+    runs-on: ubuntu-24.04
+    environment: backup
+    timeout-minutes: 120
+    env:
+      PG_MAJOR: ${{ vars.PG_MAJOR || '16' }}
+      BACKUP_SSH_HOST: ${{ vars.BACKUP_SSH_HOST }}
+      DB_URL: ${{ secrets.ARBITER_BACKUP_DATABASE_URL }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.B2_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_APP_KEY }}
+      AWS_DEFAULT_REGION: eu-central-003
+      B2_BUCKET: ${{ secrets.B2_BUCKET }}
+      B2_ENDPOINT: ${{ secrets.B2_ENDPOINT }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - id: preflight
+        name: check configuration
+        env:
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+        run: |
+          missing=""
+          for name in DB_URL AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY B2_BUCKET B2_ENDPOINT BACKUP_PASSPHRASE; do
+            if [ -z "${!name:-}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$BACKUP_SSH_HOST" ] && [ -z "$TS_OAUTH_CLIENT_ID" ]; then missing="$missing TS_OAUTH_CLIENT_ID"; fi
+          if [ -n "$missing" ]; then
+            echo "::notice title=backup skipped::environment 'backup' is not configured; missing:$missing"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.preflight.outputs.ready == 'true' && env.BACKUP_SSH_HOST != ''
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+      - if: steps.preflight.outputs.ready == 'true'
+        name: pg_dump, manifest, encrypt, upload
+        run: |
+          set -euo pipefail
+          stamp="$(date -u +%Y-%m-%dT%H%M%SZ)"
+          key="pg/arbiter-${stamp}.dump.gpg"
+          start=$(date +%s)
+          dump() {
+            # The URL travels on stdin, never on a command line.
+            if [ -n "$BACKUP_SSH_HOST" ]; then
+              printf '%s\n' "$DB_URL" | ssh -o StrictHostKeyChecking=accept-new "deploy@${BACKUP_SSH_HOST}" \
+                "read -r U; docker run --rm -i -e U postgres:${PG_MAJOR} sh -c 'pg_dump -Fc --no-owner \"\$U\"'"
+            else
+              printf '%s\n' "$DB_URL" | docker run --rm -i postgres:"${PG_MAJOR}" sh -c 'read -r U; pg_dump -Fc --no-owner "$U"'
+            fi
+          }
+          counts() {
+            local sql="SELECT json_object_agg(relname, n_live_tup) FROM pg_stat_user_tables"
+            if [ -n "$BACKUP_SSH_HOST" ]; then
+              printf '%s\n' "$DB_URL" | ssh "deploy@${BACKUP_SSH_HOST}" \
+                "read -r U; docker run --rm -i -e U postgres:${PG_MAJOR} sh -c 'psql -tA \"\$U\" -c \"${sql}\"'"
+            else
+              printf '%s\n' "$DB_URL" | docker run --rm -i postgres:"${PG_MAJOR}" sh -c "read -r U; psql -tA \"\$U\" -c \"${sql}\""
+            fi
+          }
+          # Approximate row counts first; the restore drill checks no populated table comes back empty.
+          counts > counts.json
+          echo "[backup] dumping (postgres client ${PG_MAJOR})"
+          dump > db.dump
+          size=$(stat -c %s db.dump)
+          if [ "$size" -lt 1024 ]; then echo "dump is suspiciously small ($size bytes)"; exit 1; fi
+          gpg --batch --yes --pinentry-mode loopback --passphrase-fd 3 --symmetric --cipher-algo AES256 \
+            -o db.dump.gpg db.dump 3<<<"$BACKUP_PASSPHRASE"
+          sha=$(sha256sum db.dump.gpg | cut -d' ' -f1)
+          jq -n --arg key "$key" --arg sha "$sha" --argjson size "$size" --arg at "$stamp" \
+                --argjson secs "$(( $(date +%s) - start ))" --slurpfile counts counts.json \
+                '{key:$key, sha256:$sha, dump_bytes:$size, created_at:$at, duration_seconds:$secs, approx_rows:$counts[0]}' > manifest.json
+          echo "[backup] uploading $key ($size bytes before encryption)"
+          aws s3 cp db.dump.gpg "s3://${B2_BUCKET}/${key}" --endpoint-url "$B2_ENDPOINT" --only-show-errors
+          aws s3 cp manifest.json "s3://${B2_BUCKET}/${key%.dump.gpg}.manifest.json" --endpoint-url "$B2_ENDPOINT" --only-show-errors
+          rm -f db.dump db.dump.gpg
+          cat manifest.json
+          # Retention lives in the B2 bucket lifecycle rules (keep 35 daily copies), not here.
+
+  restore-drill:
+    name: monthly restore drill
+    needs: [dump]
+    # After a dispatched "both" it waits for the dump; on its own schedule `dump` is skipped,
+    # so the condition must not require it to have succeeded.
+    if: >-
+      !cancelled() && needs.dump.result != 'failure' &&
+      ((github.event_name == 'schedule' && github.event.schedule == '41 4 3 * *') ||
+       (github.event_name == 'workflow_dispatch' && inputs.job != 'dump'))
+    runs-on: ubuntu-24.04
+    environment: backup
+    timeout-minutes: 120
+    services:
+      scratch:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: drill
+          POSTGRES_PASSWORD: drill
+          POSTGRES_DB: drill
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U drill -d drill"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.B2_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_APP_KEY }}
+      AWS_DEFAULT_REGION: eu-central-003
+      B2_BUCKET: ${{ secrets.B2_BUCKET }}
+      B2_ENDPOINT: ${{ secrets.B2_ENDPOINT }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+      PGPASSWORD: drill
+    steps:
+      - id: preflight
+        name: check configuration
+        run: |
+          missing=""
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY B2_BUCKET B2_ENDPOINT BACKUP_PASSPHRASE; do
+            if [ -z "${!name:-}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::notice title=restore drill skipped::environment 'backup' is not configured; missing:$missing"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.preflight.outputs.ready == 'true'
+        name: restore newest dump and check it
+        run: |
+          set -euo pipefail
+          start=$(date +%s)
+          key=$(aws s3api list-objects-v2 --bucket "$B2_BUCKET" --prefix pg/ --endpoint-url "$B2_ENDPOINT" \
+                --query 'reverse(sort_by(Contents[?ends_with(Key, `.dump.gpg`)], &LastModified))[0].Key' --output text)
+          if [ -z "$key" ] || [ "$key" = "None" ]; then echo "no dump found in the bucket"; exit 1; fi
+          echo "[drill] newest dump: $key"
+          aws s3 cp "s3://${B2_BUCKET}/${key}" db.dump.gpg --endpoint-url "$B2_ENDPOINT" --only-show-errors
+          aws s3 cp "s3://${B2_BUCKET}/${key%.dump.gpg}.manifest.json" manifest.json --endpoint-url "$B2_ENDPOINT" --only-show-errors
+          expected_sha=$(jq -r .sha256 manifest.json)
+          actual_sha=$(sha256sum db.dump.gpg | cut -d' ' -f1)
+          if [ "$expected_sha" != "$actual_sha" ]; then echo "checksum mismatch"; exit 1; fi
+          gpg --batch --yes --pinentry-mode loopback --passphrase-fd 3 -o db.dump -d db.dump.gpg 3<<<"$BACKUP_PASSPHRASE"
+          psql -h localhost -U drill -d drill -c "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+          docker run --rm --network host -e PGPASSWORD=drill -v "$PWD:/w" pgvector/pgvector:pg16 \
+            pg_restore --no-owner --no-privileges -h localhost -U drill -d drill --exit-on-error /w/db.dump
+          psql -h localhost -U drill -d drill -c "ANALYZE"
+          psql -h localhost -U drill -d drill -tA -c \
+            "SELECT json_object_agg(table_name, (xpath('/row/n/text()', query_to_xml(format('SELECT count(*) AS n FROM %I.%I', table_schema, table_name), false, true, '')))[1]::text::bigint) FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'" > restored.json
+          alembic=$(psql -h localhost -U drill -d drill -tA -c "SELECT version_num FROM alembic_version" || echo "")
+          # Checks: the schema is there, migrations are recorded, and no table that had rows
+          # at dump time came back empty.
+          jq -n --slurpfile r restored.json --slurpfile m manifest.json --arg alembic "$alembic" \
+                --arg key "$key" --argjson secs "$(( $(date +%s) - start ))" '
+            ($r[0] // {}) as $rows | ($m[0].approx_rows // {}) as $before |
+            [ $before | to_entries[] | select(.value > 0) | select(($rows[.key] // 0) == 0) | .key ] as $emptied |
+            { dump_key: $key, sha256: $m[0].sha256, restored_at: (now | todate), duration_seconds: $secs,
+              alembic_version: $alembic, tables: ($rows | length), rows: $rows,
+              emptied_tables: $emptied,
+              ok: (($rows | length) > 0 and ($alembic | length) > 0 and ($emptied | length) == 0) }' > restore-drill.json
+          cat restore-drill.json
+          jq -e .ok restore-drill.json > /dev/null
+      - if: always() && steps.preflight.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: restore-drill-${{ github.run_id }}
+          path: restore-drill.json
+          if-no-files-found: warn
+          retention-days: 400

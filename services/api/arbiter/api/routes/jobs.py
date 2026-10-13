@@ -15,6 +15,7 @@ from typing import Any, Literal
 from urllib.parse import quote as urlquote
 
 from fastapi import APIRouter, Query, Response
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -355,13 +356,30 @@ def download(job_id: str, p: Customer, db: DB) -> Response:
     job = get_job(db, p, job_id)
     if job.state not in OUTPUT_STATES or not job.output_storage_key:
         raise NotDelivered("the translated file is available once the job is delivered")
+    name = job.output_storage_key.rsplit("/", 1)[-1]
+    media = mimetypes.guess_type(name)[0] or "application/octet-stream"
+    redirect = _presigned_redirect(job.output_storage_key, name, media)
+    if redirect is not None:
+        return redirect
     try:
         data = storage.get(job.output_storage_key)
     except FileNotFoundError:
         raise NotFound("the translated file is no longer stored (retention)") from None
-    name = job.output_storage_key.rsplit("/", 1)[-1]
-    media = mimetypes.guess_type(name)[0] or "application/octet-stream"
     return Response(data, media_type=media, headers={"Content-Disposition": attachment(name)})
+
+
+def _presigned_redirect(key: str, filename: str, media: str) -> Response | None:
+    """302 to a short-lived presigned GET when the backend is object storage, so the bytes
+    go straight from the bucket to the browser. None for the local backend (streamed here).
+    A missing object raises 404 rather than redirecting to an error page of the bucket."""
+    if storage.backend().name == "local":
+        return None
+    if not storage.exists(key):
+        raise NotFound("the file is no longer stored (retention)")
+    url = storage.presign_get(key, filename=filename, content_type=media)
+    if url is None:
+        return None
+    return RedirectResponse(url, status_code=302, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/jobs/{job_id}/xliff")
@@ -408,10 +426,15 @@ def get_evidence(
     """The stored pack of a delivered job; for a job still in progress a live pack."""
     job = get_job(db, p, job_id)
     data: bytes | None = None
+    media = "application/pdf" if format == "pdf" else "application/json"
     if job.evidence_storage_key:
         key = job.evidence_storage_key
         if format == "pdf":
             key = key.rsplit("/", 1)[0] + "/evidence.pdf"
+        if storage.backend().name != "local" and storage.exists(key):
+            url = storage.presign_get(key, filename=f"evidence-{job.id}.{format}", content_type=media)
+            if url:
+                return RedirectResponse(url, status_code=302, headers={"Cache-Control": "no-store"})
         try:
             data = storage.get(key)
         except FileNotFoundError:
@@ -419,7 +442,6 @@ def get_evidence(
     if data is None:
         pack = evidence.build(db, job)
         data = evidence.to_pdf(pack) if format == "pdf" else evidence.to_json(pack)
-    media = "application/pdf" if format == "pdf" else "application/json"
     headers = {"Content-Disposition": attachment(f"evidence-{job.id}.{format}")}
     return Response(data, media_type=media, headers=headers)
 

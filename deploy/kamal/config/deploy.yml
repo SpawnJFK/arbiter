@@ -1,0 +1,126 @@
+# Kamal 2: Arbiter API + worker (service "arbiter", image arbiter-api).
+#
+# Kamal deploys one image per service, so the stack is two Kamal configs sharing the
+# same hosts and the same kamal-proxy:
+#   config/deploy.yml      service arbiter      image ghcr.io/spawnjfk/arbiter-api  roles api, worker
+#   config/deploy.web.yml  service arbiter-web  image ghcr.io/spawnjfk/arbiter-web  role  web
+# Destinations add hosts and domains: deploy.staging.yml / deploy.production.yml (and the
+# deploy.web.<destination>.yml pair). Run from deploy/kamal:
+#   kamal deploy -d staging --version <git sha> --skip-push
+#   kamal deploy -c config/deploy.web.yml -d staging --version <git sha> --skip-push
+# CI does exactly this (.github/workflows/release.yml). Images are built and attested in CI;
+# Kamal never builds (--skip-push), so the builder block below is only for a manual build.
+#
+# Traffic: Cloudflare (DNS, WAF) -> Hetzner Load Balancer (TLS, health checks) -> port 80
+# on every VM -> kamal-proxy routes by Host to the api or web container. SSH from CI and
+# operators goes over Tailscale only: the host names in the destination files are tailnet
+# names and the VMs have no public SSH.
+
+service: arbiter
+image: spawnjfk/arbiter-api
+
+registry:
+  server: ghcr.io
+  username: spawnjfk
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+primary_role: api
+
+servers:
+  api:
+    hosts: []  # set per destination
+    options:
+      # Stable name on the kamal docker network so the web container on the same host
+      # reaches the API directly (API_URL=http://arbiter-api:8000), not through Cloudflare.
+      network-alias: arbiter-api
+  worker:
+    hosts: []  # set per destination
+    cmd: python -m arbiter.pipeline.worker
+    options:
+      # The image HEALTHCHECK probes the API port; the worker proves liveness through the
+      # Better Stack heartbeat (ARBITER_HEARTBEAT_URL) instead.
+      no-healthcheck: true
+      stop-timeout: 60
+    env:
+      clear:
+        ARBITER_OTEL_SERVICE_NAME: arbiter-worker
+      secret:
+        - ARBITER_HEARTBEAT_URL
+
+proxy:
+  # host is set per destination (api.<domain>)
+  app_port: 8000
+  ssl: false  # TLS ends at the Hetzner Load Balancer; Cloudflare runs Full (strict) to it
+  forward_headers: true
+  response_timeout: 120
+  healthcheck:
+    path: /healthz
+    interval: 3
+    timeout: 3
+  buffering:
+    requests: true
+    responses: true
+    # File bodies normally go straight to object storage (presigned PUT). This limit only
+    # applies to the multipart POST /v1/files fallback and JSON bodies.
+    max_request_body: 104857600
+
+# One list for both roles; values come from .kamal/secrets* (which only read env vars).
+# Every name matches a field of services/api/arbiter/config.py (ARBITER_<FIELD>).
+env:
+  clear:
+    ARBITER_STORAGE_BACKEND: s3
+    ARBITER_S3_PATH_STYLE: "true"
+    ARBITER_MAIL_BACKEND: smtp
+    ARBITER_SMTP_PORT: "587"
+    ARBITER_SMTP_SECURITY: starttls
+    ARBITER_POSTHOG_HOST: https://eu.i.posthog.com
+    ARBITER_EMBEDDING_PROVIDER: mock
+    ARBITER_DEFAULT_MT_ENGINE: mock-mt
+    ARBITER_DEFAULT_JUDGE_ENGINE: mock-llm
+    ARBITER_CURRENCY: EUR
+    ARBITER_OTEL_SERVICE_NAME: arbiter-api
+    ARBITER_MIGRATE_ON_START: "0"  # migrations run once in the pre-deploy hook
+    ARBITER_LOG_LEVEL: INFO
+  secret:
+    - ARBITER_DATABASE_URL
+    - ARBITER_JWT_SECRET
+    - ARBITER_S3_ENDPOINT_URL
+    - ARBITER_S3_REGION
+    - ARBITER_S3_BUCKET
+    - ARBITER_S3_ACCESS_KEY_ID
+    - ARBITER_S3_SECRET_ACCESS_KEY
+    - ARBITER_MAIL_FROM
+    - ARBITER_SMTP_HOST
+    - ARBITER_SMTP_USERNAME
+    - ARBITER_SMTP_PASSWORD
+    - ARBITER_ANTHROPIC_API_KEY
+    - ARBITER_OPENAI_API_KEY
+    - ARBITER_DEEPL_API_KEY
+    - ARBITER_GOOGLE_API_KEY
+    - ARBITER_POSTHOG_KEY
+    - ARBITER_OTEL_ENDPOINT
+    - ARBITER_OTEL_HEADERS
+    - ARBITER_SELLER_COUNTRY
+    - ARBITER_VAT_RATE
+
+ssh:
+  user: deploy
+
+builder:
+  arch: amd64
+  context: ../../services/api
+  dockerfile: ../../services/api/Dockerfile
+
+logging:
+  driver: json-file
+  options:
+    max-size: 50m
+    max-file: "5"
+
+# Keep the last 5 images per host for fast rollbacks (kamal rollback <version>).
+retain_containers: 5
+
+readiness_delay: 10
+deploy_timeout: 60
+drain_timeout: 60

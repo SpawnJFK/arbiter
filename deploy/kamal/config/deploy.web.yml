@@ -1,0 +1,55 @@
+# Kamal 2: Arbiter web app (service "arbiter-web", image arbiter-web, role web).
+# Same hosts and kamal-proxy as config/deploy.yml; see the notes there.
+#   kamal deploy -c config/deploy.web.yml -d staging --version <git sha> --skip-push
+# NEXT_PUBLIC_* values are inlined at image build time (release.yml build args); only the
+# server-side API origin is set here. Deploy the API service first on a fresh host.
+
+service: arbiter-web
+image: spawnjfk/arbiter-web
+
+registry:
+  server: ghcr.io
+  username: spawnjfk
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+servers:
+  web:
+    hosts: []  # set per destination
+
+proxy:
+  # host is set per destination (app.<domain>)
+  app_port: 3000
+  ssl: false
+  forward_headers: true
+  response_timeout: 60
+  healthcheck:
+    path: /api/health
+    interval: 3
+    timeout: 3
+
+env:
+  clear:
+    NODE_ENV: production
+    # Server-side calls go straight to the API container on the same host (network alias
+    # set in config/deploy.yml), never out through Cloudflare and back.
+    API_URL: http://arbiter-api:8000
+
+ssh:
+  user: deploy
+
+builder:
+  arch: amd64
+  context: ../../apps/web
+  dockerfile: ../../apps/web/Dockerfile
+
+logging:
+  driver: json-file
+  options:
+    max-size: 50m
+    max-file: "5"
+
+retain_containers: 5
+readiness_delay: 5
+deploy_timeout: 60
+drain_timeout: 30

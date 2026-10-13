@@ -12,14 +12,21 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Build-time values (NEXT_PUBLIC_* are inlined into the bundle).
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ARG NEXT_PUBLIC_API_MOCK=0
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL NEXT_PUBLIC_API_MOCK=$NEXT_PUBLIC_API_MOCK
+# Analytics key is public by design; empty = PostHog JS disabled.
+ARG NEXT_PUBLIC_POSTHOG_KEY=
+ARG NEXT_PUBLIC_POSTHOG_HOST=https://eu.i.posthog.com
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL NEXT_PUBLIC_API_MOCK=$NEXT_PUBLIC_API_MOCK \
+    NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY NEXT_PUBLIC_POSTHOG_HOST=$NEXT_PUBLIC_POSTHOG_HOST
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
 FROM node:24-alpine AS run
+ARG ARBITER_GIT_SHA=unknown
+LABEL org.opencontainers.image.source="https://github.com/SpawnJFK/arbiter" \
+      org.opencontainers.image.revision=$ARBITER_GIT_SHA
 WORKDIR /app
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0 ARBITER_GIT_SHA=$ARBITER_GIT_SHA
 RUN addgroup -S app && adduser -S app -G app
 COPY --from=build --chown=app:app /app/.next/standalone ./
 COPY --from=build --chown=app:app /app/.next/static ./.next/static

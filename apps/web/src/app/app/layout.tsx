@@ -1,4 +1,5 @@
 import { getI18n } from "@/lib/i18n/server";
+import { Analytics } from "@/components/analytics";
 import { AppShell, type NavSection } from "@/components/shell";
 import { getMe } from "@/lib/server-api";
 
@@ -74,6 +75,7 @@ export default async function CustomerLayout({ children }: { children: React.Rea
       ];
   return (
     <AppShell sections={sections} user={user} context={org?.name}>
+      <Analytics userId={user.id} role={user.role} />
       {children}
     </AppShell>
   );

@@ -1,0 +1,23 @@
+# Production destination for the API + worker service. Deployed by CI on a v* tag after
+# manual approval of the GitHub "production" environment. Two API hosts behind the Hetzner
+# Load Balancer; workers on both (the Postgres queue makes them safe to run in parallel).
+
+servers:
+  api:
+    hosts:
+      - arbiter-prd-1
+      - arbiter-prd-2
+  worker:
+    hosts:
+      - arbiter-prd-1
+      - arbiter-prd-2
+
+proxy:
+  host: api.<%= ENV.fetch("ARBITER_DOMAIN") %>
+
+env:
+  clear:
+    ARBITER_ENV: prod
+    ARBITER_PUBLIC_BASE_URL: https://api.<%= ENV.fetch("ARBITER_DOMAIN") %>
+    ARBITER_WEB_BASE_URL: https://app.<%= ENV.fetch("ARBITER_DOMAIN") %>
+    ARBITER_CORS_ORIGINS: https://app.<%= ENV.fetch("ARBITER_DOMAIN") %>

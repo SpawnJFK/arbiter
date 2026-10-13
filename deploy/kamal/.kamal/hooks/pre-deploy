@@ -1,0 +1,25 @@
+#!/bin/sh
+# Kamal pre-deploy hook: run database migrations exactly once per deploy, before any new
+# container takes traffic. Runs `alembic upgrade head` in a one-off container of the NEW
+# api image on the primary host only. A failing migration aborts the deploy (exit != 0),
+# so the old version keeps serving.
+#
+# The web service (config/deploy.web.yml) shares this hooks folder and has no database,
+# so the hook does nothing for it.
+set -eu
+
+service="${KAMAL_SERVICE:-${KAMAL_SERVICE_VERSION%@*}}"
+if [ "$service" != "arbiter" ]; then
+  echo "[pre-deploy] service ${service}: no migrations"
+  exit 0
+fi
+
+dest_flag=""
+if [ -n "${KAMAL_DESTINATION:-}" ]; then
+  dest_flag="--destination=${KAMAL_DESTINATION}"
+fi
+
+echo "[pre-deploy] alembic upgrade head with version ${KAMAL_VERSION} (${KAMAL_DESTINATION:-default})"
+# shellcheck disable=SC2086
+kamal app exec --primary --roles=api --version="${KAMAL_VERSION}" ${dest_flag} "alembic upgrade head"
+echo "[pre-deploy] migrations done"

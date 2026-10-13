@@ -45,10 +45,18 @@ The `client` role sees money fields (`revenue`, `cost`, `margin`, dashboard mone
 | 422 | `tag_error` | edit/approve would break inline codes (D-009 error severity; `details.issues`) |
 | 422 | `rights_not_confirmed` | TM import without `rights_confirmed=true` (R-TM-01) |
 | 422 | `workflow_invalid` | workflow template fails validation |
+| 404 | `module_disabled` | the org has not enabled the module the route belongs to |
+| 409 | `upload_missing` | complete called before the bytes reached storage |
+| 409 | `upload_expired` | the upload URL expired before the bytes arrived, or the upload was rejected |
+| 422 | `size_mismatch` | stored object size differs from the declared size (object deleted) |
+| 413 | `too_large` | local signed PUT body larger than the declared size |
+| 403 | `invalid_signature` | local signed upload URL forged or expired |
+| 422 | `invalid_token` | password reset or invitation link unknown, used or expired |
+| 500 | `internal_error` | unhandled error (reported to error tracking without the request body) |
 
 ### Idempotency
 
-`Idempotency-Key` header (max 150 chars) is honoured on these creating POSTs: `/files`, `/quotes`, `/projects`, `/glossaries`, `/webhooks`, `/crm/accounts`, `/crm/accounts/{id}/contacts`, `/crm/deals`, `/crm/activities`, `/price-lists`, `/workflows`, `/dashboards`, `/assistant/threads`, `/assistant/threads/{id}/messages`.
+`Idempotency-Key` header (max 150 chars) is honoured on these creating POSTs: `/files`, `/uploads`, `/uploads/{id}/complete`, `/quotes`, `/projects`, `/glossaries`, `/webhooks`, `/crm/accounts`, `/crm/accounts/{id}/contacts`, `/crm/deals`, `/crm/activities`, `/price-lists`, `/workflows`, `/dashboards`, `/assistant/threads`, `/assistant/threads/{id}/messages`.
 One key space per organization, kept 24 h. Same key + same body on the same endpoint replays the stored response; anything else is 409 `idempotency_conflict`. Concurrent requests with one key are serialised.
 
 ### Score scales
@@ -68,6 +76,8 @@ One key space per organization, kept 24 h. Same key + same body on the same endp
 |---|---|---|---|---|
 | POST | /auth/register | public | `{org_name, name?, email, password(>=8)}` | 201 `{token, user, org}` (creates org + pm user); 409 if email exists |
 | POST | /auth/login | public | `{email, password}` | `{token, user}`. `email` is any string (demo accounts use reserved domains) |
+| POST | /auth/password/forgot | public | `{email}` | 202 `{ok: true}` always (never reveals whether the address exists). Queues the `password_reset` email; at most 5 links per user per hour |
+| POST | /auth/password/reset | public | `{token, password(>=8)}` | `{token, user}` (signed in). Accepts reset and invitation links; single use, expiring; every other open link of the user is revoked. 422 `invalid_token` |
 | GET | /me | any | | `{user\|null, org\|null}` (org null for reviewers/admin; user null for API keys) |
 | GET | /org | cust | | `Org` |
 | PATCH | /org | pm | `{name?, default_tier?, no_reviewer_policy?, ai_subprocessors_opt_in?, regulated?, vertical?, data_retention_days?(1..3650)}` | `Org` |
@@ -82,7 +92,11 @@ One key space per organization, kept 24 h. Same key + same body on the same endp
 
 | Method | Path | Role | Body / query | Returns |
 |---|---|---|---|---|
-| POST | /files | cust | multipart `file`, `source_lang` | 201 `File`. Extracted once to validate; 422 `unsupported_file` otherwise. Limit 1 GB |
+| POST | /files | cust | multipart `file`, `source_lang` | 201 `File`. Extracted once to validate; 422 `unsupported_file` otherwise. Limit 1 GB. Small files and fallback only: browsers use `/uploads` |
+| POST | /uploads | cust, module `tms` | `{filename, size(1..1 GB), content_type, source_lang}` | 201 `{upload_id, url, method: PUT, headers, expires_at, max_bytes, size, backend: local\|s3}`. Extension checked first (422 `unsupported_file`). PUT the raw bytes to `url` with `headers` |
+| GET | /uploads/{id} | cust, module `tms` | | `{upload_id, filename, size, status: pending\|completed\|rejected, file_id, expires_at}` |
+| POST | /uploads/{id}/complete | cust, module `tms` | | 201 `File` (same as POST /files; completing twice returns the same file). 409 `upload_missing` / `upload_expired`, 422 `size_mismatch` / `unsupported_file` |
+| PUT | /uploads/{id}/blob | signed URL | `?expires=&token=` raw body | 204. Only with the local storage backend: the HMAC in the query is the authorization (no bearer). 404 with s3 |
 | POST | /quotes | cust | `{file_id, target_langs[1..50], content_type="general", account_id?}` | 201 `Quote` (account's price list when `account_id` given) |
 | GET | /quotes/{id} | cust | | `Quote` (`status` reads `expired` once past `valid_until`) |
 | POST | /projects | pm | `{name, quote_id, tier?, due_at?, account_id?, workflow_template_id?}` | 201 `Project` with `jobs[]` (one per target language, started) |
@@ -95,9 +109,9 @@ One key space per organization, kept 24 h. Same key + same body on the same endp
 | POST | /jobs/{id}/segments/{seg_id}/approve | cust | | `Segment` (`needs_review` -> `reviewed`; repeat is a no-op) |
 | POST | /jobs/{id}/cancel | pm | | `Job` (repeat is a no-op; delivered/failed -> 409 `illegal_state`) |
 | POST | /jobs/{id}/client-approve | cust | | `Job` (repeat is a no-op; 409 `not_awaiting_client` otherwise) |
-| GET | /jobs/{id}/download | cust | | translated file; 409 `not_delivered` before `delivered`/`settled`/`disputed` |
+| GET | /jobs/{id}/download | cust | | translated file; 409 `not_delivered` before `delivered`/`settled`/`disputed`. With the s3 backend: 302 to a presigned GET (5 min) |
 | GET | /jobs/{id}/xliff | cust | | XLIFF 2.1 (units whose segments all have a target carry it) |
-| GET | /jobs/{id}/evidence | cust | `?format=json\|pdf` | stored pack for delivered jobs, live pack otherwise |
+| GET | /jobs/{id}/evidence | cust | `?format=json\|pdf` | stored pack for delivered jobs, live pack otherwise. Stored pack with the s3 backend: 302 to a presigned GET |
 | POST | /jobs/{id}/report-error | cust | `{segment_id, note?}` | 201 `{id}` (escaped error, feeds calibration). Only on `delivered` segments, else 409 |
 | GET | /exceptions | pm | | list of `{kind, job_id, segment_id, reason, created_at, term_question_id?}` |
 
@@ -193,6 +207,7 @@ Reviewer statuses: `applied, active, suspended, banned`. Levels: `candidate, rev
 | GET | /admin/payouts | admin | `?state=accrued\|blocked\|sent\|settled\|failed` | list of `Payout` |
 | POST | /admin/payouts/run | admin | | `{created, total, blocked, retried, payouts[], provider, send, note?}` |
 | GET | /admin/orgs | admin | | list of `Org` + `{kind, created_at, usage: {period, words, jobs}}` |
+| GET | /admin/metrics/queue | admin | | `{at, totals: {ready, running, done, dead}, due_now, oldest_due_age_seconds, expired_leases, by_kind: {kind: {ready, running, done, dead}}, emails: {status: n}}` |
 | POST | /admin/tests | admin | `{kind, source_lang, target_lang, domain?, items: [{source, target, errors: [{span, category, severity: neutral\|minor\|major\|critical}], reference?}], pass_mark=80, time_limit_min=45, active=true}` | 201 test |
 
 `Dispute`: `{id, task_id, reviewer_id, reason, status, decided_by, decision_note, due_at, created_at, decided_at}`.

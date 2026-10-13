@@ -1,0 +1,10 @@
+# Production destination for the web service.
+
+servers:
+  web:
+    hosts:
+      - arbiter-prd-1
+      - arbiter-prd-2
+
+proxy:
+  host: app.<%= ENV.fetch("ARBITER_DOMAIN") %>

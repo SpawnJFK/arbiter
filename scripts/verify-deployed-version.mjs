@@ -7,9 +7,9 @@
  *   DEPLOY_VERIFY_URL=https://api.<domain> npm run verify:deployed
  *   EXPECTED_GIT_SHA=<sha> npm run verify:deployed           (check a specific commit)
  *
- * Reads GET /healthz. Today it returns { ok: true } only; P02 adds `commit` (from an
- * ARBITER_GIT_COMMIT build arg) so this script can compare it. Until then it reports the
- * deployed commit as unknown and exits 1. No SSH and no secrets needed.
+ * Reads GET /healthz, which returns { ok, commit, version }; `commit` comes from the
+ * ARBITER_GIT_SHA image build arg set by .github/workflows/release.yml. An image built
+ * without it reports "unknown" and this script exits 1. No SSH and no secrets needed.
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -67,7 +67,7 @@ if (match && healthOk) {
   process.exit(0);
 }
 if (deployed === "unknown") {
-  console.error("verify-deployed-version: deployed commit is unknown; /healthz must return `commit` (P02 scope item)");
+  console.error("verify-deployed-version: deployed commit is unknown; build the image with --build-arg ARBITER_GIT_SHA=<sha>");
 }
 console.error(`verify-deployed-version: MISMATCH or unhealthy: expected ${short(expected)}, deployed ${short(deployed)}, health ${health.status}`);
 console.error(JSON.stringify(report));

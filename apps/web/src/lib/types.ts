@@ -121,6 +121,18 @@ export interface UploadedFile {
   warnings: string[];
 }
 
+/** POST /uploads: where and how to send the bytes for a direct upload. */
+export interface UploadTicket {
+  upload_id: string;
+  url: string;
+  method: "PUT";
+  headers: Record<string, string>;
+  expires_at: string;
+  max_bytes: number;
+  size: number;
+  backend: "local" | "s3";
+}
+
 export interface TierQuote {
   price: Money;
   est_auto_rate: number; // 0..1

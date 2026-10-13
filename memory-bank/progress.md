@@ -1,6 +1,6 @@
 # Progress
 
-Last updated: 2026-10-13 (eight module builds merged and integrated). Phase: P00 next (`phases/README.md`).
+Last updated: 2026-10-13 (architecture decisions D-079..D-090 and the P00..P09 plan written). Phase: P00 next, item 1 of 19 (`phases/README.md`).
 
 ## Exists (built and tested locally)
 - **File processing**: formats behind `FormatHandler`: docx, xlsx, pptx, html, md, json, po, txt, csv, tsv, xliff, IDML, SRT/VTT/ASS, XML with ITS rules, DITA, Android/iOS strings and stringsdict, ARB, properties, resx, YAML, AsciiDoc; OCR seam (no engine). Handler options stored per file and used by quote, extract and merge (D-076). Segmenter, tagged text model, round-trip tests, XLIFF 2.1 export.
@@ -20,18 +20,21 @@ Last updated: 2026-10-13 (eight module builds merged and integrated). Phase: P00
 - **Platform and ops (2026-10-13)**: module entitlements and gating, custom roles, team and invites, append-only audit log, OIDC SSO, Fernet secrets (D-052..D-055); S3 or local storage with presigned uploads, queued email (password reset, invites, job and payout notices, vendor offers), PostHog and OpenTelemetry, `/healthz` commit, Kamal configs, release and backup workflows (D-051). Add-ons per plan written by billing (D-077).
 - **Software strings (module strings)**: keys, branches, releases, OTA bundles, push/pull, CLI (D-060..D-062).
 - **Tests**: 789 backend tests (2026-10-13; was 441) (pytest, mock providers only), including the automated `alembic upgrade head` equals `create_all` check (tests/db). Web: lint with i18n:check, typecheck, build, E2E (J-01..J-09 plus one step per merged section, 30 steps).
-- **Infra/docs**: Dockerfiles (web on Node 24), compose, Caddy, backups, CI (lint, tests, builds, compose config), Makefile, deploy guide, runbook, decisions D-001..D-078.
-- **HYPERPOWER v2** (installed 2026-10-09, proven on Linux only): control plane `.hyperpower/` (core 1.0.0, hash-locked), `hyperpower.json` schema 2, `phases/` P00..P08, `ACCEPTANCE.md` journeys with verifiers, evidence ledger (baseline record EV-c769e975 VERIFIED), root npm ship check (`npm run verify`, `verify:e2e`, `verify:deployed`), git hooks, Cursor rules/commands/agents/skills/hooks, Beads skeleton, bootstrap runbook.
+- **Infra/docs**: Dockerfiles (web on Node 24), Kamal configs (primary, D-080), compose + Caddy (local and fallback), `release.yml` (build, attest, deploy), `backup.yml` (nightly B2 dump, monthly restore drill), CI (lint, tests, builds, compose config), Makefile, deploy guide, runbook, `docs/infrastructure.md`, `docs/subprocessors.md` (draft), decisions D-001..D-090.
+- **Approved architecture (2026-10-13, on paper only)**: Hetzner Cloud VMs behind a load balancer with Kamal 2 and GHCR, Ubicloud Postgres (pgvector to verify), Hetzner Object Storage, Backblaze B2 EU backups, Cloudflare, Tailscale, PostHog EU + Better Stack, Paddle, Payoneer + PayPal; Claude through Anthropic's API by default, EU processing as an add-on (D-079..D-088).
+- **HYPERPOWER v2** (installed 2026-10-09, proven on Linux only): control plane `.hyperpower/` (core 1.0.0, hash-locked), `hyperpower.json` schema 2, `phases/` P00..P09 (rewritten 2026-10-13, D-090), `ACCEPTANCE.md` journeys J-01..J-18 and checkpoints INT-01..INT-11 with verifiers, evidence ledger (baseline record EV-c769e975 VERIFIED), root npm ship check (`npm run verify`, `verify:e2e`, `verify:deployed`), git hooks, Cursor rules/commands/agents/skills/hooks, Beads skeleton, bootstrap runbook.
 
 - **Workbench, TM tools, LQA, auditor** (2026-10-13, parallel builder, migration 0008): segment editor API and page `/app/jobs/{id}/editor` (live QA, TM diff, glossary, MT on demand, concordance, comments and client queries, split/merge, find/replace, PM locks, live preview), TM editor/alignment/term extraction/TM QA, job LQA scorecards with PDF/XLSX and org LQA settings, standalone auditor (`/v1/audits`, `/app/auditor`) on the work queue. Decisions D-063..D-066. The e2e opens the editor (edit and confirm) and runs one audit.
 
 ## Not yet
-- P00: the HYPERPOWER layer proven on Windows (tools, hooks through Cursor, Beads graph, Graphify index, Context7, journey records).
-- Any measurement on a real pair with real keys (P01).
-- Deployment, backups in cron, restore drill (P02).
-- Live payment and payout provider accounts, webhook destination, Paddle client token and approved domain, one test payout; legal and tax review; security pass (P03). Seat limits are reported, not enforced.
-- Okapi sidecar (P06), COMET plugin (D-005). SSO exists (D-055) but no real IdP has been tried.
-- Engine module: no real call made yet against Bedrock, Vertex (EU host), Together or Fireworks; one small real call per provider before the first customer (D-057, D-059). No resume endpoint for failed jobs (EU route failures need one once the owner adds an EU engine).
+- P00: the HYPERPOWER layer proven on Windows (tools, hooks through Cursor, Beads graph P00..P09, Graphify index, Context7), J-10..J-18 markers in `scripts/verify-e2e.mjs`, journey records.
+- Any measurement on a real pair with real keys; any real call to Bedrock or Vertex (P01, INT-01..INT-03).
+- Any account or cloud resource: Hetzner, Ubicloud (pgvector unverified), Cloudflare, Tailscale, Backblaze B2, PostHog, Better Stack, SMTP provider; staging deploy, backups and restore drill in use, attestation verified (P02, INT-04..INT-08).
+- Kamal secret gaps (`ARBITER_SECRETS_KEY` and others not passed; no refusal of dev default keys outside dev and test) (P02 item 7).
+- Live Paddle (sandbox, live account, domain approval, webhook destination, client token), Payoneer and PayPal accounts, one test payout; legal and tax review; published DPA, subprocessor list, terms, privacy policy, trust page; security pass (P03). Seat limits are reported, not enforced.
+- Production, public status page, calibrated launch languages, first customers (P04).
+- Connectors (P05), own models on real data (P06), SAML, SCIM, certification, pen test (P07), white-label (P08), other regions (P09). Okapi sidecar and COMET plugin are backlog (D-090, D-005).
+- Engine module: no real call made yet against Bedrock, Vertex (EU host), Together or Fireworks; no resume endpoint for failed jobs (EU route failures need one once the owner adds an EU engine).
 
 ## Known limitations
 - No Snowball stemmer for some languages (e.g. sl, uk, bg, and others outside the Snowball set): exact matching only there.

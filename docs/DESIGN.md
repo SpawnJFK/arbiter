@@ -31,42 +31,44 @@ Service tiers:
 ```mermaid
 flowchart LR
   subgraph Clients
-    B[Browser: client / PM / reviewer / admin]
-    INT[API clients, webhooks consumers]
+    B[Browser: client / PM / reviewer / vendor / admin]
+    INT[API clients, webhook consumers, OTA clients]
   end
-  subgraph Host["Hetzner host (EU)"]
-    C[Caddy TLS]
+  CF[Cloudflare: DNS, WAF]
+  subgraph Cell["Hetzner Cloud cell (one region; 2+ VMs in production)"]
+    LB[Load balancer, TLS]
     W[web: Next.js 16]
     A[api: FastAPI]
-    K[worker: pipeline steps]
-    P[(Postgres 16\npgvector + pg_trgm\nwork_items queue)]
-    S[(file storage volume)]
+    K[worker: pipeline steps, email, payouts, training polls]
+    S[(Object storage: files, presigned)]
   end
-  subgraph Providers["External providers (keys via env)"]
-    AN[Anthropic]
-    OA[OpenAI]
-    DL[DeepL]
-    GO[Google]
+  P[(Ubicloud Postgres 16\npgvector + pg_trgm\nwork_items queue, PITR)]
+  subgraph Providers["AI and MT providers (keys: env, platform DB, org BYOK)"]
+    AN[Anthropic: global default]
+    EU[Bedrock EU / Vertex eu / DeepL: eu_processing]
+    OT[OpenAI, Google, own models]
   end
-  OBJ[(Object storage\nnightly backups)]
+  OBJ[(Backblaze B2 EU\nnightly encrypted dumps)]
 
-  B --> C --> W
-  C --> A
-  INT --> C
+  B --> CF --> LB --> W
+  LB --> A
+  INT --> CF
   W --> A
+  B -- presigned PUT/GET --> S
   A --> P
   A --> S
   K --> P
   K --> S
-  K --> AN & OA & DL & GO
+  K --> AN & EU & OT
   K -- webhooks --> INT
-  P -. pg_dump .-> OBJ
-  S -. tar .-> OBJ
+  P -. pg_dump in CI .-> OBJ
 ```
+
+Deployment: Kamal 2 services `arbiter` (api, worker) and `arbiter-web` (web) from attested GHCR images, SSH over Tailscale only (D-080 to D-083, `docs/infrastructure.md`). Locally and as the emergency fallback the same images run under Docker Compose with Caddy and a Postgres volume (`deploy/docker-compose.yml`).
 
 - **api** and **worker** are the same image (D-002). The API never calls a provider on the request path except for cheap synchronous checks; anything slow is a `work_items` row.
 - **Postgres** is the only stateful service besides file storage: relational data, TM vectors (pgvector, D-003), fuzzy search (pg_trgm), queue, idempotency records, provenance.
-- **Okapi Framework** sidecar is planned for P06 (D-004); until then file handling is pure Python behind `FormatHandler`.
+- **Okapi Framework** sidecar (D-004) is in the ROADMAP backlog (D-090); file handling is pure Python behind `FormatHandler` and covers 25+ formats.
 
 ## 3. Pipeline
 
@@ -145,22 +147,23 @@ State machines for segments, jobs, review tasks and payouts are defined only in 
 - Every customer query is filtered by `org_id`; tests cover cross-org access returning 404.
 - Webhooks signed: `Arbiter-Signature: t=<unix>,v1=<hmac sha256 of "t.body">`; receivers dedupe on `event_id`.
 - POST creates accept `Idempotency-Key` (24 h).
-- Files: per-org storage paths, size limits at Caddy and API, format sniffing, XML parsers with entity expansion disabled (lxml `resolve_entities=False`).
-- Secrets only via env; Postgres not exposed; only Caddy publishes ports.
+- Files: per-org storage keys, presigned direct uploads with size checked on `complete` (D-051), size limits at the API and kamal-proxy, format sniffing, XML parsers with entity expansion disabled (lxml `resolve_entities=False`).
+- Secrets only via env (GitHub environment secrets through Kamal in staging and production); stored engine keys and SSO secrets Fernet-encrypted (D-056); Postgres reachable only from the VMs; no public SSH (Tailscale). Details: `SECURITY.md`.
 - Provider data: orgs that have not opted in to AI subprocessors (`ai_subprocessors_opt_in=false`) are not sent to external LLM providers; the quote shows which tiers are available.
 
-## 7. EU data residency
+## 7. Data residency and processing region
 
-- Hosting: Hetzner Germany or Finland; database, file storage and backups stay in the EU.
-- Subprocessors: external providers (Anthropic, OpenAI, DeepL, Google) receive segment text only for orgs that opted in, and only the minimum context needed. Provider region options are configured where the provider supports EU processing. The subprocessor list is published before public launch.
+- Market is global; GDPR transfers rest on DPAs with the EU-US Data Privacy Framework or SCCs, not on EU hosting (D-079). Hosting is one Hetzner region per cell (chosen in P02); a US cell or an AWS enterprise region is a separate deployment chosen at signup, never a migration (P09, `docs/infrastructure.md` section 9).
+- Processing region per org: `global` (default, Claude through Anthropic's API) or `eu` (add-on `eu_processing`): only engines that declare `region = eu` (Bedrock EU inference profiles, Vertex `eu`, DeepL); no fallback outside the EU (D-057). Region, engine and model are recorded per call in provenance and in the evidence pack.
+- Subprocessors: external providers receive segment text only for orgs that opted in, and only the minimum context needed. Draft list: `docs/subprocessors.md`, published after legal review before public launch.
 - Retention: `data_retention_days` per org deletes content (files, segment text, TM if requested); provenance keeps hashes and decisions, not text, after retention.
-- Legal review before public launch (DPA template, subprocessor list, reviewer contractor terms).
+- Legal review before public launch (DPA, subprocessor list, terms, reviewer contractor terms).
 
 ## 8. Observability
 
 - Structured JSON logs (one line per request and per work item) with `org_id`, `job_id`, `segment_id`, `work_item_id`, `engine`, latency, cost.
-- `/healthz` (process) for Docker and Caddy; queue health from `work_items` counts by status and oldest `ready` age.
+- `/healthz` (process, with the deployed `commit`) for kamal-proxy, the load balancer and `npm run verify:deployed`; web `/api/health`; queue health from `work_items` counts by status and oldest `ready` age; worker heartbeat (`ARBITER_HEARTBEAT_URL`).
 - Quality signals (in `quality_metrics`, shown on `/quality/dashboard`): auto-approve rate, escaped-error rate vs `ARBITER_ESCAPED_ERROR_TARGET`, control-sample disagreement, drift alarm when the auto rate moves more than `ARBITER_DRIFT_ALARM_RATIO` against its baseline.
 - Provider health: error rate and latency per engine; the router skips unhealthy engines and the decide step adds a safety offset (runbook).
 - Money signals: per job revenue, cost, margin; payouts failed.
-- Error tracking and metrics export (e.g. Sentry, Prometheus) are not wired yet: error tracking and uptime arrive in P02 (staging) and P04 (production).
+- Error tracking, logs and LLM usage go to PostHog EU with privacy mode (never segment text); uptime checks, heartbeat, status page and phone alerts in Better Stack; OpenTelemetry in code so either can be swapped (D-083). Built in `observability.py`, all off when unset; wired on staging in P02 and production in P04.

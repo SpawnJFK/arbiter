@@ -1,6 +1,6 @@
 # Operations runbook
 
-For the Hetzner deployment described in `deploy/README.md`. Commands run in `/opt/arbiter/deploy`.
+For the deployments described in `deploy/README.md`. The commands below are written for the Compose fallback (`/opt/arbiter/deploy`); on the primary Kamal stack (from P02) the same queries run through any psql client on the tailnet against the Ubicloud database, and logs come from `kamal app logs` and PostHog EU (`docs/infrastructure.md`). P02 rewrites the command lines for Kamal once staging exists.
 Status: written ahead of the code. Behaviours marked "the system does" are build targets of phases P01 to P04 (`phases/README.md`); check `memory-bank/progress.md` for what is live.
 Every incident gets a short note at the bottom of this file (date, what happened, what was done, follow-up).
 

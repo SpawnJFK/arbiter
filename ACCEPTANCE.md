@@ -6,9 +6,10 @@ Evidence tier for every item: **replayable** (`hyperpower.json` `gates.evidenceT
 
 Verifier kinds available in core: `cli`, `sql` (through `scripts/run-sql-verifier.mjs`), `http`, `commit-exists`, `playwright`. Arbiter's journeys use `cli`:
 
-- The browser journeys J-01 to J-09 are automated by one script, `apps/web/e2e/real-flow.mjs`, against a real API, worker and web server (not mock mode). `node scripts/verify-e2e.mjs` checks the stack is up, runs it, and prints one line per journey (`J-03 PASS`) plus `E2E JOURNEYS J-01..J-09 PASS`. A journey's verifier is that command with `expectOutputContains` set to its line. The script stops at the first failure, so a PASS line means every step up to it passed. Each replay runs the whole flow (a few minutes).
-- The core's `cli` verifier rewrites every argument of a `node` command into a repo path, so verifier scripts take no arguments.
-- The stack for J-01 to J-09: Postgres 16 + pgvector, `alembic upgrade head`, `python -m arbiter.cli seed-demo`, API on :8000, worker, web built without `NEXT_PUBLIC_API_MOCK` on :3000 (`apps/web/README.md`, "End-to-end test").
+- The browser journeys are automated by one script, `apps/web/e2e/real-flow.mjs` (30 steps on 2026-10-13), against a real API, worker and web server (not mock mode). `node scripts/verify-e2e.mjs` checks the stack is up, runs it, echoes every step line, and prints one line per journey (`J-03 PASS`) plus a final line. Today the script maps J-01 to J-09 and ends with `E2E JOURNEYS J-01..J-09 PASS`; P00 item 10 adds the J-10 to J-18 markers below to its `JOURNEYS` table, after which it prints `J-10 PASS` to `J-18 PASS` and `E2E JOURNEYS J-01..J-18 PASS`. A journey's verifier is that command with `expectOutputContains` set to its line. The script stops at the first failure, so a PASS line means every step up to it passed. Each replay runs the whole flow (a few minutes).
+- Journeys whose browser step only opens a page also name the pytest files that cover the deeper pass condition; those run inside `node scripts/run-api-checks.mjs` (the ship check), which is their second verifier.
+- The core's `cli` verifier rewrites every argument of a `node` command into a repo path, so verifier scripts take no arguments. Remote runs (staging, production) set `BASE_URL` and `API_URL` in the environment.
+- The local stack: Postgres 16 + pgvector, `alembic upgrade head`, `python -m arbiter.cli seed-demo` and `seed-plans`, API on :8000, worker, web built without `NEXT_PUBLIC_API_MOCK` on :3000 (`apps/web/README.md`, "End-to-end test").
 
 Status values: **UNPROVEN** (no ledger record, no automated check), **COVERED** (an automated check in the repo exercises it, not yet replayed into the ledger), **PROVEN** (replayable record, last `verify` VERIFIED, with the record id).
 
@@ -24,7 +25,7 @@ Status values: **UNPROVEN** (no ledger record, no automated check), **COVERED** 
 
 **Evidence tier:** replayable
 
-**Status:** COVERED, not yet in the ledger: `apps/web/e2e/real-flow.mjs` (reported green by the cloud build sessions up to commit 32e8cd0), API tests under `services/api/tests/api/`. UNPROVEN until P00 replays it on Windows.
+**Status:** COVERED, not yet in the ledger: `apps/web/e2e/real-flow.mjs` (green in the cloud sessions, last run 2026-10-13 with all 30 steps), API tests under `services/api/tests/api/`. UNPROVEN until P00 replays it on Windows.
 
 ---
 
@@ -140,11 +141,137 @@ Status values: **UNPROVEN** (no ledger record, no automated check), **COVERED** 
 
 ---
 
+## J-10: Engines, BYOK and the EU route
+
+**Journey:** An org admin opens Engines, adds the org's own key for a provider (BYOK), sees it masked, sets a routing rule and a monthly budget, and previews which engine a job would use; the Own models page opens. An org with `processing_region = eu` and no EU engine gets a visible failure, never a global fallback.
+
+**Pass condition:** The key is stored encrypted and only its last 4 characters are ever returned; routing preview follows org rule, platform rule, scoreboard, default; capped providers drop out; the EU org's job fails with `no EU engine configured` and provenance records `routing_blocked`.
+
+**Verifier:** `cli` `node scripts/verify-e2e.mjs`, `expectOutputContains: "J-10 PASS"` (marker "engines and own models pages render"), plus the ship check for `services/api/tests/api/test_api_engines.py` (`test_byok_create_never_returns_secret_and_is_encrypted`, routes and budgets, preview, region), `tests/engines/test_engines_routing.py`, `tests/engines/test_engines_eu.py`.
+
+**Evidence tier:** replayable
+
+**Status:** COVERED, not yet in the ledger. The browser step only opens the pages; the key, routing and EU behaviour are covered by pytest. A deeper browser step (add a BYOK key in the UI) is a Beads issue from P00. Real EU calls: INT-03. UNPROVEN until P00.
+
+---
+
+## J-11: Software strings with a release and an OTA bundle
+
+**Journey:** A developer creates a string project in the UI, pushes a JSON file with two keys, the keys are translated, a release is published and the public OTA endpoint serves the bundle.
+
+**Pass condition:** Keys exist on the main branch, translations are attached, the release has a version label, and the OTA bundle for the release is served without login.
+
+**Verifier:** `cli` `node scripts/verify-e2e.mjs`, `expectOutputContains: "J-11 PASS"` (marker "strings: project created, 2 keys pushed, translated, release"), plus `services/api/tests/strings/` (`test_release_publish_and_ota`, branches and merge, formats, placeholders, CLI).
+
+**Evidence tier:** replayable
+
+**Status:** COVERED, not yet in the ledger. UNPROVEN until P00.
+
+---
+
+## J-12: Workbench editor edits and confirms a segment
+
+**Journey:** A linguist opens a job in the segment editor (`/app/jobs/{id}/editor`), edits a segment with live QA, TM and glossary panels, and confirms it.
+
+**Pass condition:** The edit is saved, a provenance event records the human edit, and the segment state changes through `states.py`.
+
+**Verifier:** `cli` `node scripts/verify-e2e.mjs`, `expectOutputContains: "J-12 PASS"` (marker "workbench editor opened and saved an edited segment"), plus `services/api/tests/tms/test_tms_workbench.py` (split and merge, find and replace, locks, comments and queries) and `test_tms_tmtools.py`.
+
+**Evidence tier:** replayable
+
+**Status:** COVERED, not yet in the ledger. UNPROVEN until P00.
+
+---
+
+## J-13: Auditor scores a bilingual file
+
+**Journey:** A quality manager uploads a small XLIFF file to the standalone auditor (`/app/auditor`) and waits for the audit.
+
+**Pass condition:** The audit runs on the work queue, reports segments audited, an MQM score and a verdict.
+
+**Verifier:** `cli` `node scripts/verify-e2e.mjs`, `expectOutputContains: "J-13 PASS"` (marker "auditor: XLIFF audited"), plus `services/api/tests/auditor/test_auditor.py`.
+
+**Evidence tier:** replayable
+
+**Status:** COVERED, not yet in the ledger. UNPROVEN until P00.
+
+---
+
+## J-14: Own vendor is suggested for a human step; capacity shows it
+
+**Journey:** A PM creates an own vendor in the UI with a language pair and rate; the vendor is suggested for the review step of a job; the capacity page opens.
+
+**Pass condition:** The vendor exists in the org only, appears in the assignment suggestions for `human_review`, and the capacity planner renders.
+
+**Verifier:** `cli` `node scripts/verify-e2e.mjs`, `expectOutputContains: "J-14 PASS"` (marker "vendor created and suggested for the review step"), plus `services/api/tests/agency/test_agency_vendors.py` (offers, timeout escalation, workbench token, POs, vendor invoices) and `test_agency_capacity.py`.
+
+**Evidence tier:** replayable
+
+**Status:** COVERED, not yet in the ledger. The full offer, accept, PO and vendor invoice flow is covered by pytest, not by the browser. UNPROVEN until P00.
+
+---
+
+## J-15: Billing: plans, checkout and entitlements
+
+**Journey:** An org admin opens Billing, the public pricing page lists the plans, the admin starts a checkout; after the provider confirms payment the plan's modules and add-ons are active.
+
+**Pass condition:** Pricing shows the seeded plans from the database; access starts only after a signed provider webhook; `org.settings["modules"]` and `["addons"]` follow the plan; the credit ledger and invoice records are written; a refund reverses.
+
+**Verifier:** `cli` `node scripts/verify-e2e.mjs`, `expectOutputContains: "J-15 PASS"` (marker "billing settings and the public pricing page render"), plus `services/api/tests/billing/test_bill_api.py` (`test_paddle_checkout_webhooks_invoices_credits_refund_portal_cancel`, manual checkout, add-ons follow plan) and `test_bill_providers.py`.
+
+**Evidence tier:** replayable
+
+**Status:** COVERED, not yet in the ledger. Locally the checkout runs against recorded Paddle fixtures; the real sandbox checkout is INT-09 (P03), after which the browser step is extended. UNPROVEN until P00.
+
+---
+
+## J-16: Team, roles and audit log
+
+**Journey:** An org admin opens Settings: team (invite a user), roles, the audit log and modules with add-ons.
+
+**Pass condition:** Invites go through the one invite flow (D-078); a custom role cannot grant more than its creator holds; every admin action writes an append-only audit row; modules and add-ons show read-only from the plan.
+
+**Verifier:** `cli` `node scripts/verify-e2e.mjs`, `expectOutputContains: "J-16 PASS"` (marker "settings: team, audit log, modules with add-ons render"), plus `services/api/tests/platform/test_roles_team.py`, `test_audit.py`, `test_modules_api.py`.
+
+**Evidence tier:** replayable
+
+**Status:** COVERED, not yet in the ledger. The browser step only opens the pages; invite, role and audit behaviour are covered by pytest. UNPROVEN until P00.
+
+---
+
+## J-17: SSO login with OpenID Connect
+
+**Journey:** An org admin configures OIDC SSO, proves the email domain by DNS TXT, and a user signs in through the IdP; with SSO enforced, password login is refused.
+
+**Pass condition:** The code flow with PKCE completes, the ID token is validated (issuer, audience, expiry, nonce), the user is provisioned just in time into the right org and audited; emails outside verified domains, expired state and PKCE mismatch are rejected.
+
+**Verifier:** `cli` `node scripts/run-api-checks.mjs` (ship check), covering `services/api/tests/platform/test_sso.py` against a fake IdP. No browser step.
+
+**Evidence tier:** replayable
+
+**Status:** COVERED by pytest only, not yet in the ledger. A real IdP is tried in P07. UNPROVEN until P00.
+
+---
+
+## J-18: Presigned direct upload
+
+**Journey:** A customer uploads a source file in the new-project wizard; the browser asks for an upload ticket, PUTs the bytes to the ticket URL and completes the upload.
+
+**Pass condition:** With the local backend the bytes go to the API's HMAC-signed blob endpoint; with the S3 backend they go straight to the presigned bucket URL; `complete` checks size and content and registers the file with its handler options; tenancy, idempotency and module gates hold.
+
+**Verifier:** `cli` `node scripts/verify-e2e.mjs`, `expectOutputContains: "J-18 PASS"` (marker "quote shows 4 tiers": the wizard in J-01 uploads through `lib/upload.ts`), plus `services/api/tests/api/test_api_ops_uploads.py` (`test_s3_direct_upload_and_presigned_download` with moto, size mismatch, damaged file, tenancy) and `test_api_ops_storage.py`.
+
+**Evidence tier:** replayable
+
+**Status:** COVERED locally with the local backend, not yet in the ledger. The real bucket and a 1 GB file: INT-06 (P02). UNPROVEN until P00.
+
+---
+
 ## Ship check (not a journey, gates every phase)
 
 `npm run verify`: runtime pins, API ruff check, ruff format --check and pytest (mock providers only), web lint with i18n:check, typecheck and build. Replayable as `cli` `node scripts/run-api-checks.mjs` and `node scripts/run-web-checks.mjs`.
 
-Status: API checks PROVEN on Linux as baseline record EV-c769e975 (cloud install session, 2026-10-09, not assigned to a phase). P00 records both checks on Windows.
+Status: API checks PROVEN on Linux as baseline record EV-c769e975 (cloud install session, 2026-10-09, not assigned to a phase; 441 tests then, 789 since the 2026-10-13 merge). P00 records both checks on Windows.
 
 ---
 
@@ -152,11 +279,17 @@ Status: API checks PROVEN on Linux as baseline record EV-c769e975 (cloud install
 
 | ID | Checkpoint | Phase | Verifier | Status |
 | --- | --- | --- | --- | --- |
-| INT-01 | Anthropic judge and senate on real segments: model version, prompt version and cost recorded | P01 | `cli` recompute of the stored smoke run (`evidence/p01/smoke-anthropic.json`) | UNPROVEN |
-| INT-02 | DeepL and/or Google MT on real segments, same record per engine | P01 | `cli` recompute of the stored smoke run per engine | UNPROVEN |
-| INT-03 | Measurement: threshold sweep on a human-labelled EN to SR set, escaped-error rate per threshold with confidence interval | P01 | `cli` `measure` recompute from the stored run file, checked against `docs/measurements/p01-en-sr.md` | UNPROVEN |
-| INT-04 | Staging on Hetzner: compose deploy, TLS, migrations, J-01 to J-03 against the public URL, deployed commit equals HEAD | P02 | `cli` `node scripts/verify-deployed-version.mjs` and `node scripts/verify-e2e.mjs` against staging; attested CI provenance later | UNPROVEN |
-| INT-05 | Backups: nightly encrypted off-site dump and one restore drill | P02 | `cli` check of the drill log and the remote listing | UNPROVEN |
-| INT-06 | Real payout provider sends one test payout | P03 | provider reference plus `sql` read of the ledger entry | UNPROVEN |
+| INT-01 | Provider keys: one authenticated call per configured provider; Anthropic judge and senate and at least one MT engine on real segments with model version, prompt version and cost recorded | P01 | `cli` recompute of the stored smoke runs (`evidence/p01/smoke-<engine>.json`) | UNPROVEN |
+| INT-02 | Measurement: threshold sweep on a human-labelled EN to SR set, escaped-error rate per threshold with confidence interval | P01 | `cli` `measure` recompute from the stored run file, checked against `docs/measurements/p01-en-sr.md` | UNPROVEN |
+| INT-03 | EU route: a job of an EU org through Bedrock EU and/or Vertex `eu` with the provider-reported region in provenance and the evidence pack; the same job without an EU engine fails with `no EU engine configured` | P01 if keys exist, else before the first EU customer (P03) | `cli` recompute over the stored run file | UNPROVEN |
+| INT-04 | Ubicloud Postgres 16 accepts `CREATE EXTENSION vector` and `pg_trgm` and answers a vector query (or the D-081 fallback, with its superseding decision) | P02 | `sql` verifier against the staging database (`select extname from pg_extension`) | UNPROVEN |
+| INT-05 | Staging deploy: Kamal over Tailscale, migrations in the pre-deploy hook, all 30 e2e steps (J-01 to J-18) against the public URL, deployed commit equals HEAD | P02 | `cli` `node scripts/verify-deployed-version.mjs` and `node scripts/verify-e2e.mjs` with staging `BASE_URL` and `API_URL` | UNPROVEN |
+| INT-06 | A 1 GB file uploaded on staging through the presigned flow, bytes browser to bucket, size and checksum match after `complete` | P02 | `cli` check of the stored upload record and a `sql` read of the file row | UNPROVEN |
+| INT-07 | Backups: nightly encrypted dump to Backblaze B2 EU and a restore drill with `ok: true`; one PITR restore duration recorded | P02 | `cli` check of `evidence/p02/restore-drill.json` | UNPROVEN |
+| INT-08 | Attested deploy: build provenance for both images of the deployed SHA verifies (`gh attestation verify`), or the recorded GitHub-plan fallback | P02 | `cli` attestation check for the SHA in `shipped.staging` | UNPROVEN |
+| INT-09 | Paddle sandbox checkout: signed webhook once, subscription active, modules and add-ons follow the plan, ledger and invoice record written, refund reverses | P03 | `sql` verifier over the stored webhook rows and ledger entries | UNPROVEN |
+| INT-10 | Payoneer or PayPal sandbox payout: onboarding, payout run, settlement only after the poll | P03 | `sql` verifier over the payout batch and ledger entries | UNPROVEN |
+| INT-11 | One real payout of at most 10 EUR to the owner's own payee account | P03 | provider reference plus `sql` read of the ledger entry | UNPROVEN |
 
-Journeys J-10 (customer pays an invoice through the payment provider) and J-11 (a payout run reconciles with the ledger) are written in P03; later phases add their own (`phases/README.md`).
+Earlier numbering (2026-10-09 plan): INT-01 and INT-02 are now INT-01; INT-03 is INT-02; INT-04 is INT-05; INT-05 is INT-07; INT-06 is INT-11. None had evidence. Later phases add their own journeys from J-19 (`phases/README.md`).
+

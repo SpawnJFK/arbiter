@@ -1,7 +1,80 @@
-# Deploying Arbiter on Hetzner
+# Deploying Arbiter
 
-One server, Docker Compose, Caddy for TLS, Postgres on a local volume, nightly off-site backups.
-Everything stays in the EU (Hetzner Germany or Finland). Kubernetes is deliberately not used (see D-013 in `docs/decisions.md`).
+Two paths. **Primary (staging from P02, production from P04): Kamal 2 on Hetzner Cloud** with managed Postgres, decided in D-080 to D-083 and described in `docs/infrastructure.md`. **Fallback: one box with Docker Compose and Caddy**, used for local development, demos and as the emergency path if the Kamal stack is down (D-013 kept for that role only). Kubernetes is not used.
+
+Status 2026-10-13: nothing is deployed. The configs and workflows exist; accounts and secrets come in P02 (`phases/phase-02-staging-deploy.md`).
+
+## A. Primary path: Kamal on Hetzner
+
+```
+Browser -> Cloudflare (DNS, WAF, rate limits; Full strict)
+        -> Hetzner Load Balancer (TLS, health checks) -> :80 kamal-proxy on each VM (private network)
+             app.<domain> -> arbiter-web  (Next.js, :3000, /api/health)
+             api.<domain> -> arbiter api   (FastAPI, :8000, /healthz)
+                             arbiter worker (same image, no proxy, heartbeat to Better Stack)
+Browser -- presigned PUT/GET --> Hetzner Object Storage (never through Cloudflare or the app)
+VMs -> Ubicloud Postgres 16 (pgvector, pg_trgm, TLS, PITR)
+CI  -> GHCR (build, attest) -> Tailscale -> VMs (kamal deploy)     CI -> Backblaze B2 EU (nightly dump, monthly drill)
+```
+
+| Piece | Where |
+| --- | --- |
+| Kamal configs, destinations, pre-deploy migration hook, secrets reader | `deploy/kamal/` and its `README.md` (one-time owner setup, GitHub environment secrets and variables) |
+| Build, push, attest, deploy, verify | `.github/workflows/release.yml` (staging on green `main`, production on a `v*` tag with approval) |
+| Nightly dump and monthly restore drill | `.github/workflows/backup.yml` |
+| Architecture, environments, network, secrets, costs | `docs/infrastructure.md` |
+| Incidents | `docs/runbook.md` |
+
+### A1. Everyday operations (from `deploy/kamal`, connected to the tailnet)
+
+```bash
+kamal deploy -d staging --version <sha> --skip-push                          # api + worker (pre-deploy hook migrates)
+kamal deploy -c config/deploy.web.yml -d staging --version <sha> --skip-push   # web
+kamal rollback -d staging <previous sha>                                       # last 5 images stay on each host
+kamal app logs -d staging --roles=worker -f
+kamal app exec -d staging --roles=api --reuse "python -m arbiter.cli create-admin ..."
+```
+
+CI does the deploy; run these by hand only for rollback or diagnosis. Kamal does not run natively on Windows: use the official Kamal Docker image or WSL (P02 records which). After every deploy `npm run verify:deployed` must pass (it compares `/healthz` `commit` with HEAD).
+
+### A2. Migrations
+
+Run once per deploy by `.kamal/hooks/pre-deploy` on the primary api host, in a container of the new image, before traffic moves; `ARBITER_MIGRATE_ON_START=0` on the containers. Migrations are additive and backward compatible with the previous release (expand, deploy, contract), which is what makes `kamal rollback` safe. Never edit an applied migration.
+
+### A3. Backups and restore
+
+- Ubicloud point-in-time recovery (restore into a new instance from the Ubicloud console or API).
+- Nightly `pg_dump -Fc`, GPG AES256 with `BACKUP_PASSPHRASE`, uploaded with a row-count manifest to Backblaze B2 EU (`backup.yml`, 02:17 UTC); retention by B2 lifecycle rule (35 daily copies).
+- Monthly restore drill in CI (04:41 UTC on the 3rd): restore into a scratch pgvector Postgres, checksum, alembic version, no populated table emptied; artifact `restore-drill.json` (400 days).
+
+Real restore from a dump into production (only after a PITR restore is ruled out):
+
+```bash
+# on an operator machine on the tailnet, with the B2 and database secrets exported (never typed on a command line)
+aws s3 cp "s3://$B2_BUCKET/pg/arbiter-<STAMP>.dump.gpg" . --endpoint-url "$B2_ENDPOINT"
+aws s3 cp "s3://$B2_BUCKET/pg/arbiter-<STAMP>.manifest.json" . --endpoint-url "$B2_ENDPOINT"
+sha256sum arbiter-<STAMP>.dump.gpg          # compare with the manifest's sha256
+gpg -d arbiter-<STAMP>.dump.gpg > arbiter.dump
+# stop traffic: kamal app stop -d production (both services), then restore into a NEW Ubicloud database,
+# CREATE EXTENSION vector, pg_trgm; pg_restore --no-owner --no-privileges -d <new url> arbiter.dump
+# point ARBITER_DATABASE_URL at the new database, deploy, check alembic current and row counts, start traffic
+```
+
+Record every restore (drill or real) with date and duration in `docs/runbook.md`.
+
+### A4. Queue health and logs
+
+```bash
+kamal app logs -d production --roles=api,worker --since 30m
+# work_items by status (through any psql client on the tailnet):
+#   select kind, status, count(*), min(run_at) from work_items group by 1,2 order by 1,2;
+```
+
+Errors and logs also go to PostHog EU (privacy mode); uptime, heartbeat and the status page are in Better Stack.
+
+## B. Fallback path: one box with Compose and Caddy
+
+For local development, demos, and the emergency path when the Kamal stack cannot serve. Postgres runs on a local volume here, so this path carries the operational duties the primary stack hands to Ubicloud (backups, restores, upgrades).
 
 ```
 Internet -> Caddy :443 -> app.<DOMAIN> -> web:3000   (Next.js)
@@ -10,19 +83,17 @@ Internet -> Caddy :443 -> app.<DOMAIN> -> web:3000   (Next.js)
                            postgres (pgvector/pgvector:pg16, volume pgdata)
 ```
 
-## 1. Server
+### F1. Server
 
 | Stage | Hetzner type | vCPU / RAM / disk | Notes |
 |---|---|---|---|
-| P01 measurement and P02 staging, private beta | CX32 or CPX31 | 4 / 8 GB / 80-160 GB | enough for one org, a few thousand segments a day |
-| P04 public self-serve | CPX41 or CCX23 (dedicated vCPU) | 8 / 16 GB / 240 GB | dedicated vCPU once LLM traffic and file conversion overlap |
-| Later | split Postgres to its own CCX host or Hetzner managed option | | when DB CPU is the bottleneck |
+| Emergency fallback or a local demo box | 4 vCPU / 8 GB class | 80-160 GB | enough for one org, a few thousand segments a day; read the current types and prices with `hcloud server-type list` |
 
-- Location: `fsn1`/`nbg1` (Germany) or `hel1` (Finland). Pick one and keep data there.
+- Location: the same region as the primary stack, so restored data stays where customers expect it.
 - Image: Ubuntu 24.04.
 - Add your SSH key at create time. Enable Hetzner backups (snapshots) as a second safety net, they do not replace `backup.sh`.
 
-## 2. Firewall
+### F2. Firewall
 
 Create a Hetzner Cloud Firewall and attach it to the server:
 
@@ -37,7 +108,7 @@ Postgres is never published. On the host also run `ufw` with the same rules if y
 
 SSH hardening: `PasswordAuthentication no`, `PermitRootLogin prohibit-password`, create a deploy user in the `docker` group.
 
-## 3. Install Docker
+### F3. Install Docker
 
 ```bash
 curl -fsSL https://get.docker.com | sh
@@ -46,7 +117,7 @@ docker compose version            # must be v2+
 sudo apt-get install -y rclone git
 ```
 
-## 4. DNS
+### F4. DNS
 
 At your DNS provider create (TTL 300 while setting up):
 
@@ -58,7 +129,7 @@ At your DNS provider create (TTL 300 while setting up):
 
 Wait until `dig +short app.<DOMAIN>` returns the server IP before the first start, otherwise Let's Encrypt fails and rate-limits you.
 
-## 5. Code and `.env`
+### F5. Code and `.env`
 
 ```bash
 sudo mkdir -p /opt/arbiter && sudo chown deploy: /opt/arbiter
@@ -80,7 +151,7 @@ Fill in at minimum:
 
 Leave `NEXT_PUBLIC_API_URL` empty to get `https://api.<DOMAIN>`. It is baked into the web bundle at build time, so changing it means rebuilding `web`.
 
-## 6. First deploy
+### F6. First deploy
 
 ```bash
 cd /opt/arbiter/deploy
@@ -90,7 +161,7 @@ docker compose ps                     # postgres healthy, api healthy, worker/we
 curl -fsS https://api.<DOMAIN>/healthz
 ```
 
-## 7. Migrations
+### F7. Migrations
 
 The `api` container runs `alembic upgrade head` on start because `ARBITER_MIGRATE_ON_START=1` (worker has it at 0, so two containers never race).
 To run them by hand, or with auto-migrate turned off:
@@ -102,7 +173,7 @@ docker compose run --rm --no-deps api alembic current
 
 Rule: migrations are additive and backward compatible with the previous release (expand, deploy, contract). Never edit an applied migration.
 
-## 8. Backups
+### F8. Backups
 
 `backup.sh` dumps Postgres (`pg_dump -Fc`), verifies the dump with `pg_restore --list`, archives the file storage volume, writes sha256 sums, uploads with rclone, and prunes (7 days local, 30 days remote by default).
 
@@ -123,7 +194,7 @@ Cron as root:
 
 Run it once by hand and check the remote: `rclone ls $RCLONE_REMOTE`.
 
-## 9. Restore drill (do it monthly, and before the P04 launch)
+### F9. Restore drill on the fallback box
 
 On a throwaway server or locally, never on production first:
 
@@ -137,9 +208,9 @@ docker compose exec -T postgres pg_restore -U arbiter -d arbiter_restore --no-ow
 docker compose exec -T postgres psql -U arbiter -d arbiter_restore -c "select count(*) from jobs; select count(*) from provenance_events;"
 ```
 
-Real restore on production: stop `api worker web`, restore into `arbiter` (drop + create), restore the storage tarball into the `storage` volume, start again, run `alembic current`. Record the drill date and duration in `docs/runbook.md`.
+Real restore on production: stop `api worker web`, restore into `arbiter` (drop + create), restore the storage tarball into the `storage` volume, start again, run `alembic current`. Record the date and duration in `docs/runbook.md`. On the primary stack the drill runs monthly in CI (`backup.yml`).
 
-## 10. Updating
+### F10. Updating
 
 ```bash
 cd /opt/arbiter && git pull
@@ -150,9 +221,9 @@ docker compose up -d                          # api migrates, then worker restar
 docker compose ps && curl -fsS https://api.<DOMAIN>/healthz
 ```
 
-Rollback: `git checkout <previous tag> && docker compose up -d --build`. Only possible if the migration was backward compatible, which is why rule 7 exists.
+Rollback: `git checkout <previous tag> && docker compose up -d --build`. Only possible if the migration was backward compatible, which is why the F7 rule exists.
 
-## 11. Logs
+### F11. Logs
 
 ```bash
 docker compose logs -f --tail=200 api worker

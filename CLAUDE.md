@@ -96,7 +96,9 @@ apps/web/            Next.js 16 App Router: /app (customers), /reviewer, /admin;
                      i18n), src/app/api/proxy (server proxy, token in httpOnly cookie, D-036), src/proxy.ts
 apps/web/messages/   en.json, the English UI catalog (source of every UI string)
 apps/web/e2e/        real-flow.mjs: browser test of J-01..J-09 against a real API + worker + web
-deploy/              compose, Caddy, backup.sh, Hetzner guide
+deploy/              kamal/ (primary: services arbiter + arbiter-web, staging and production destinations,
+                     pre-deploy migration hook); compose + Caddy + backup.sh (local and fallback); see
+                     docs/infrastructure.md and .github/workflows/release.yml, backup.yml
 phases/              the frozen phase plan (HYPERPOWER format), README has the order table
 evidence/            ledger.jsonl (append-only proof) and schema.json
 scripts/             ship check, e2e and deploy verifiers, sql verifier, git and Cursor hook scripts
@@ -115,7 +117,7 @@ The npm scripts at the root work the same on Windows and Linux; the Makefile is 
 | Task | Command |
 |---|---|
 | Ship check (runtime pins, ruff, pytest, web lint + i18n, typecheck, build) | `npm run verify` (parts: `npm run verify:api`, `npm run verify:web`) |
-| Browser e2e, J-01..J-09 (needs API, worker, web running) | `npm run verify:e2e` |
+| Browser e2e, 30 steps; J-01..J-09 mapped, J-10..J-18 from P00 (needs API, worker, web running) | `npm run verify:e2e` |
 | Deployed commit equals HEAD (from P02) | `npm run verify:deployed` |
 | HYPERPOWER | `npm run hp -- doctor`, `status`, `verify`, `resume`, `handoff`, `end`, `gate P0x --product` |
 | Local Postgres | `docker compose -f deploy/docker-compose.dev.yml up -d --wait` (`make dev-db`) |
@@ -124,6 +126,8 @@ The npm scripts at the root work the same on Windows and Linux; the Makefile is 
 | Lint / format | `make lint`, `make fmt` |
 | New migration | `alembic revision -m "..."` in services/api (hand-written, reviewed) |
 | Compose check | `docker compose -f deploy/docker-compose.yml config -q` (needs env vars, see deploy/README.md) |
+| Deploy (from P02; CI does it, by hand only for rollback) | in `deploy/kamal`: `kamal deploy -d <staging\|production> --version <sha> --skip-push`, then the same with `-c config/deploy.web.yml`; `kamal rollback -d <dest> <sha>` |
+| Seed billing plans | `python -m arbiter.cli seed-plans` in services/api |
 
 Run `npm run verify` before declaring any task done. CI runs the same steps plus Docker builds and compose validation.
 

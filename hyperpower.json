@@ -4,7 +4,7 @@
   "displayName": "Arbiter",
   "displayNameNote": "working name; the product name is not final",
   "domain": null,
-  "domainNote": "not chosen yet; the owner picks it in P02 (staging) and P04 (production)",
+  "domainNote": "not chosen yet; the owner picks it in P02 (staging app.staging.<domain>, api.staging.<domain>); production uses the same zone in P04",
   "owner": "Djordje Radulovic",
   "commercial": true,
   "commercialNote": "paid SaaS sold globally (per-word service tiers, Agency OS), so no noncommercial-licensed tool may be used",
@@ -72,19 +72,18 @@
   "capabilities": [
     "web",
     "api",
-    "ai-runtime"
+    "ai-runtime",
+    "payments",
+    "email"
   ],
   "excluded": [
     "mobile-native",
     "pwa",
     "desktop",
-    "payments",
-    "email",
-    "analytics",
     "cms",
     "relay-bridge"
   ],
-  "excludedNote": "payments leaves the excluded list in P03 (payment and payout providers). email is not built: nothing sends mail today.",
+  "excludedNote": "payments (Paddle, payout rails) and email (queued SMTP) are built on mocks and go live in P03 and P02. Product analytics and errors run through PostHog EU with privacy mode as part of observability (plannedHosting.observability), not as a separate capability.",
   "tools": {
     "required": [
       "graphify",
@@ -132,11 +131,63 @@
           "auth": "fine-grained token in the Authorization header",
           "required": false,
           "note": "only when a phase needs it; the gh CLI covers most GitHub work"
+        },
+        {
+          "name": "posthog",
+          "form": "hosted-http",
+          "url": null,
+          "auth": "personal API key",
+          "required": false,
+          "phase": "P02",
+          "note": "optional; URL confirmed from PostHog docs before adding, added only at a phase start (frozen per phase)"
+        },
+        {
+          "name": "cloudflare",
+          "form": "hosted-http",
+          "url": null,
+          "auth": "OAuth or scoped API token",
+          "required": false,
+          "phase": "P02",
+          "note": "optional; the REST API with a zone-scoped token covers the phase; URL confirmed before adding"
         }
       ],
       "template": ".cursor/mcp.json.example",
       "note": "Hosted HTTP forms only. The npx/stdio forms failed on two earlier projects with errors that looked like bad keys. .cursor/mcp.json is gitignored."
-    }
+    },
+    "cli": [
+      {
+        "name": "gh",
+        "phase": "P00",
+        "purpose": "GitHub: environments, secrets (stdin only), plan check, attestation verify"
+      },
+      {
+        "name": "hcloud",
+        "phase": "P02",
+        "purpose": "Hetzner Cloud: prices, network, firewall, VMs, load balancer, certificates"
+      },
+      {
+        "name": "kamal",
+        "version": "~> 2.7",
+        "phase": "P02",
+        "purpose": "deploys; runs in CI, locally through the official Kamal Docker image or WSL (no native Windows)"
+      },
+      {
+        "name": "tailscale",
+        "phase": "P02",
+        "purpose": "tailnet access for local Kamal and operators; CI uses tailscale/github-action"
+      },
+      {
+        "name": "aws",
+        "phase": "P02",
+        "purpose": "S3 API for Hetzner Object Storage buckets and Backblaze B2 (S3-compatible)"
+      },
+      {
+        "name": "ubicloud",
+        "phase": "P02",
+        "purpose": "Ubicloud API or CLI for Postgres; exact tool confirmed from Ubicloud docs in P02"
+      }
+    ],
+    "cliNote": "Provider work goes through these CLIs or the providers' REST APIs before any browser step is asked of the owner (CLAUDE.md law 2). Cloudflare, Better Stack and PostHog are driven through their REST APIs with scoped tokens."
   },
   "canonicalTruth": {
     "versioned": true,
@@ -194,13 +245,154 @@
         "recurring": false
       },
       {
-        "what": "Hetzner Cloud server (CX32 or CPX31 class) and Hetzner Object Storage for backups",
+        "what": "EU route test calls (AWS Bedrock EU profile and/or Google Vertex eu), only if the owner sets up access",
+        "phase": "P01",
+        "ceiling": "suggested 20 EUR",
+        "recurring": false
+      },
+      {
+        "what": "Staging: Hetzner VM + Hetzner Load Balancer + Hetzner Object Storage + Ubicloud smallest Postgres + Backblaze B2 EU",
         "phase": "P02",
-        "ceiling": "25 EUR per month combined; exact prices read from the Hetzner API and written here before creation",
+        "ceiling": "60 EUR per month combined (estimate; Ubicloud from 19.54 USD per month per research; exact prices read from provider APIs and written here before creation)",
+        "recurring": true
+      },
+      {
+        "what": "One-off pgvector check instance on Ubicloud, if it cannot be the staging database itself",
+        "phase": "P02",
+        "ceiling": "5 EUR",
+        "recurring": false
+      },
+      {
+        "what": "GitHub plan upgrade, only if the P02 plan check decides it (environment secrets, required reviewers, attestations on a private repo)",
+        "phase": "P02",
+        "ceiling": "25 EUR per month (estimate)",
+        "recurring": true
+      },
+      {
+        "what": "Paddle and payout provider fees on test transactions, one real payout",
+        "phase": "P03",
+        "ceiling": "payout at most 10 EUR plus fees; Paddle 5 % + 50 cents per transaction (research)",
+        "recurring": false
+      },
+      {
+        "what": "Production: 2 Hetzner VMs + load balancer + object storage + Ubicloud HA Postgres + B2",
+        "phase": "P04",
+        "ceiling": "200 EUR per month combined (estimate, read from provider APIs before creation)",
+        "recurring": true
+      },
+      {
+        "what": "Better Stack responder seat for phone alerts",
+        "phase": "P04",
+        "ceiling": "34 USD per month, 29 USD yearly (research)",
+        "recurring": true
+      },
+      {
+        "what": "Provider usage for calibrating 3 launch languages",
+        "phase": "P04",
+        "ceiling": "the budget the owner names with apply (suggested 100 EUR)",
+        "recurring": false
+      },
+      {
+        "what": "Training and serving of the first own model",
+        "phase": "P06",
+        "ceiling": "declared at phase start (suggested 100 EUR)",
+        "recurring": false
+      },
+      {
+        "what": "Compliance platform, auditor, pen test",
+        "phase": "P07",
+        "ceiling": "declared at phase start; research ranges in phases/phase-07-enterprise.md",
+        "recurring": false
+      },
+      {
+        "what": "AWS profile or US cell",
+        "phase": "P09",
+        "ceiling": "declared at phase start, covered by the triggering contract",
         "recurring": true
       }
     ],
-    "note": "Nothing is paid today. A planned item moves to items with its exact monthly price when it is created."
+    "note": "Nothing is paid today. A planned item moves to items with its exact monthly price when it is created. Estimates are confirmed through the provider API or console in the phase; research facts carry their source in docs/decisions.md D-079 to D-086."
+  },
+  "plannedHosting": {
+    "status": "planned, nothing created (D-079 to D-083, docs/infrastructure.md)",
+    "processing": {
+      "default": "Claude through Anthropic's API (global geography)",
+      "euAddon": "eu_processing: Bedrock EU inference profile, Vertex eu, DeepL; never a silent fallback (D-057, D-079)"
+    },
+    "compute": {
+      "provider": "Hetzner Cloud",
+      "staging": "1 VM behind a Hetzner Load Balancer",
+      "production": "2+ VMs behind a Hetzner Load Balancer",
+      "location": "chosen in P02 where Ubicloud also runs Postgres"
+    },
+    "deploy": {
+      "tool": "Kamal 2 (~> 2.7)",
+      "services": {
+        "arbiter": {
+          "image": "ghcr.io/spawnjfk/arbiter-api",
+          "roles": [
+            "api",
+            "worker"
+          ]
+        },
+        "arbiter-web": {
+          "image": "ghcr.io/spawnjfk/arbiter-web",
+          "roles": [
+            "web"
+          ]
+        }
+      },
+      "config": "deploy/kamal/",
+      "registry": "GHCR",
+      "pipeline": ".github/workflows/release.yml: build, push, attest, kamal deploy over Tailscale, verify deployed commit",
+      "fallback": "deploy/docker-compose.yml + Caddy on one VM, local development and emergency only"
+    },
+    "edge": {
+      "dns": "Cloudflare",
+      "waf": "Cloudflare managed rules and rate limits",
+      "tls": "Cloudflare Full (strict) to the Hetzner Load Balancer; certificate path verified in P02 (Origin CA expected)",
+      "ssh": "Tailscale only, tags tag:ci and tag:arbiter, no public SSH"
+    },
+    "database": {
+      "provider": "Ubicloud managed PostgreSQL 16",
+      "required": [
+        "vector",
+        "pg_trgm",
+        "PITR"
+      ],
+      "verifyFirst": "INT-04 in P02 before anything else is created",
+      "fallback": [
+        "Scaleway managed Postgres if pgvector and PITR are confirmed",
+        "self-managed Postgres 16 with a streaming replica on Hetzner"
+      ]
+    },
+    "storage": {
+      "files": "Hetzner Object Storage, one private bucket per environment, presigned uploads up to 1 GB (D-051)",
+      "backups": "Backblaze B2 EU: nightly encrypted pg_dump (backup.yml) + Ubicloud PITR + monthly restore drill in CI (D-082)"
+    },
+    "observability": {
+      "errorsLogsAnalytics": "PostHog Cloud EU, privacy mode, never segment text",
+      "uptime": "Better Stack: HTTP checks, worker heartbeat, status page, phone alerts",
+      "instrumentation": "OpenTelemetry (ARBITER_OTEL_*)",
+      "database": "Ubicloud console metrics"
+    },
+    "payments": {
+      "live": "Paddle (merchant of record)",
+      "later": "Stripe adapter, off until a company in a Stripe-supported country exists",
+      "enterprise": "manual bank invoices"
+    },
+    "payouts": {
+      "rails": [
+        "Payoneer",
+        "PayPal"
+      ],
+      "fallback": "bank files (SEPA pain.001, CSV, Wise CSV)",
+      "platformFee": "0 to 8 % of human work, default 5 %"
+    },
+    "regions": {
+      "now": "one cell",
+      "later": "region chosen at signup, separate deployment per region (P09); AWS profile on contract"
+    }
   },
   "shipped": {
     "status": "nothing deployed",
@@ -210,12 +402,16 @@
       "appUrl": null,
       "apiUrl": null,
       "server": null,
-      "deploy": "planned: GitHub Action on push to main after CI, SSH with a forced-command key that only runs deploy/deploy.sh",
-      "verifyDeployed": "npm run verify:deployed reads apiUrl/healthz commit and compares it with HEAD (healthz gets commit in P02)"
+      "deploy": "planned: release.yml deploy-staging on every green main (Kamal over Tailscale), images attested in GHCR",
+      "verifyDeployed": "npm run verify:deployed reads apiUrl/healthz commit (built, ARBITER_GIT_SHA) and compares it with HEAD"
     },
     "production": {
       "status": "not deployed",
-      "plannedPhase": "P04"
+      "plannedPhase": "P04",
+      "appUrl": null,
+      "apiUrl": null,
+      "servers": [],
+      "deploy": "planned: release.yml deploy-production on a v* tag with manual approval (GitHub environment or the P02 fallback)"
     }
   },
   "phases": {
@@ -238,7 +434,7 @@
       "status": "planned"
     },
     "P02": {
-      "slug": "staging-deploy-hetzner",
+      "slug": "staging-production-grade",
       "file": "phases/phase-02-staging-deploy.md",
       "bead": "to be created in P00",
       "beadId": "",
@@ -247,7 +443,7 @@
       "status": "planned"
     },
     "P03": {
-      "slug": "money-and-legal-readiness",
+      "slug": "money-and-legal",
       "file": "phases/phase-03-money-and-legal.md",
       "bead": "to be created in P00",
       "beadId": "",
@@ -265,7 +461,7 @@
       "status": "planned"
     },
     "P05": {
-      "slug": "integrations",
+      "slug": "integrations-connectors",
       "file": "phases/phase-05-integrations.md",
       "bead": "to be created in P00",
       "beadId": "",
@@ -274,8 +470,8 @@
       "status": "planned"
     },
     "P06": {
-      "slug": "okapi-formats",
-      "file": "phases/phase-06-okapi-formats.md",
+      "slug": "own-models-production",
+      "file": "phases/phase-06-own-models.md",
       "bead": "to be created in P00",
       "beadId": "",
       "gateKind": "phase",
@@ -299,7 +495,16 @@
       "gateKind": "phase",
       "evidenceIds": [],
       "status": "planned"
+    },
+    "P09": {
+      "slug": "enterprise-region-and-us-cell",
+      "file": "phases/phase-09-enterprise-region.md",
+      "bead": "to be created in P00",
+      "beadId": "",
+      "gateKind": "phase",
+      "evidenceIds": [],
+      "status": "planned"
     }
   },
-  "phasesNote": "Order is frozen (phases/README.md). P00 fills each beadId; each phase appends its evidence record ids before running the gate."
+  "phasesNote": "Order is frozen (phases/README.md, D-090; owner override of 2026-10-13 in D-089). P00 fills each beadId; each phase appends its evidence record ids before running the gate."
 }

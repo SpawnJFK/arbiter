@@ -201,7 +201,7 @@ Date: 2026-10-07. Status: accepted.
 ---
 
 ## D-013 Hetzner + Docker Compose instead of Kubernetes
-Date: 2026-10-07. Status: accepted.
+Date: 2026-10-07. Status: superseded by D-080 (production hosting) and D-082 (backups); the compose stack stays for local development and as the emergency fallback.
 
 **Context.** EU data residency, low cost, one operator.
 
@@ -702,7 +702,7 @@ Date: 2026-10-09. Status: accepted.
 ---
 
 ## D-048 Phase plan moves to root `phases/`, renumbered P00 to P08
-Date: 2026-10-09. Status: accepted.
+Date: 2026-10-09. Status: superseded by D-090 (plan rewritten as P00 to P09 on 2026-10-13).
 
 **Context.** The plan lived in `docs/phases/phase-0..6.md` with ROADMAP numbers P0 to P6, where P0 mixed built foundation, open measurement and ops, and P1/P2 mixed built features with launch work. The HYPERPOWER format needs one file per gateable phase with Goal, Scope, Human-only steps, Declared spend, Acceptance, Exit gate, Out of scope, and an order table.
 
@@ -1147,3 +1147,198 @@ Date: 2026-10-13. Status: accepted.
 - *A second encryption key for engine keys.* Two keys to rotate and back up for the same class of secret.
 
 **Consequences.** Vendor invoices marked paid do not trigger the platform payout rails: an agency pays its own vendors, while the rails pay marketplace reviewers from platform funds. Connecting the two needs a decision about who holds the money.
+
+---
+
+Entries D-079 to D-090 record the infrastructure, money, compliance and plan decisions the owner approved on 2026-10-13. Facts marked "research" come from the infrastructure research report of October 2026 (kept outside the repo); each fact names its original source so it can be re-checked. Prices are dated facts from that report or are labelled estimates that the phase confirms through the provider's API or console before anything is created. `docs/infrastructure.md` is the long form.
+
+## D-079 Global market; GDPR without EU hosting; Claude through Anthropic's API by default, EU processing as a paid add-on
+Date: 2026-10-13. Status: accepted (owner approved).
+
+**Context.** Arbiter is sold globally, English-first. Earlier documents (D-013, PRODUCT.md, SECURITY.md, DESIGN.md section 7) treated EU hosting as a product constraint. GDPR does not require EU hosting: a transfer outside the EU is lawful under a DPA with the EU-US Data Privacy Framework or Standard Contractual Clauses. Research: as of October 2026 Anthropic's first-party API offers only "global" or "us" inference geography and a US-only workspace geography, so it cannot process in the EU ([Claude docs, data residency](https://platform.claude.com/docs/en/manage-claude/data-residency)). EU-processed Claude means AWS Bedrock with the EU geographic inference profile (routing inside EU regions such as eu-central-1, eu-west-1, eu-west-3) or Google Vertex AI's "eu" multi-region, which carries a 10 % premium ([Claude on Vertex](https://platform.claude.com/docs/en/api/claude-on-vertex-ai)); single-region Vertex endpoints serve only Sonnet 4.6 and older, so the honest promise is "processed within the EU", not "in Germany". The API reports the actual region per call in `usage.inference_geo`.
+
+**Decision.** Default processing for every org: Claude through Anthropic's own API (global geography), other engines as configured. EU-only processing is the paid per-org add-on `eu_processing` (`org.settings["processing_region"] = "eu"`), routed only to engines that declare `region = eu`: Bedrock EU inference profiles, Vertex `eu`, DeepL. Never a silent fallback: a job of an EU org without an EU engine fails visibly with `no EU engine configured` (already built, D-056 to D-058). The processing region, engine and model of every call are written to provenance and the evidence pack, so residency is a replayable record, not a sales claim. Transfers are covered by the DPA plus the Data Privacy Framework or SCCs; legal review before public launch.
+
+**Rejected.**
+- *EU hosting and EU processing for everyone.* Costs every customer the EU premium and limits engine choice for buyers who do not need it; GDPR does not require it.
+- *Global routing for EU orgs with a contractual promise only.* Not verifiable; the evidence pack would contradict the promise.
+- *Promising single-country processing.* Not available for current Claude models on Vertex single regions (research, see above).
+
+**Consequences.** Residency-pinned LLM spend costs more (research: budget about 10 % more on Vertex `eu`); the add-on price covers it. Bedrock profile ids and the Vertex `eu` host are confirmed against the provider consoles in P01 (INT-03) or before the first EU customer. Hosting location no longer decides residency for AI processing; D-080 picks hosting on cost and operations. Supersedes the "EU hosting" constraint wording in PRODUCT.md and SECURITY.md.
+
+---
+
+## D-080 Hosting: Hetzner Cloud VMs behind a load balancer, Kamal 2 deploys, Cloudflare in front, Tailscale for SSH
+Date: 2026-10-13. Status: accepted (owner approved). Supersedes D-013 for staging and production.
+
+**Context.** D-013 chose one Hetzner host running Compose with Postgres on a local volume: no redundancy and the operator owns database operations. The research report recommended an AWS eu-central-1 cell, mainly so Claude could run through Bedrock EU in the same region and because Hetzner has no managed Postgres. Research facts on Hetzner: ISO 27001:2022 for its German datacenter parks ([Hetzner](https://www.hetzner.com/de/unternehmen/rechenzentrum?country=us)), used as a production subprocessor by security-sensitive B2B products ([heylogin](https://www.heylogin.com/en/subprocessors)); the certificate page names only the German parks. The report also says the absolute saving of self-hosting at Arbiter's size is hundreds of dollars a month and that Kamal 2 works in production but needs health endpoints and a remote builder early ([Planet Argon](https://blog.planetargon.com/blog/entries/deploying-laravel-with-kamal-2-lessons-from-a-real-production-setup)). With D-079 the EU route is an add-on reached over the network, so co-locating compute with Bedrock is no longer required, and D-081 removes the "no managed Postgres" objection.
+
+**Decision.** Hetzner Cloud (EU and US locations available) with at least two VMs per production environment behind a Hetzner Load Balancer. App containers are deployed by Kamal 2 as two services: `arbiter` (image `arbiter-api`, roles `api` and `worker`) and `arbiter-web` (image `arbiter-web`, role `web`); images live in GHCR, built and attested in CI (`.github/workflows/release.yml`), never on the hosts. Cloudflare in front for DNS, WAF and rate limiting, SSL mode Full (strict). TLS terminates at the load balancer; kamal-proxy on each VM listens on port 80 on the private network. Tailscale carries SSH for operators and CI; the VMs have no public SSH. Staging is one VM, production two or more. Configs exist in `deploy/kamal/` (D-051).
+
+**Rejected.**
+- *Single-box Compose + Caddy (D-013).* No redundancy and we own database operations. It stays only as local development and emergency fallback (`deploy/docker-compose.yml`).
+- *Coolify.* Operational trouble on another of the owner's projects.
+- *Kubernetes.* Too many moving parts before scale (the research report agrees: concepts without matching benefit at this size).
+- *AWS full stack as the default.* Estimated 3 to 5 times the monthly cost now (owner's estimate, not measured); kept as an enterprise-region profile triggered by a contract (P09).
+- *Scaleway.* pgvector support and PITR on its managed Postgres were not confirmed.
+- *Vercel + Neon or Supabase + Render.* Many US subprocessors, and long-running queue workers polling `work_items` fit badly on serverless platforms.
+
+**Consequences.** Questionnaires will ask about the US cell: Hetzner's named ISO scope covers the German parks only, so a US cell on Hetzner needs that caveat, or P09's AWS profile. Hetzner managed certificates on the load balancer need the zone in Hetzner DNS (to verify in P02); with Cloudflare DNS the expected path is an uploaded Cloudflare Origin CA certificate. GitHub plan limits for environments, required reviewers and artifact attestations on a private repository are checked in P02 before relying on them. Prices are read from the Hetzner API (`hcloud`) and written to `hyperpower.json` before creation.
+
+---
+
+## D-081 Database: Ubicloud managed PostgreSQL on Hetzner, after pgvector is verified
+Date: 2026-10-13. Status: accepted (owner approved), conditional on the pgvector check in P02.
+
+**Context.** Postgres holds everything: relational data, the `work_items` queue, TM vectors (pgvector, D-003), fuzzy search (pg_trgm), append-only provenance. Research: Ubicloud offers managed Postgres on Hetzner-class hardware in Germany and the US, from 19.54 USD per month, with 7-day per-minute restore ([Ubicloud pricing](https://www.ubicloud.com/docs/about/pricing)); the report flags that a young provider raises its own questionnaire questions, and that pgvector support per provider was not verified. The owner also lists high availability and a SOC 2 Type 2 report for Ubicloud; both are confirmed from Ubicloud's own documentation in P02 before they appear in any customer-facing text. The report argues for an always-on managed Postgres over serverless because long-lived worker connections keep compute awake anyway (reasoning, not a benchmark).
+
+**Decision.** Ubicloud managed PostgreSQL 16, in the same region as the Hetzner VMs, TLS required, access limited to the VMs' egress addresses. Before creating anything billable, P02 verifies that `CREATE EXTENSION vector` and `CREATE EXTENSION pg_trgm` work on Ubicloud (docs first; if unclear, the smallest instance under the declared ceiling, deleted if the check fails). Evidence: INT-04. Fallback chosen by evidence, in order: Scaleway managed Postgres (only once its pgvector and PITR are confirmed), or self-managed Postgres 16 with a streaming replica on Hetzner VMs plus WAL archiving.
+
+**Rejected.**
+- *Postgres on the app VM (D-013).* Single point of failure, operator-owned backups and failover.
+- *Serverless Postgres (Neon).* Worker polling keeps it awake; no saving, more moving parts.
+- *Supabase.* Research: the PITR add-on is 100 USD per month ([Neon comparison](https://neon.com/guides/neon-launch-plan-vs-supabase-pro-plan)), and the bundled auth and storage are not used.
+- *AWS RDS now.* Tied to the AWS default rejected in D-080.
+
+**Consequences.** If the pgvector check fails, P02 records a superseding decision before creating the fallback. Database host metrics come from the managed provider (D-083). The migrations must run as a role that can create extensions, or the extensions are created once by the provider's admin role; P02 records which.
+
+---
+
+## D-082 Storage: Hetzner Object Storage for customer files, Backblaze B2 EU for backups at a different provider
+Date: 2026-10-13. Status: accepted (owner approved). Supersedes the backup half of D-013.
+
+**Context.** Uploads up to 1 GB go straight from the browser to object storage through presigned URLs (built, D-051), because Cloudflare caps proxied request bodies by plan and the app should never carry file bytes. Backups must survive the loss of the primary provider. Research: managed PITR is what security questionnaires ask about; a logical dump at a second provider covers provider loss and operator error past the PITR window.
+
+**Decision.** Customer files: Hetzner Object Storage, one private bucket per environment, CORS limited to the app origin, lifecycle rule aborting incomplete multipart uploads after one day. Backups: three layers. (1) Ubicloud PITR (D-081). (2) Nightly `pg_dump -Fc`, encrypted with a symmetric passphrase, uploaded with a manifest of row counts to Backblaze B2 in its EU region (built: `.github/workflows/backup.yml`, 02:17 UTC). (3) A monthly restore drill in CI that restores the newest dump into a scratch pgvector Postgres, checks the checksum, the alembic version and that no populated table came back empty, and keeps `restore-drill.json` as an artifact for 400 days (built, same workflow). Retention lives in B2 lifecycle rules (35 daily copies). Customer file buckets get their own copy policy in P02 (object versioning or a nightly sync to B2; decision recorded there).
+
+**Rejected.**
+- *Backups in the same provider as production (Hetzner Object Storage only).* One account problem loses both.
+- *Hetzner Storage Box with rclone (D-013 path).* Needs a host cron and an operator-run drill; CI keeps the drill replayable.
+- *PITR only.* No copy outside the database provider, and the window is short (research: 7 days on Ubicloud).
+
+**Consequences.** The B2 account region is chosen at sign-up and cannot be changed later, so the P02 click path selects the EU region first. The backup passphrase is a secret with its own rotation (SECURITY.md). INT-07 is the drill record.
+
+---
+
+## D-083 Observability: PostHog EU plus Better Stack, instrumented through OpenTelemetry
+Date: 2026-10-13. Status: accepted (owner approved).
+
+**Context.** Research, from PostHog's own handbook (October 2026): error tracking, logs and web vitals are production-ready; distributed tracing and metrics are alpha; there is no infrastructure or synthetic monitoring and "no built-in on-call/incident management" ([PostHog handbook](https://posthog.com/handbook/growth/use-case-selling/observability)). PostHog error tracking has Python and Next.js SDKs with 100K exceptions a month free ([pricing](https://posthog.com/docs/error-tracking/pricing)); logs are OpenTelemetry-native, 10 GB a month free then 0.25 USD per GB ([logs pricing](https://posthog.com/docs/logs/pricing)); AI observability has a privacy mode that drops prompt and completion text ([privacy mode](https://posthog.com/docs/ai-observability/privacy-mode)); PostHog Cloud EU sits in Frankfurt ([GDPR](https://posthog.com/docs/privacy/gdpr-compliance)). Better Stack's free tier has 10 monitors and heartbeats and one status page; a responder seat is 34 USD a month (29 yearly) for on-call; EU log ingestion is 0.10 USD per GB ([Better Stack pricing](https://betterstack.com/pricing.md)). The queue is a custom Postgres table, so a heartbeat plus queue depth is the portable signal.
+
+**Decision.** PostHog Cloud EU for errors, logs, product analytics and LLM analytics, with privacy mode always on: segment text, prompts and completions never leave Arbiter (built in `observability.py`, D-051). Better Stack for uptime checks on `/healthz` and the web app, the worker heartbeat (`ARBITER_HEARTBEAT_URL`), a public status page and phone alerts. OpenTelemetry in code (`ARBITER_OTEL_*`) so either vendor can be swapped by configuration. Database metrics come from Ubicloud's own console.
+
+**Rejected.**
+- *PostHog alone.* No uptime checks, status page or on-call, by PostHog's own description; tracing and metrics are alpha.
+- *Sentry + Grafana as the default.* More vendors; PostHog already covers errors and logs at our volume. Sentry stays the upgrade if debugging depth is needed; Langfuse (research: EU cloud, open source) is the upgrade when prompt management and eval datasets for the judge need a dedicated tool.
+- *Self-hosted Prometheus and Grafana.* One more system for one operator to run.
+
+**Consequences.** Both vendors appear in the subprocessor list (D-086) with "no segment text" stated. The free tiers cover staging; a responder seat for phone alerts is the first paid item at launch (P04).
+
+---
+
+## D-084 Payments: Paddle as merchant of record now; our database is the source of truth; Stripe only with a company in a supported country
+Date: 2026-10-13. Status: accepted (owner approved). Confirms D-072 with the research facts.
+
+**Context.** Research: Stripe supports 51 countries and regions as of August 2026 and "everywhere else is unsupported" ([StartupOwl](https://startupowl.com/setup/stripe-unsupported-countries)); Serbia is not among them, and Stripe's own merchant-of-record product still needs a Stripe account ([Stripe Managed Payments](https://stripe.com/en-dk/managed-payments)). Paddle accepts software sellers from any country outside a short sanctions list, Serbia included ([Paddle](https://www.paddle.com/help/start/intro-to-paddle/which-countries-are-supported-by-paddle)), and costs 5 % + 50 cents per transaction with tax calculation, filing, remittance, chargebacks and fraud included and no monthly fee ([Paddle pricing](https://www.paddle.com/pricing)). Paddle supports invoices with payment terms, PO numbers, bank transfer and tax-exempt billing for valid VAT or GST IDs; its native usage billing is in early-access beta and it recommends tracking usage in your own app ([Paddle for AI companies](https://developer.paddle.com/get-started/how-paddle-works/ai-companies.md)). Known downsides (research): domain review estimated at 5 to 7 business days, payouts only in USD, EUR, GBP, AUD and CAD. Entity options for a later Stripe rail: Stripe Atlas (500 USD once, 100 USD a year; a foreign-owned single-member US LLC must file Form 5472 yearly or face a 25,000 USD penalty per form) or an Estonian company via e-Residency (about 415 EUR in state fees, 700 to 2,000 EUR a year to run); e-Residency is not tax residency, and a company managed from Serbia may be treated as Serbian-resident ([Stripe Atlas](https://stripe.com/atlas), [TaxesForExpats](https://www.taxesforexpats.com/articles/foreign-business/foreign-owned-single-member-llc.html), [Enty](https://enty.io/blog/real-cost-running-estonian-e-resident-company-2026)).
+
+**Decision.** Paddle is the merchant of record and the only live card rail now. Usage, credits, entitlements, plans and invoice records stay in our database (built, D-072 to D-075); providers are thin adapters. The Stripe adapter exists and stays off until a company in a Stripe-supported country exists; which entity (US LLC through Atlas or an Estonian company) is an open owner decision that needs a tax adviser's check first (P03). Enterprise customers can be billed through the manual bank-invoice provider (our own PDF invoice, admin marks it paid).
+
+**Rejected.**
+- *Stripe first.* Not available without a foreign entity, and tax filing would be ours.
+- *Forming the foreign entity now.* Tax residency risk unreviewed.
+- *Dedicated usage engines (Metronome, Orb).* Research: both now belong to payment companies and are enterprise-priced; Lago is the one to revisit if the in-house ledger becomes a burden.
+- *Polar, Creem, Dodo and similar.* Smaller, with weaker or unclear usage and enterprise invoicing support (research).
+
+**Consequences.** The Paddle application goes in early (P03) with the website, terms and pricing page live, because review takes days. For EU B2B buyers with VAT IDs much VAT is reverse-charged, so the 5 % is a launch cost, revisited when enterprise volume grows (research).
+
+---
+
+## D-085 Payouts: Payoneer and PayPal first, bank files as fallback; platform fee on human work; agencies pay their own vendors
+Date: 2026-10-13. Status: accepted (owner approved). Confirms D-073 and D-078.
+
+**Context.** Research: translation marketplaces converge on Payoneer for the long tail, with PayPal and bank transfer beside it. Gengo added Payoneer in 2017 and pays translators monthly in over 200 countries and territories ([Gengo](https://gengo.com/translator-product-updates/gengo-payoneer-a-new-translator-payment-option/)); Smartcat processes payouts within 3 business days with a 7 USD or EUR minimum, Payoneer wallets with roughly 3 USD deducted by Payoneer, bank transfer and PayPal as alternatives ([Smartcat Payoneer](https://smartcat-company.helpjuice.com/1674961-payoneer)), and charges the paying company 2 % to 8 % per transaction ([Smartcat](https://smartcat-company.helpjuice.com/payment-automation/1539596-how-to-pay-freelancers-in-smartcat)). Paddle pays the seller, not third parties, so payouts need their own provider. Stripe Connect is unavailable without a Stripe account.
+
+**Decision.** Payoneer and PayPal are the first live rails; bank files (SEPA pain.001, plain CSV, Wise batch CSV) are the fallback (built, D-073). Arbiter is the paying counterparty for marketplace reviewers, from its own funds. Platform fee: 0 to 8 % of human work, default 5 %, charged to the customer and shown on quotes for `hybrid` and `full` (built). Vendor invoices of an agency's own vendors are paid by the agency outside the platform rails (D-078).
+
+**Rejected.**
+- *Stripe Connect.* Needs a Stripe account (D-084).
+- *Wise API as the first rail.* Slower business onboarding for API payouts (D-073).
+- *Outsourcing the reviewer pool to a vendor.* The senate-plus-reviewer design makes the pool core to the product (research notes this is how some competitors do it).
+- *Paying agency vendors through the platform.* Arbiter would hold agency money and take on that liability.
+
+**Consequences.** Arbiter takes on payee identity checks, sanctions screening and tax documentation. Two obligations are unverified and need specialist review before the marketplace pays real reviewers (P03): US tax forms (W-8BEN or W-9) for US-linked payees, and EU DAC7 reporting for platforms with EU sellers of personal services (research could not confirm whether review work falls under it).
+
+---
+
+## D-086 Compliance path: trust page, DPA and subprocessor list now; ISO 27001 or SOC 2 Type I on the first enterprise deal; Type II after
+Date: 2026-10-13. Status: accepted (owner approved).
+
+**Context.** Research: comparable products lead with ISO 27001 or SOC 2. Crowdin wins enterprise accounts on ISO 27001 plus a HIPAA BAA without SOC 2 on its security page ([Crowdin](https://crowdin.com/page/security)); Smartling held SOC 2 since 2013 and announced ISO 27001 on 2025-12-04 ([Smartling](https://www.smartling.com/security)). ISO 27001 lands better with EU buyers, SOC 2 with US buyers. Cost estimates (research, from compliance vendors whose numbers do not cleanly sum): first-year SOC 2 compliance platform 7,500 to 25,000 USD a year, Type II audit 12,000 to 50,000 USD, pen test 4,000 to 15,000 USD, observation window 3 to 12 months, headline total 25,000 to 100,000+ USD ([Strac](https://www.strac.io/blog/soc-2-cost)); specialist auditors cost a third to a fifth of the Big 4, Type I takes about three months, renewals run 20 to 40 % cheaper ([Agency](https://blog.getagency.com/articles/soc-2-audit-cost-for-startups)). ISO 27001 cost at one-to-five person scale was not sourced. Lokalise publishes a full subprocessor list naming every LLM and MT provider with location ([Lokalise](https://lokalise.com/sub-processors)).
+
+**Decision.** Now (P03): a public trust page, a GDPR DPA and a public subprocessor list (draft in `docs/subprocessors.md`: vendor, purpose, data, location), all pending legal review before public launch. On the first enterprise deal that asks: ISO 27001 or SOC 2 Type I, chosen by the buyer's region (P07). Then SOC 2 Type II after a 3 to 6 month window. ISO/IEC 42001 (AI management) is noted as a later differentiator, not planned.
+
+**Rejected.**
+- *Starting SOC 2 Type II before any enterprise demand.* Tens of thousands of dollars and months of evidence collection with no buyer asking.
+- *No public subprocessor list until a customer asks.* Every serious buyer asks; publishing it early is cheap.
+
+**Consequences.** The controls already in the repo (append-only provenance, evidence ledger, org scoping, regulated-vertical blocks, audit log) are the base of the later audit. The audit choice and its fees are declared in P07, not before.
+
+---
+
+## D-087 Modular product: seven modules and three add-ons sold through plans, one entitlement writer
+Date: 2026-10-13. Status: accepted (owner approved). Records the product shape built in D-052 to D-055 and D-077.
+
+**Context.** Buyers differ: a software team wants strings and an engine API, an agency wants PM and a workbench, a quality team wants only the auditor. Selling one bundle prices out the small buyer and under-prices the large one.
+
+**Decision.** Seven modules: `tms` (web translation and workbench), `engine` (translation engine API, keys, routing, own models), `ai` (QE judge, senate, AI editor), `pm` (Agency OS, vendors, POs, capacity), `auditor` (standalone QA and LQA), `strings` (software strings, OTA; needs `tms`), `community` (reviewer marketplace; needs `tms`). Add-ons on the engine module: `eu_processing`, `byok`, `custom_models`. Plans (data, admin-edited) grant modules and add-ons; billing is the only writer of `org.settings["modules"]` and `["addons"]`; admin overrides are stored as overrides against the plan. A disabled module answers 404 `module_disabled`. Modules talk only through `contracts.py`.
+
+**Rejected.**
+- *One bundle with seats.* Does not fit the buyers above.
+- *Usage-only pricing with every module on.* Hides the product structure and makes the entry price unpredictable.
+
+**Consequences.** Known debt: `strings` and `auditor` import engines, quality and community internals (`tests/platform/test_module_isolation.py`). Seat limits are reported, not enforced.
+
+---
+
+## D-088 Own models activate after measurement and first customers
+Date: 2026-10-13. Status: accepted (owner approved). Builds on D-059.
+
+**Context.** Per-client LoRA fine-tunes on consented, human-approved segments are built (D-059) and compete on the scoreboard. Training needs real approved segments from one client and pair; none exist before customers, and the scoreboard needs the judge calibrated (P01) before its numbers mean anything.
+
+**Decision.** Own models stay switched off for customers until P01 has a calibrated judge and real customers have produced consented approved segments. P06 runs the first real training, evaluation on the held-out set and scoreboard comparison. EU orgs train only with the manual provider and evaluate only EU-declared models (D-059).
+
+**Rejected.**
+- *Training on synthetic or public data now to have a model at launch.* It would not be the client's model, which is the point.
+- *Shared model across clients.* No consent model allows it (D-059).
+
+**Consequences.** The `custom_models` add-on can be sold from P04, but delivery starts when a client has enough approved segments (`ARBITER_TRAINING_MIN_EXAMPLES`).
+
+---
+
+## D-089 Owner override of phase discipline on 2026-10-13
+Date: 2026-10-13. Status: accepted (owner instruction).
+
+**Context.** CLAUDE.md law 4 says work only on the current phase. On 2026-10-13 P00 was the current phase, and the owner asked for every product module (platform, engines, strings, file formats, workbench, vendors, billing, infra configs) to be built ahead of the plan, in parallel builds that were then merged (activeContext 2026-10-13).
+
+**Decision.** That work is an owner-directed exception, not a violation. No phase item was ticked for it; the rewritten plan (D-090) lists it under "Already built", and every phase still proves it through its own gate.
+
+**Rejected.**
+- *Treating the merged work as unplanned and reverting it.* The owner asked for it.
+- *Ticking phase items because the code exists.* Code existing is not proof (ACCEPTANCE.md).
+
+**Consequences.** Later agents read this entry instead of raising law 4. Law 4 applies again from now on: work follows `phases/` in order unless the owner says otherwise.
+
+---
+
+## D-090 Phase plan rewritten as P00 to P09 around what is built
+Date: 2026-10-13. Status: accepted. Supersedes D-048.
+
+**Context.** The P00 to P08 plan (D-048) assumed single-box Compose on Hetzner, an undecided payment provider, an Okapi phase and no own-models or region phase. After D-079 to D-089 most product scope is built; what remains is proof on the owner's machine, measurement, accounts, deploys, legal work and launch.
+
+**Decision.** New order: P00 install and verify on Windows; P01 measurement harness (plus the EU route when keys exist); P02 production-grade staging on the chosen stack; P03 money and legal; P04 self-serve launch; P05 integrations and connectors; P06 own models in production; P07 enterprise; P08 white-label for agencies; P09 enterprise region (AWS profile on contract) and US cell on demand. Journeys J-10 to J-18 cover the merged modules; integration checkpoints are renumbered INT-01 to INT-11 (none had evidence, so no record changes). The Okapi sidecar phase is dropped from the numbered plan: the Python handlers now cover IDML, DITA, XML with ITS, subtitles and resource formats; Okapi moves to the ROADMAP backlog, triggered by a format request the handlers cannot serve.
+
+**Rejected.**
+- *Keeping P00 to P08 and patching each file.* P02 and P03 described a stack and choices that no longer apply.
+- *Merging P02 and P04 (deploy production straight away).* Staging must prove the stack, backups, restore drill and attested deploys before customer data arrives.
+
+**Consequences.** `hyperpower.json` phases map, `phases/README.md`, `ROADMAP.md` and `ACCEPTANCE.md` follow the new numbers. P00 creates ten beads, not nine.

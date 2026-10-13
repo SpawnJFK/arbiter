@@ -1,8 +1,19 @@
 # Active context
 
-Last updated: 2026-10-13 (module integration). Phase position: **P00 next, item 1 of 18** (`phases/phase-00-install-and-verify.md`). HYPERPOWER v2 is installed in the repo (uncommitted at the end of the install session; the owner commits). Nothing in the HYPERPOWER layer is proven on the owner's Windows machine yet.
+Last updated: 2026-10-13 (architecture and plan documentation). Phase position: **P00 next, item 1 of 19** (`phases/phase-00-install-and-verify.md`). The plan was rewritten as P00 to P09 (D-090). Nothing is proven on the owner's Windows machine yet; nothing is deployed; no account exists for any provider.
 
 Next gate: `npm run hp -- gate P00 --product`.
+
+## Session 2026-10-13 (docs: approved architecture, decisions D-079..D-090, phase plan P00..P09)
+
+Docs-only session; no code, contract or migration change (`docs/api-contract.md` and `contracts.py` unchanged).
+- Decisions D-079 to D-090 added from the owner's approvals, with research facts and sources: global market and GDPR without EU hosting, Claude through Anthropic's API by default and `eu_processing` via Bedrock EU or Vertex `eu` (D-079); Hetzner Cloud VMs behind a load balancer, Kamal 2, GHCR, Cloudflare, Tailscale (D-080, supersedes D-013); Ubicloud Postgres after a pgvector check (D-081); Hetzner Object Storage plus Backblaze B2 EU backups and the CI restore drill (D-082); PostHog EU plus Better Stack plus OpenTelemetry (D-083); Paddle now, Stripe only with a foreign entity (D-084); Payoneer and PayPal payouts, platform fee (D-085); compliance path (D-086); seven modules and add-ons (D-087); own models after measurement (D-088); the owner override of phase discipline on 2026-10-13 (D-089); the plan rewrite (D-090, supersedes D-048).
+- New `docs/infrastructure.md` (requirements, options table, mermaid architecture, environments, network and secrets, deploy flow, backups, scaling and regional cells, cost ranges labelled as estimates, built vs needs accounts) and `docs/subprocessors.md` (draft, pending legal review).
+- Phase plan rewritten in `phases/` (P06 Okapi removed to the ROADMAP backlog; new P06 own models, P09 enterprise region and US cell). `hyperpower.json`: phases P00..P09 with empty bead ids, capabilities now include payments and email, `plannedHosting` block, CLI list, optional MCPs, spend ceilings per phase, `shipped` unchanged in substance (nothing deployed).
+- `ACCEPTANCE.md`: J-10 to J-18 (engines and BYOK, strings and OTA, workbench, auditor, vendors, billing, team and audit, SSO, presigned upload) with verifiers on the existing e2e markers and pytest files; INT-01 to INT-11 renumbered (no evidence existed).
+- Updated: PRODUCT.md, SECURITY.md (network, secrets rotation, audit log, SSO, BYOK encryption), README.md, ROADMAP.md, deploy/README.md (Kamal primary, Compose fallback), docs/DESIGN.md (sections 2, 6, 7, 8), docs/runbook.md header, CLAUDE.md (deploy line and commands only).
+- Findings written into P02 scope (not fixed here, docs-only): Kamal configs do not pass `ARBITER_SECRETS_KEY` and the app does not refuse its dev default outside dev and test; Hetzner managed certificates likely need Hetzner DNS (Origin CA expected with Cloudflare); `deploy/kamal/README.md` step 2 needs correcting after that check; GitHub plan limits on a private repo for environment secrets, required reviewers and attestations must be checked; the nightly backup streams the plaintext dump through a GitHub-hosted runner before encryption; no transactional SMTP provider is chosen yet although `release.yml` preflight requires `ARBITER_SMTP_HOST`.
+- Validated: `hyperpower.json` parses, `npm run hp -- status` runs, `npm run hp -- doctor` shows the same BROKEN items as before (Node 22 in this session, graphify missing, storage path pending P00).
 
 ## Session 2026-10-13 (integration of the eight parallel module builds)
 
@@ -61,13 +72,17 @@ Built with tests (D-072..D-075), mocks only: plans catalog as data (seeded Start
 Not live: no provider keys used; live Paddle/PayPal/Payoneer setup, webhook destination, Paddle client token + approved domain, test payout stay P03 human steps.
 
 ## Open items carried forward
-1. Context7 was not used while building; P00 item 16 re-checks the conventions.
-2. Payout rails exist (D-073) but are only proven against mocks; live credentials and one test payout are P03.
-3. `/healthz` reports `commit` (ARBITER_GIT_SHA) since the infra merge; `npm run verify:deployed` still needs a deployment (P02 item 6).
-4. `apps/web/e2e/ensure_reviewer.py` writes to a local database; running e2e against staging needs a remote path (P02 item 11).
-5. Core `status` cannot see Playwright and Impeccable in a monorepo; they are listed under `tools.requiredOutsideRegistry` instead of being patched into the core.
+1. Context7 was not used while building; P00 item 17 re-checks the conventions and the provider request shapes.
+2. Payout rails and Paddle exist but are proven only against mocks; sandboxes and one real payout are P03 (INT-09 to INT-11).
+3. `/healthz` reports `commit` (ARBITER_GIT_SHA); `npm run verify:deployed` needs a deployment (P02 item 16).
+4. `apps/web/e2e/ensure_reviewer.py` writes to a local database; running e2e against staging needs a remote path (P02 item 15).
+5. `scripts/verify-e2e.mjs` maps only J-01..J-09; P00 item 10 adds the J-10..J-18 markers.
+6. Kamal secret gaps and the dev-default key refusal (P02 item 7); GitHub plan check (P02 item 1); backup runner data path (P02 item 14); SMTP provider choice (P02 item 8).
+7. Core `status` cannot see Playwright and Impeccable in a monorepo; they stay under `tools.requiredOutsideRegistry`.
+8. The Stripe entity question is an open owner decision (P03 item 8), after a tax adviser's check.
+9. `.cursor/commands/plan.md` still lists the 2026-10-09 phase names (P06 Okapi, no P09); it was outside this docs session's edit scope. Update it (and `HYPERPOWER.md` if any line disagrees) at the start of P00.
 
 ## Next steps (in order)
-1. Owner reviews and commits the install (one commit is fine; message without employer or agency names).
-2. P00 on Windows, item 1 onward: clone to `E:\arbiter`, runtimes, Docker Postgres, `npm run verify`, stack + `npm run verify:e2e`, tools from the registry, Beads, Graphify, Impeccable, hooks, Cursor hooks, Context7, ledger records, doctor clean, gate.
-3. Then P01 measurement (needs provider keys and the EN to SR reference set).
+1. Owner reviews the docs commit (local, not pushed) and pushes when satisfied.
+2. P00 on Windows, item 1 onward: clone to `E:\arbiter`, runtimes, Docker Postgres, `npm run verify`, stack and the 30-step `npm run verify:e2e`, J-10..J-18 markers, tools from the registry, Beads (P00..P09), Graphify, Impeccable, hooks, Cursor hooks, Context7, ledger records, doctor clean, gate.
+3. Then P01 measurement (provider keys, the EN to SR reference set, optional EU route).

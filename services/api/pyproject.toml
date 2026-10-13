@@ -20,6 +20,7 @@ dependencies = [
   "snowballstemmer>=2.2",
   "pyjwt>=2.9",
   "argon2-cffi>=23.1",
+  "cryptography>=43",
   "reportlab>=4.2",
   "orjson>=3.10",
   "tenacity>=9.0",

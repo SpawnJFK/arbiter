@@ -15,7 +15,7 @@ from fastapi import APIRouter, File, Form, Header, UploadFile
 from fastapi.responses import JSONResponse
 
 from arbiter import storage
-from arbiter.api.deps import DB, Customer
+from arbiter.api.deps import DB, Customer, require_module
 from arbiter.api.routes.projects import idempotent_replay, idempotent_store
 from arbiter.billing.quotes import count_words
 from arbiter.errors import Invalid
@@ -23,7 +23,7 @@ from arbiter.fileproc.base import FormatError, plain_text
 from arbiter.fileproc.registry import MAX_FILE_BYTES, detect_and_extract
 from arbiter.models import FileAsset, new_id
 
-router = APIRouter(tags=["files"])
+router = APIRouter(tags=["files"], dependencies=[require_module("tms")])
 
 _CHUNK = 1024 * 1024
 

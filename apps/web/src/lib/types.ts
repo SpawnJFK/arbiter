@@ -28,6 +28,8 @@ export interface User {
   name: string;
   role: Role;
   org_id: string | null;
+  /** Custom role (Settings > Team & roles); null = built-in role only. */
+  role_id?: string | null;
 }
 
 export type Tier = "auto" | "ai_review" | "hybrid" | "full";
@@ -46,6 +48,8 @@ export interface Org {
   regulated: boolean;
   vertical: string | null;
   data_retention_days: number;
+  /** Modules that work for this org (platform.modules). Absent = all (older API). */
+  modules?: string[];
 }
 
 /** `GET /admin/orgs` (routes/admin.py). */
@@ -77,6 +81,8 @@ export interface AuthResponse {
 export interface Me {
   user: User;
   org: Org | null;
+  /** Granted permission patterns ("jobs.*", "*.read"); see src/lib/modules.ts `can`. */
+  permissions?: string[];
 }
 
 export interface RegisterBody {

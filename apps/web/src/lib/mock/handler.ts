@@ -27,6 +27,7 @@ import type {
 import * as F from "./fixtures";
 import { i18nRoute } from "./i18n";
 import { agencyRoute, agencyStore, snapshotFor } from "./agency";
+import { mockModules, platformRoute, ROLE_PERMS } from "./platform";
 
 interface Store {
   org: Org;
@@ -348,10 +349,15 @@ async function route(c: Ctx): Promise<Response | null> {
   const { method: m, parts: p, s } = c;
   const [a, b, cc, d, e] = p;
 
+  // --- platform: modules, roles, team, audit, SSO (mock/platform.ts)
+  const platform = platformRoute(m, p, c.body, c.role, s.org);
+  if (platform) return platform;
+
   // --- account
   if (a === "me" && m === "GET") {
     const user = F.USERS[c.role];
-    return json({ user, org: isCustomer(c.role) ? s.org : null });
+    const org = isCustomer(c.role) ? { ...s.org, modules: mockModules() } : null;
+    return json({ user, org, permissions: ROLE_PERMS[c.role] ?? [] });
   }
   if (a === "org") {
     if (!isCustomer(c.role)) return err(403, "forbidden", "Org settings are for customer users.");

@@ -14,6 +14,7 @@ from arbiter.config import get_settings
 from arbiter.domain.states import IllegalTransition
 from arbiter.errors import ServiceError
 from arbiter.fileproc.base import FormatError
+from arbiter.platform.audit import AuditContextMiddleware
 
 log = logging.getLogger("arbiter.api")
 
@@ -28,6 +29,8 @@ def create_app() -> FastAPI:
     settings = get_settings()
     if settings.env == "prod" and settings.jwt_secret.startswith("dev-only"):
         raise RuntimeError("ARBITER_JWT_SECRET must be set in production")
+    if settings.env == "prod" and settings.secrets_key.startswith("dev-only"):
+        raise RuntimeError("ARBITER_SECRETS_KEY must be set in production")
     app = FastAPI(title="Arbiter API", version="1.0.0", docs_url="/docs", openapi_url="/openapi.json")
     app.add_middleware(
         CORSMiddleware,
@@ -36,6 +39,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(AuditContextMiddleware)  # client IP and user agent for audit rows
 
     @app.exception_handler(ServiceError)
     async def _service(_: Request, e: ServiceError) -> JSONResponse:

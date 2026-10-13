@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from arbiter import storage
 from arbiter.agency import workflows as wfl
-from arbiter.api.deps import DB, PM, Customer, Paging, Principal, listing
+from arbiter.api.deps import DB, PM, Customer, Paging, Principal, listing, require_module
 from arbiter.billing.ledger import money
 from arbiter.domain.states import transition
 from arbiter.errors import Conflict, Invalid, NotFound
@@ -30,8 +30,9 @@ from arbiter.fileproc.registry import detect_and_extract
 from arbiter.fileproc.xliff import export_xliff21
 from arbiter.models import FileAsset, Job, Segment, TermQuestion, utcnow
 from arbiter.pipeline import events, evidence, orchestrator
+from arbiter.platform.audit import audit
 
-router = APIRouter(tags=["jobs"])
+router = APIRouter(tags=["jobs"], dependencies=[require_module("tms")])
 
 DONE_STATES = ("auto_approved", "reviewed", "delivered")
 OUTPUT_STATES = ("delivered", "settled", "disputed")
@@ -294,6 +295,7 @@ def edit_segment(job_id: str, seg_id: str, body: SegmentPatch, p: Customer, db: 
         events.record(db, job, "edited", segment=seg, actor_type="human", actor_id=actor, state=seg.state)
         orchestrator._learn(db, job, seg)
     db.flush()
+    audit(db, p, "segment.edited", "segment", seg.id, {"job_id": job.id, "state": seg.state})
     return segment_view(seg)
 
 
@@ -313,6 +315,7 @@ def approve_segment(job_id: str, seg_id: str, p: Customer, db: DB) -> dict[str, 
         raise Invalid("this segment has no translation yet; edit it first")
     _check_tags(seg, seg.target_tagged)
     _mark_reviewed(db, job, seg, actor_of(p), "approved")
+    audit(db, p, "segment.approved", "segment", seg.id, {"job_id": job.id})
     return segment_view(seg)
 
 
@@ -322,6 +325,14 @@ def cancel(job_id: str, p: PM, db: DB) -> dict[str, Any]:
     job = get_job(db, p, job_id, lock=True)
     if job.state != "cancelled":
         orchestrator.cancel_job(db, job)  # IllegalTransition -> 409 illegal_state
+        audit(
+            db,
+            p,
+            "job.cancelled",
+            "job",
+            job.id,
+            {"project_id": job.project_id, "target_lang": job.target_lang},
+        )
     db.flush()
     return job_view(db, p, job)
 

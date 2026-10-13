@@ -14,10 +14,10 @@ from typing import Any
 from fastapi import APIRouter
 from sqlalchemy import func, select
 
-from arbiter.api.deps import DB, Customer, Paging, listing
+from arbiter.api.deps import DB, Customer, Paging, listing, require_module
 from arbiter.models import ControlSample, EngineScore, EscapedError, Job, Threshold, utcnow
 
-router = APIRouter(tags=["quality"])
+router = APIRouter(tags=["quality"], dependencies=[require_module("ai")])
 
 WINDOW_DAYS = 30
 

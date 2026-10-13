@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { IS_MOCK } from "@/lib/config";
+import type { ModuleKey } from "@/lib/modules";
 import { Icons, Logo } from "./icons";
 import { LocaleSwitcher } from "./locale-switcher";
 
@@ -15,6 +16,8 @@ export interface NavItem {
   label: string;
   icon: IconName;
   exact?: boolean;
+  /** Product module of the item (src/lib/modules.ts); filterByModule hides it when disabled. */
+  module?: ModuleKey;
 }
 export interface NavSection {
   label?: string;

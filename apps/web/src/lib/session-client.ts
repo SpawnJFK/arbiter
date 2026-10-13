@@ -3,7 +3,7 @@ import type { User } from "./types";
 
 /** Calls the /api/session route handler, which sets the httpOnly cookie. */
 export async function startSession(
-  kind: "login" | "register" | "apply",
+  kind: "login" | "register" | "apply" | "invite",
   body: Record<string, unknown>,
   next?: string | null,
 ): Promise<{ user: User; redirect: string }> {

@@ -30,6 +30,20 @@ class Settings(BaseSettings):
     # Auth
     jwt_secret: str = Field(default="dev-only-change-me-not-for-production-use", min_length=32)
     jwt_ttl_minutes: int = 60 * 12
+    # Master key for secrets stored in the database (SSO client secrets, BYOK keys). Comma
+    # separated for rotation: the first key encrypts, every key decrypts. A Fernet key
+    # (urlsafe base64 of 32 bytes) or any passphrase of 32+ characters (derived with HKDF).
+    secrets_key: str = Field(default="dev-only-secrets-key-change-me-not-for-production", min_length=32)
+    # Origin of the web app; SSO redirect_uri is <web_base_url>/api/sso/callback and invite
+    # links point at <web_base_url>/accept-invite.
+    web_base_url: str = "http://localhost:3000"
+    invite_ttl_hours: int = 24 * 7
+    sso_state_ttl_seconds: int = 600
+    # DNS-over-HTTPS resolver (JSON API) used to check SSO domain TXT records.
+    doh_url: str = "https://cloudflare-dns.com/dns-query"
+    # Audit log: take the client IP from X-Forwarded-For (only behind a trusted reverse proxy).
+    trust_proxy_headers: bool = False
+    audit_export_max_rows: int = 50_000
 
     # Providers. Empty string = not configured.
     anthropic_api_key: str = ""

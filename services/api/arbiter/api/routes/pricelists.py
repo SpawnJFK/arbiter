@@ -9,11 +9,11 @@ from sqlalchemy import func, select
 
 from arbiter.agency import pricelists
 from arbiter.agency.schemas import PriceListIn, PriceListPatch
-from arbiter.api.deps import DB, PM, Paging, listing
+from arbiter.api.deps import DB, PM, Paging, listing, require_module
 from arbiter.api.routes.projects import idempotent_post
 from arbiter.models import PriceList
 
-router = APIRouter(tags=["price-lists"])
+router = APIRouter(tags=["price-lists"], dependencies=[require_module("pm")])
 
 
 @router.get("/price-lists")

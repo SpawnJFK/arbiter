@@ -342,3 +342,50 @@ Messages import rules:
 - `en` cannot be written (422): it is the source catalog.
 - Placeholder safety: when `source` is given, every key present in both must use the same set of top-level ICU arguments (`{name}`, and the argument of `{count, plural, ...}` / `{x, select, ...}`; text inside plural branches is not an argument; `'{...}'` is quoted literal text). Otherwise 422 with `details.placeholders: {key: {expected: [...], got: [...]}}` and nothing is written.
 
+
+# Platform: modules, roles, team, audit log, SSO
+
+None of these routes are module-gated. Permission checks use `require_permission("<area>.<action>")` (built-in role mapping in `arbiter/platform/permissions.py`, or the user's custom role). `user` = a signed-in person; API keys get 403 on these writes.
+
+### Module gating
+
+Every route of a product module carries `require_module("<module>")`; when the org has not enabled it the route answers 404 `module_disabled` (other modules keep working). Current mapping: files, quotes, projects, jobs, glossaries, terms, TM, term questions, exceptions -> `tms`; quality -> `ai`; CRM, price lists, workflows, dashboards, assistant -> `pm`. Auth, org settings, API keys, webhooks, usage, invoices, i18n and everything below are platform routes. `Org.modules` (in `/me`, `/org`, `/admin/orgs`) lists the modules that work for the org (enabled and every dependency enabled).
+
+| Status | Code | When |
+|---|---|---|
+| 404 | `module_disabled` | the route belongs to a module the org has not enabled |
+| 401 | `sso_failed` | SSO callback rejected (state expired or reused, token exchange failed, id_token invalid) |
+| 403 | `sso_required` | password login for a member of an org that enforces SSO |
+
+| Method | Path | Auth | Body / query | Returns |
+|---|---|---|---|---|
+| GET | /org/modules | cust | | `{enabled: [key], catalog: [{key, name, depends_on, enabled}]}` |
+| GET | /admin/orgs/{id} | admin | | `Org` + `kind`, `catalog` |
+| PUT | /admin/orgs/{id}/modules | admin | `{modules: [key]}` | as GET /org/modules; 422 `details.problems` for unknown keys or missing dependencies |
+| GET | /roles | `users.read` | | `{items: [Role], builtin: [{key}], catalog: [{key, description}]}` |
+| POST | /roles | `roles.write`, user | `{name, description?, base_role: pm\|client, permissions: [pattern]}` | 201 `Role`; 409 name taken; 422 invalid pattern; 403 granting a permission you do not hold, or a pm-based role when you are not pm |
+| PATCH | /roles/{id} | `roles.write`, user | any field of POST | `Role` (base role change moves its members) |
+| DELETE | /roles/{id} | `roles.write`, user | | 204; 409 while assigned or SSO default |
+| GET | /users | `users.read` | paging | list of `Member` |
+| POST | /users/invite | `users.write`, user | `{email, name?, role?: pm\|client, role_id?}` | 201 `{user: Member, expires_at, email_sent, invite_token?, invite_url?}` (token and url only in dev and test); 409 email exists |
+| PATCH | /users/{id} | `users.write`, user | `{name?, role?, role_id?\|null, is_active?}` | `Member`; 422 changing your own role or deactivating yourself; 409 would leave no active pm |
+| DELETE | /users/{id} | `users.write`, user | | 204 (deactivates; history stays) |
+| POST | /auth/invite/accept | public | `{token, password(>=8), name?}` | `{token, user}`; 404 invalid, used or expired |
+| GET | /audit | `audit.read` | `actor?` (user/key id or email), `action?` (exact, or prefix ending in `.` or `*`), `since?`, `until?`, paging | list of `AuditEvent`, newest first |
+| GET | /audit/export | `audit.read` | same filters | CSV (`text/csv`), at most `ARBITER_AUDIT_EXPORT_MAX_ROWS` rows; the export itself is audited |
+| GET | /org/sso | `org.manage` | | `SsoConfig` |
+| PUT | /org/sso | `org.manage`, user | `{issuer, client_id, client_secret? (required on create, kept when omitted), allowed_domains: [domain], default_role?, default_role_id?, enforce_sso?, enabled?}` | `SsoConfig`; the issuer must answer OIDC discovery; 409 domain claimed by another org; 422 enforcing without a verified domain |
+| DELETE | /org/sso | `org.manage`, user | | 204 (domains released) |
+| POST | /org/sso/domains/{domain}/verify | `org.manage`, user | | `SsoConfig`; checks the TXT record `arbiter-verify=<token>` via DNS-over-HTTPS; 422 not found |
+| POST | /admin/sso-domains/{domain}/verify | admin | | `SsoConfig` (manual verification) |
+| GET | /auth/sso/check | public | `email` | `{sso, enforced}` for the login page |
+| GET | /auth/sso/start | public | `email`, `next?` | 302 to the IdP (state, nonce, PKCE S256); 404 when the email domain has no verified SSO |
+| GET | /auth/sso/callback | public | `code`, `state` | `{token, user, redirect\|null}`; JIT-provisions unknown users with the default role; 409 email belongs to another org; 403 email domain not verified for the org |
+
+`Role`: `{id, name, description, base_role, permissions, members, created_at}`. `base_role` decides the coarse route guards (pm or client); `permissions` replace the base role's built-in permission set for `require_permission` checks. Patterns: `area.action`, `area.*`, `*.action`, `*`. `audit.read` is only granted by `*`, `audit.read` or `audit.*`, never by `*.read`.
+`Member`: `{id, email, name, role, role_id, role_name, status: active|invited|deactivated, created_at}`.
+`AuditEvent`: `{id, at, actor: {type: user|api_key|system, id, label}, action, target: {type, id}, ip, user_agent, data}`. The table is append-only (DB trigger). Secrets in `data` are redacted.
+`SsoConfig`: `{configured, enabled, issuer, client_id, client_secret_set, default_role, default_role_id, enforce_sso, redirect_uri, domains: [{domain, verified, verified_at, txt_record}]}`. The client secret is never returned; it is stored encrypted with `ARBITER_SECRETS_KEY`.
+`/me` also returns `permissions` (granted patterns) and `user.role_id`.
+
+Audited actions so far: `org.created`, `org.updated`, `auth.login`, `auth.sso_login`, `api_key.created|revoked`, `webhook.created|deleted`, `module.changed`, `role.created|updated|deleted`, `user.invited|invite_accepted|updated|deactivated|reactivated|provisioned`, `sso.created|updated|deleted|domain_verified`, `audit.exported`, `glossary.imported`, `tm.imported`, `project.created`, `job.cancelled`, `segment.edited|approved`.

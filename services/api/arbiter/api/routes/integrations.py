@@ -24,6 +24,7 @@ from arbiter.billing.invoices import list_invoices
 from arbiter.billing.usage import usage_view
 from arbiter.errors import Invalid, NotFound
 from arbiter.models import Webhook
+from arbiter.platform.audit import audit
 
 router = APIRouter(tags=["integrations"])
 
@@ -82,6 +83,7 @@ def create_webhook(
     db.add(h)
     db.flush()
     out = webhook_view(h, with_secret=True)
+    audit(db, p, "webhook.created", "webhook", h.id, {"url": h.url, "events": events})
     idempotent_store(db, p, "webhooks", idempotency_key, payload, 201, out)
     return JSONResponse(out, status_code=201)
 
@@ -91,6 +93,7 @@ def delete_webhook(webhook_id: str, p: PM, db: DB) -> Response:
     h = db.get(Webhook, webhook_id)
     if h is None or h.org_id != p.org_id:
         raise NotFound("webhook not found")
+    audit(db, p, "webhook.deleted", "webhook", h.id, {"url": h.url})
     db.delete(h)
     return Response(status_code=204)
 

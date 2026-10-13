@@ -7,11 +7,12 @@ import { mockApply, mockLogin, mockRegister } from "@/lib/mock/handler";
 import { safeNext } from "@/lib/roles";
 import type { User } from "@/lib/types";
 
-type Kind = "login" | "register" | "apply";
+type Kind = "login" | "register" | "apply" | "invite";
 const PATHS: Record<Kind, string> = {
   login: "/auth/login",
   register: "/auth/register",
   apply: "/reviewers/apply",
+  invite: "/auth/invite/accept", // accept a team invite: set the password, start a session
 };
 const MAX_AGE = 60 * 60 * 12; // 12 h; the backend's JWT expiry still wins (401 -> /logout)
 
@@ -32,12 +33,15 @@ export async function POST(req: NextRequest) {
     return errorJson(400, "invalid_json", "Body must be JSON.");
   }
   const kind = payload.kind as Kind;
-  if (!PATHS[kind]) return errorJson(400, "invalid_kind", "kind must be login, register or apply.");
+  if (!PATHS[kind]) return errorJson(400, "invalid_kind", "kind must be login, register, apply or invite.");
   const { kind: _k, next, ...body } = payload;
   void _k;
 
   let token: string;
   let user: User;
+  if (IS_MOCK && kind === "invite") {
+    return errorJson(501, "not_in_demo", (await getI18n()).t("platform.invite.notInDemo"));
+  }
   if (IS_MOCK) {
     const email = String(body.email ?? "");
     if (!email || !body.password) return errorJson(422, "validation_error", (await getI18n()).t("errors.emailPasswordRequired"));

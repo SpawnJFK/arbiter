@@ -14,7 +14,7 @@ from arbiter.api import security
 from arbiter.config import get_settings
 from arbiter.db import session_factory
 from arbiter.errors import Forbidden, NotFound, ServiceError
-from arbiter.models import ApiKey, Organization, ReviewerProfile, User, utcnow
+from arbiter.models import ApiKey, Organization, ReviewerProfile, Role, User, utcnow
 
 
 class Unauthorized(ServiceError):
@@ -44,6 +44,8 @@ class Principal:
     role: str  # admin | pm | client | reviewer | api
     org: Organization | None
     api_key: ApiKey | None = None
+    # Custom role permissions (models.platform.Role); None = the built-in set of `role`.
+    permissions: list[str] | None = None
 
     @property
     def org_id(self) -> str:
@@ -71,7 +73,12 @@ def current(db: DB, authorization: Annotated[str | None, Header()] = None) -> Pr
     if user is None or not user.is_active:
         raise Unauthorized("user not active")
     org = db.get(Organization, user.org_id) if user.org_id else None
-    return Principal(user=user, role=user.role, org=org)
+    permissions = None
+    if user.role_id and org is not None:
+        custom = db.get(Role, user.role_id)
+        if custom is not None and custom.org_id == org.id:
+            permissions = list(custom.permissions or [])
+    return Principal(user=user, role=user.role, org=org, permissions=permissions)
 
 
 Auth = Annotated[Principal, Depends(current)]
@@ -84,6 +91,16 @@ def require(*roles: str):  # noqa: ANN201
         return p
 
     return Depends(dep)
+
+
+def require_user(p: Auth) -> Principal:
+    """A signed-in person, not an API key (team, roles and SSO changes need a human)."""
+    if p.user is None:
+        raise Forbidden("this action needs a signed-in user, not an API key")
+    return p
+
+
+UserOnly = Annotated[Principal, Depends(require_user)]
 
 
 # Customer-side endpoints: org users and API keys.
@@ -125,13 +142,18 @@ def listing(items: list, pg: Page, total_fetched: int | None = None) -> dict:
     return {"items": items[: pg.limit], "next_offset": pg.offset + pg.limit if has_more else None}
 
 
-def require_module(module: str):  # noqa: ANN201
-    """Route dependency: 404 `module_disabled` when the org has not enabled the module."""
-    from arbiter.platform.modules import org_has_module
+class ModuleDisabled(ServiceError):
+    code = "module_disabled"
+    status = 404
 
-    class ModuleDisabled(ServiceError):
-        code = "module_disabled"
-        status = 404
+
+def require_module(module: str):  # noqa: ANN201
+    """Route dependency: 404 `module_disabled` when the org has not enabled the module.
+    Use per route or per router: APIRouter(dependencies=[require_module("tms")])."""
+    from arbiter.platform.modules import MODULES, org_has_module
+
+    if module not in MODULES:
+        raise ValueError(f"unknown module {module!r}")
 
     def dep(p: Auth) -> Principal:
         if p.org is not None and not org_has_module(p.org, module):
@@ -142,6 +164,7 @@ def require_module(module: str):  # noqa: ANN201
 
 
 def require_permission(perm: str):  # noqa: ANN201
+    """Route dependency: 403 unless the principal (built-in role or custom role) holds `perm`."""
     from arbiter.platform.permissions import has_permission
 
     def dep(p: Auth) -> Principal:
@@ -150,3 +173,13 @@ def require_permission(perm: str):  # noqa: ANN201
         return p
 
     return Depends(dep)
+
+
+def require_user(p: Auth) -> Principal:
+    """A signed-in person, not an API key (team, roles and SSO changes need a human)."""
+    if p.user is None:
+        raise Forbidden("this action needs a signed-in user, not an API key")
+    return p
+
+
+UserOnly = Annotated[Principal, Depends(require_user)]

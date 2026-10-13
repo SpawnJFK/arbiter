@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     storage_dir: str = "./var/storage"
     public_base_url: str = "http://localhost:8000"
     cors_origins: str = "http://localhost:3000"  # comma separated
+    # Where the web app runs: links in vendor offer e-mails (no-login vendor workbench).
+    web_base_url: str = "http://localhost:3000"
 
     # Seller (for invoices). Tax treatment needs legal/tax review before public launch.
     seller_country: str = ""

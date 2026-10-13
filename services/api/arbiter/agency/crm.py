@@ -5,7 +5,7 @@ Account stats (revenue is recognised when a job is delivered):
   jobs_active    jobs in running | review | ready | merging
   revenue_total  sum of job revenue for delivered/settled/disputed jobs
   revenue_90d    the same, delivered in the last 90 days
-  margin_90d     revenue_90d minus engine and reviewer cost of those jobs
+  margin_90d     revenue_90d minus engine, reviewer and own-vendor cost of those jobs
 """
 
 from __future__ import annotations
@@ -210,7 +210,7 @@ def account_stats(session: Session, org_id: str, account_id: str) -> dict[str, A
     rev90, cost90 = session.execute(
         select(
             func.coalesce(func.sum(Job.revenue), zero),
-            func.coalesce(func.sum(Job.cost_engines + Job.cost_reviewers), zero),
+            func.coalesce(func.sum(Job.cost_engines + Job.cost_reviewers + Job.cost_vendors), zero),
         ).where(
             Job.org_id == org_id,
             Job.account_id == account_id,

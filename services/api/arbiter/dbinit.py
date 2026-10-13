@@ -67,11 +67,19 @@ LATER_TABLES: frozenset[str] = frozenset(
         "tm_alignments",
         "audits",
         "audit_segments",
+        # 0009_vendors (module pm)
+        "vendors",
+        "vendor_absences",
+        "vendor_documents",
+        "vendor_assignments",
+        "number_series",
+        "purchase_orders",
+        "vendor_invoices",
     }
 )
 LATER_COLUMNS: dict[str, frozenset[str]] = {
     "projects": frozenset({"account_id", "workflow_template_id"}),
-    "jobs": frozenset({"account_id", "workflow", "client_approved_at", "senate_count"}),
+    "jobs": frozenset({"account_id", "workflow", "client_approved_at", "senate_count", "cost_vendors"}),
     "users": frozenset({"role_id"}),  # 0005_platform
     "segments": frozenset({"locked_by", "locked_at"}),
 }

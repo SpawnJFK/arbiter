@@ -390,11 +390,82 @@ Revenue is recognised at delivery. Rates are null without data. Money is null fo
 
 `Thread`: `{id, title, user_id, created_at, updated_at, messages?}`.
 `Message`: `{id, thread_id, role: user|assistant, content, plan: Action[] | null, applied: int[], results: {"<index>": {id}}, created_at}`.
-`Action`: `{type, summary, data}` with type in `create_workflow, create_price_list, create_account, create_contact, create_deal, create_activity, create_dashboard, update_org, create_glossary, add_terms, create_webhook`. `data` is validated with the same models as the matching endpoint. An id field may reference an earlier action of the same plan as `"@<index>"` (e.g. `account_id: "@0"`).
+`Action`: `{type, summary, data}` with type in `create_workflow, create_price_list, create_account, create_contact, create_deal, create_activity, create_dashboard, update_org, create_glossary, add_terms, create_webhook, create_assignment, draft_quote` (the last two need the pm module, see "Vendors"). `data` is validated with the same models as the matching endpoint. An id field may reference an earlier action of the same plan as `"@<index>"` (e.g. `account_id: "@0"`).
 
 `locale` is a BCP-47 tag (default `"en"`; the web app sends the UI locale; invalid tag = 422). The reply, every action `summary` and every name the assistant chooses (workflow, price list and dashboard names, descriptions, widget titles) are in that locale, whatever language the user wrote in; proper names the user gave (agency, clients, contacts, e-mails) are kept verbatim. The built-in planner (used when no AI model is configured) understands English and Serbian input but always answers in English; for any other locale its reply ends with a note that only the AI model localizes replies (D-045).
 
 The assistant never changes anything by itself: posting a message only proposes a plan; a human applies all or selected actions. Each action runs in its own savepoint (one failure does not undo the others); already applied indices are skipped; workflows, price lists and dashboards with an existing name are reused (`note` says so). Apply on a message without a plan is 409. The assistant also answers questions about the org's data from a context summary.
+
+PM copilot (module pm, D-071): four project-management questions are answered from the database before the model is asked, and the result is sent to the model as `context.pm.query` (the built-in planner answers from it directly). English and Serbian input:
+- capacity: "who is free for EN->DE 20k words by Friday" -> planner rows (no plan)
+- risk: "which jobs are at risk" -> deadline risk rows (no plan)
+- propose assignments: "propose assignments for job job_..." (or the project name) -> plan `create_assignment {job_id, step, mode: vendor, vendor_ids (best three, ranked), strategy: sequential}`; applying it sends the offer like `POST /jobs/{id}/assignments`
+- draft quote: "draft a quote for <client>: 5000 words EN->DE" -> plan `draft_quote {account_id, source_lang, target_langs, words, tier, file_id?}` priced from the client's price list; applying it creates a CRM deal in stage `proposal` with the estimate (and a real quote when `file_id` is given)
+Missing pieces (pair, words, client, job) are asked for in the reply.
+
+## Vendors (module pm)
+
+The agency's own translators, reviewers and partner agencies, separate from the reviewer marketplace. Every route needs the `pm` module (404 `module_disabled`) and the pm role or an API key; writes need the permission `vendors.manage` (pm role and admin by default). Objects of another org are 404. Money is decimal strings with the currency next to it.
+
+| Method | Path | Body / query | Returns |
+|---|---|---|---|
+| GET | /vendors | `?q, status, source_lang, target_lang, service` | list of `Vendor` (+ `open_assignments`) |
+| POST | /vendors | `VendorIn` | 201 `Vendor` |
+| POST | /vendors/import | multipart `file` (CSV, header row, at most 5 MB) | `{created, updated, errors: [{row, error}]}` |
+| GET | /vendors/{id} | | `Vendor` + `absences[]`, `documents[]`, `assignments[]` (last 50) |
+| PATCH | /vendors/{id} | `VendorIn` fields, optional | `Vendor` |
+| DELETE | /vendors/{id} | | `Vendor` with `status: inactive` (never deleted) |
+| POST / DELETE | /vendors/{id}/absences[/{absence_id}] | `{start_date, end_date, note?}` | 201 `Absence` / 204 |
+| POST / DELETE | /vendors/{id}/documents[/{document_id}] | `{kind: nda\|contract\|certificate\|other, title, signed, signed_at?, valid_until?}` | 201 `Document` / 204 (a signed NDA sets `nda_signed`) |
+| GET | /vendors/{id}/calendar | `?start, days<=62` | `{vendor_id, start, days: [Day], assignments[]}` |
+| GET | /jobs/{id}/assignments | | `{job_id, routes: {human_review?, second_review?: {mode, assignment_id, status}}, items: [Assignment + link]}` |
+| GET | /jobs/{id}/assignment-suggestions | `?step=human_review\|second_review` | `{job_id, step, words, due_at, items: [CapacityRow]}` |
+| POST | /jobs/{id}/assignments | `AssignmentIn` (Idempotency-Key honoured) | 201 `{job_id, step, mode, items: [Assignment + link]}` |
+| GET | /assignments | `?status (comma list), vendor_id, job_id` | list of `Assignment` |
+| GET | /assignments/{id} | | `Assignment` + `link` |
+| POST | /assignments/{id}/approve | | `Assignment` (delivered -> approved; fee added to the job cost) |
+| POST | /assignments/{id}/reopen | `{note?}` | `Assignment` (delivered -> in_progress) |
+| POST | /assignments/{id}/cancel | | `Assignment`; the step goes back to the marketplace |
+| GET | /purchase-orders | `?vendor_id, status, job_id` | list of `PurchaseOrder` |
+| GET | /purchase-orders/{id}[/pdf] | | `PurchaseOrder` / PDF |
+| GET | /vendor-invoices | `?vendor_id, status, period=YYYY-MM` | list of `VendorInvoice` |
+| POST | /vendor-invoices | multipart `file, vendor_id, number, assignment_ids (comma list), total?, note?` | 201 `VendorInvoice` (source `upload`) |
+| POST | /vendor-invoices/auto | `{vendor_id?, period?}` | `{items: [VendorInvoice]}` one per vendor and currency from approved, not invoiced assignments |
+| GET | /vendor-invoices/{id}[/file] | | `VendorInvoice` / the uploaded file |
+| POST | /vendor-invoices/{id}/approve\|reject\|pay | `{note?}` | `VendorInvoice` (reject: the assignments can be invoiced again) |
+| GET | /vendor-invoices/export.csv | `?period` | CSV for accounting (number, source, status, period, dates, vendor, legal name, tax id, IBAN, PO numbers, currency, total) |
+| GET | /payables | `?period=YYYY-MM` (default this month) | `{period, items: [{vendor_id, vendor_name, currency, accrued, invoiced, paid, open}], totals: [...]}` |
+| GET | /capacity | `?source_lang, target_lang, words, by?, service?` | `{items: [CapacityRow]}` ranked |
+| GET | /pm/deadline-risk | `?only_at_risk=false` | `{items: [Risk]}` |
+| GET | /pm/timeline | `?start, days<=62 (14)` | `{start, days[], vendors: [{vendor_id, name, capacity_words_per_day, days: [Day]}], assignments[], jobs[]}` |
+
+`VendorIn`: `{name, kind: person|company, email?, phone?, country?, status: active|inactive|blocked, pairs: [{source_lang, target_lang, services: [translation|review|post-edit|dtp]}], domains[], rates: [{source_lang?, target_lang?, service, unit: word|hour|page|minimum, rate, currency?}], currency, rating? (0..5), notes, legal_name?, tax_id?, address?, payment_method?, iban?, swift?, payment_terms_days, capacity_words_per_day, working_days: [0=Mon..6=Sun], timezone?, nda_signed, nda_signed_at?}`. Rate lookup: exact pair, then target only, then any pair; a `minimum` rate is the least paid per assignment.
+
+`AssignmentIn`: `{step: human_review|second_review, mode: marketplace|vendor|internal, vendor_ids[] (vendor, ranked, max 10), user_id (internal), strategy: sequential|broadcast, offer_timeout_minutes (5..10080, default 240), due_at?, words?, service?, rate?, unit?, quantity?, note?}`. `mode: marketplace` ends every live assignment of the step (default route). A job without that human step is 422; a delivered assignment must be approved or sent back first (409); the second review never goes to the vendor of the first review (422).
+
+`Assignment`: `{id, job_id, step, service, assignee_kind: vendor|internal, vendor_id, vendor_name, user_id, user_name, offer_group, rank, strategy, words, words_done, unit, quantity, rate, amount, currency, status, due_at, offered_at, offer_expires_at, responded_at, started_at, delivered_at, approved_at, po_id, po_number, note, messages: [{at, to, subject, channel: email|log}], created_at}`. Status: `pending` (later in a sequential list), `offered`, `accepted`, `in_progress`, `delivered`, `approved`, `invoiced`; off ramps `declined`, `expired` (offer timeout), `withdrawn` (someone else accepted or the route changed), `cancelled`.
+
+Routing: while an assignment of a step is live (`pending`..`delivered`) the pipeline creates no marketplace review tasks for that step; open segments carry `signals.route = <assignment id>`. Sequential offers move to the next rank on decline or timeout; when nobody is left the step returns to the marketplace and `job.needs_attention` fires with `reason: vendor_unassigned`. Delivery fires `job.needs_attention` with `reason: vendor_delivered`. Job `cost` (and so `margin`) includes approved vendor fees in the platform currency; a fee in another currency is recorded in provenance, not converted.
+
+`CapacityRow`: `{vendor_id, name, kind, email, capacity_words_per_day, free_words, earliest_finish, can_meet, absent_days[], price: {amount, rate, unit, currency} | null, rating, nda_signed, eligible, rank}`.
+`Risk`: `{job_id, project_id, project, source_lang, target_lang, state, due_at, remaining_words, estimated_finish, slack_hours, routes: {step: {route: marketplace|internal|vendor, words, words_per_day, ...}}, at_risk, reasons[]}`. `/exceptions` lists at-risk jobs as kind `deadline_risk`.
+`Day`: `{date, capacity, load, free, absent, working, assignments[]}`.
+`PurchaseOrder`: `{id, number (PO-YYYY-NNNN per org), vendor_id, vendor_name, assignment_id, job_id, lines: [{description, quantity, unit, rate, amount}], total, currency, status: issued|invoiced|cancelled, due_at, issued_at, vendor_invoice_id}`.
+`VendorInvoice`: `{id, vendor_id, vendor_name, number, source: auto|upload, period, assignment_ids[], lines[], total, currency, status: received|approved|rejected|paid, filename, has_file, note, due_date, received_at, approved_at, paid_at}`.
+
+### Vendor workbench (no login)
+
+The offer e-mail carries `{ARBITER_WEB_BASE_URL}/vendor/<token>`; the token (HS256, audience `arbiter-vendor-portal`, revoked when the assignment is withdrawn or cancelled) opens one assignment only. Bad, expired or revoked tokens and orgs without the pm module are 404.
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET | /vendor-portal/{token} | | `{assignment, organization, job, segments: [{id, seq, source_tagged, target_tagged, context_before, context_after, terms, qe_score, flagged_errors, word_count, state, done}], remaining}` (segments once accepted; no client money) |
+| POST | /vendor-portal/{token}/accept | | portal view; first to accept wins (409 when taken or expired), issues the PO |
+| POST | /vendor-portal/{token}/decline | `{reason?}` | portal view; the next rank is offered |
+| POST | /vendor-portal/{token}/segments/{segment_id} | `{decision: accept\|edit, target_tagged?, errors?, comment?}` | `{ok, remaining, status}`; same hook as a reviewer; tag-breaking edits 422 (D-009) |
+| POST | /vendor-portal/{token}/complete | | portal view (409 while segments are left or the job is still being scored) |
+| GET | /vendor-portal/{token}/po.pdf | | PDF |
+| POST | /vendor-portal/{token}/invoice | multipart `number, file` | 201 `{id, number, total, currency, status}` (approved work only) |
 
 # UI string localization (platform-wide)
 

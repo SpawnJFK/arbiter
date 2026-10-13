@@ -81,6 +81,8 @@ class Job(Base):
     # Money per job, so PM sees margin per job, not per month.
     cost_engines: Mapped[Decimal] = mapped_column(Numeric(12, 5), default=Decimal("0"))
     cost_reviewers: Mapped[Decimal] = mapped_column(Numeric(12, 5), default=Decimal("0"))
+    # Own-vendor cost (module pm, migration 0009): approved vendor assignments of this job.
+    cost_vendors: Mapped[Decimal] = mapped_column(Numeric(12, 5), default=Decimal("0"), server_default="0")
     revenue: Mapped[Decimal] = mapped_column(Numeric(12, 5), default=Decimal("0"))
     no_reviewer_fallback_used: Mapped[bool] = mapped_column(default=False)
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)

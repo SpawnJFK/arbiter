@@ -63,6 +63,13 @@ def _handler(kind: str) -> Callable[[Session, dict[str, Any]], None] | None:
         from arbiter.auditor import service as audit_service
 
         return audit_service.HANDLERS.get(kind)
+    if kind.startswith("vendor."):
+        # module pm (own-vendor offers); imported lazily so the worker runs without it
+        try:
+            from arbiter.agency.assignments import HANDLERS as VENDOR_HANDLERS
+        except ImportError:  # pragma: no cover - module removed
+            return None
+        return VENDOR_HANDLERS.get(kind)
     return None
 
 

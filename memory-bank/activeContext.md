@@ -4,6 +4,18 @@ Last updated: 2026-10-09. Phase position: **P00 next, item 1 of 18** (`phases/ph
 
 Next gate: `npm run hp -- gate P00 --product`.
 
+## Session 2026-10-13 (parallel builder: agency vendor management, module pm)
+
+Built on b95f0a8 (platform module and permission seams) in an isolated worktree; outside the phase order by the owner's request (parallel module build).
+- Own vendors (`vendors`, `vendor_absences`, `vendor_documents`), assignments of human steps (`vendor_assignments`), `number_series`, `purchase_orders`, `vendor_invoices`, `jobs.cost_vendors`: models in `models/vendors.py`, migration `0009_vendors` (down_revision 0003), listed in `dbinit.LATER_TABLES` / `LATER_COLUMNS`.
+- Services: `agency/vendors.py` (CRUD, CSV import, rates, number series, notify-or-log), `agency/assignments.py` (routing, ranked offers, timeout work item `vendor.offer_timeout`, signed workbench token, vendor decisions through `hooks.segment_reviewed`, approve/reopen/cancel), `agency/procurement.py` (PO + PDF, vendor invoices upload/auto, statuses, payables, CSV), `agency/capacity.py` (planner, deadline risk, timeline), `agency/copilot.py` + `agency/heuristic_pm.py` (PM copilot).
+- Pipeline: `orchestrator._queue_review` / `reroute_open_segments` / `segment_step` / `open_step_segments`; default stays the marketplace (D-068). Worker dispatches `vendor.*`. `/exceptions` adds `deadline_risk`. State machines `assignment`, `purchase_order`, `vendor_invoice` in `domain/states.py` (`transition_status`).
+- API: `routes/vendors.py` (module pm, writes need `vendors.manage`) and `routes/vendor_portal.py` (no login, token). `docs/api-contract.md` has the new "Vendors (module pm)" section and the PM copilot paragraph. `contracts.py` unchanged. Assistant prompt version 2026-10-13.1 (two new action types).
+- Web: `/app/vendors` (+ profile tabs, CSV import), assignment picker on the job page, `/app/purchase-orders`, `/app/vendor-invoices` (payables, auto-invoice, CSV), `/app/capacity` (planner, two-week timeline, risk), public `/vendor/[token]` workbench with its own proxy `/api/vendor-portal/*`, nav section, assistant examples. New setting `ARBITER_WEB_BASE_URL`.
+- Decisions D-067..D-071 (numbered high to avoid clashes with other parallel builders; renumber on merge if needed).
+- VERIFIED `npm run verify:api` (462 tests) and `npm run verify:web` on Node 22 (check:runtime and e2e skipped by instruction). Smoke: API + `next start` against the test DB, every new page 200 without error boundary, workbench and PO PDF through the public proxy.
+- Not done: e2e journey for the vendor flow, real e-mail (no `arbiter/notify` module yet: messages are logged and kept on the assignment), vendor document file upload, nav gating by module in the web (the `/me` org has no module list).
+
 ## Session 2026-10-09 (HYPERPOWER v2 install, Linux cloud session)
 
 What changed:

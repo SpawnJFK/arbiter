@@ -22,6 +22,7 @@ class Template:
     action_url: str = ""  # a context key holding the URL, e.g. "{link}"
     footer: str = ""
     required: tuple[str, ...] = field(default_factory=tuple)
+    optional: tuple[str, ...] = field(default_factory=tuple)  # may be empty (e.g. no action link)
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,15 @@ TEMPLATES: dict[str, Template] = {
         action_url="{link}",
         footer="If you did not ask for this, ignore this email. Your password stays the same.",
         required=("name", "link", "minutes"),
+    ),
+    "vendor_message": Template(
+        subject="{subject}",
+        paragraphs=("Hi {name},", "{body}"),
+        action_label="Open the job",
+        action_url="{link}",  # optional: no button when the message has no link
+        footer="You get this email because you work with {org_name} as a vendor.",
+        required=("name", "subject", "body", "org_name"),
+        optional=("link",),
     ),
 }
 

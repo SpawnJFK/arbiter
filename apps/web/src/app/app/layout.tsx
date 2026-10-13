@@ -38,6 +38,15 @@ export default async function CustomerLayout({ children }: { children: React.Rea
           ],
         },
         {
+          label: t("app.layout.vendorManagement"),
+          items: [
+            { href: "/app/vendors", label: t("app.layout.vendors"), icon: "users", module: "pm" },
+            { href: "/app/capacity", label: t("app.layout.capacity"), icon: "calendar", module: "pm" },
+            { href: "/app/purchase-orders", label: t("app.layout.purchaseOrders"), icon: "receipt", module: "pm" },
+            { href: "/app/vendor-invoices", label: t("app.layout.vendorInvoices"), icon: "wallet", module: "pm" },
+          ],
+        },
+        {
           label: t("app.layout.languageAssets"),
           items: [
             { href: "/app/glossaries", label: t("app.layout.glossaries"), icon: "book", module: "tms" },

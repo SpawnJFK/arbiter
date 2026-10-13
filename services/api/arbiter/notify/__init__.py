@@ -47,6 +47,7 @@ __all__ = [
     "request_password_reset",
     "reviewer_welcome",
     "send_invite",
+    "vendor_message",
 ]
 
 
@@ -315,6 +316,32 @@ def payout_sent(session: Session, payout: Payout) -> None:
             )
     except Exception:  # noqa: BLE001
         log.exception("could not queue payout email for %s", payout.id)
+
+
+def vendor_message(
+    session: Session,
+    *,
+    to: str,
+    subject: str,
+    body: str,
+    name: str = "",
+    org_id: str | None = None,
+    link: str | None = None,
+) -> EmailMessage:
+    """Vendor offers and assignment updates (module pm, arbiter.agency.assignments)."""
+    return queue_email(
+        session,
+        to=to,
+        template="vendor_message",
+        context={
+            "name": name or to,
+            "subject": subject,
+            "body": body,
+            "org_name": org_name(session, org_id) or "your client",
+            "link": link or "",
+        },
+        org_id=org_id,
+    )
 
 
 def org_name(session: Session, org_id: str | None) -> str:

@@ -979,3 +979,69 @@ Date: 2026-10-13. Status: accepted.
 - *One kind with a visibility flag.* Easy to leak an internal note by toggling the wrong flag.
 
 **Consequences.** `/queries` is the client portal inbox; the editor filters segments by open queries.
+## D-067 Own vendors are a separate model from the reviewer marketplace (module pm)
+Date: 2026-10-13. Status: accepted. (Numbered in a parallel build; renumber on merge if the range is taken.)
+
+**Context.** Agencies run their own pool of freelance translators, reviewers and partner agencies (rates per pair and service, NDAs, availability, payment details) next to, or instead of, the platform's reviewer community.
+
+**Decision.** New tables `vendors`, `vendor_absences`, `vendor_documents` (migration 0009), owned by one org and managed through `/vendors`. Rates are JSON rows `{source_lang?, target_lang?, service, unit, rate, currency}` with the price-list lookup order (pair, target, any); a `minimum` unit is the least paid per assignment. Weekly capacity is `capacity_words_per_day` plus `working_days`; absences are date ranges.
+
+**Rejected.**
+- *Reuse `reviewer_profiles` with an org_id.* Marketplace reviewers are platform users with tests, scores, DAC7 data and ledger payouts; own vendors have none of that and must never be visible to other orgs or paid through the platform ledger.
+- *A `vendor_rates` table.* Rates are always read and edited with the vendor; JSON keeps the profile one row, like price lists.
+- *A per-day availability table.* Capacity per day is derived (weekly capacity minus booked work minus absences), so nothing has to be kept in sync.
+
+**Consequences.** Vendor money is the agency's accounts payable (purchase orders, vendor invoices), never `ledger_entries`.
+
+## D-068 Human step routing: a live assignment holds the step; the marketplace stays the default
+Date: 2026-10-13. Status: accepted.
+
+**Context.** Per job and step (human_review, second_review) the PM must choose the marketplace, an own vendor or an internal user, without breaking the existing pipeline.
+
+**Decision.** `vendor_assignments` rows; the orchestrator's `_queue_review` asks `assignments.route_for(job, step)` (only when the org has the pm module). With a live assignment (pending, offered, accepted, in_progress, delivered) no review task is created: the segment stays `needs_review` with `signals.route`, a `routed` provenance event is written, and the assignee decides in the vendor workbench through `hooks.segment_reviewed`, exactly like a reviewer. `reroute_open_segments` moves open segments between routes when the PM changes the assignment (queued marketplace tasks are deleted; held ones stay with their reviewer and a late duplicate is a no-op). Control samples and escalations always go to the marketplace. Offers to a ranked list are one `offer_group`: sequential (timeout work item `vendor.offer_timeout` moves to the next rank) or broadcast (first to accept wins); an exhausted group returns the step to the marketplace and emits `job.needs_attention` (`vendor_unassigned`). Assignment, purchase order and vendor invoice states live in `domain/states.py` (`transition_status`).
+
+**Rejected.**
+- *Create review tasks anyway and reserve them for the vendor.* Vendors are not reviewer profiles; the task queue, holds, pay and control grading would all need vendor branches.
+- *Store the route in the frozen `job.workflow` snapshot.* The route changes during the job (declines, timeouts, PM changes); the snapshot is meant to stay frozen.
+- *Hard dependency of the pipeline on the agency package.* The import is lazy and module-gated, so removing pm leaves the marketplace behaviour unchanged.
+
+**Consequences.** The deadline policy still applies to vendor-routed segments (it works on open segments, with or without tasks). `report_error` only touches the reviewer score when the reviewer id is a marketplace profile.
+
+## D-069 Purchase orders on acceptance; vendor invoices uploaded or generated; job cost includes vendor fees
+Date: 2026-10-13. Status: accepted.
+
+**Context.** The agency needs a PO per accepted job, a way to receive or produce vendor invoices, a monthly payables view and an accounting export, and the job margin must include what the vendor costs.
+
+**Decision.** One PO per accepted vendor assignment, numbered per org and year from `number_series` (`PO-2026-0001`, row-locked), PDF rendered on request with reportlab. A vendor invoice covers approved assignments of one vendor and one currency: uploaded (workbench or PM, the vendor's own number, total must match) or generated (`VI-2026-0001`). Covered assignments and their POs become `invoiced`; a rejected invoice returns them to `approved`/`issued` (the only backward transitions, in `states.py`). Approving delivered work adds the fee to the new `jobs.cost_vendors` when it is in the platform currency; a foreign-currency fee is recorded in provenance and not converted. Job `cost`/`margin`, CRM and dashboard margins add `cost_vendors`.
+
+**Rejected.**
+- *Issue the PO at offer time.* Offers to a ranked list would produce POs nobody accepted.
+- *Silent FX conversion of vendor fees.* No rate source is configured; a wrong margin is worse than a flagged one.
+
+**Consequences.** Tax treatment of vendor invoices needs legal and tax review before public launch.
+
+## D-070 Capacity planning and deadline risk are derived on read
+Date: 2026-10-13. Status: accepted.
+
+**Context.** PMs ask who is free for a pair and volume by a date, and which jobs will miss their deadline.
+
+**Decision.** `agency/capacity.py` computes per vendor and day: capacity on working days outside absences, load = remaining words of accepted and in-progress assignments spread evenly to their due date (or booked at full capacity from today without one), free = capacity - load. The planner ranks vendors by can-meet, earliest finish, price, rating. Deadline risk divides the remaining human words per step by the route's capacity (vendor free capacity; internal and marketplace words per day from `org.settings.pm`, defaults 4000 and 20000, documented as assumptions) and flags jobs whose estimated finish is after `due_at`; `/exceptions` shows them as `deadline_risk`.
+
+**Rejected.**
+- *A scheduling solver or stored bookings.* Over-built for the decision a PM makes; derived numbers never go stale.
+- *Marketplace throughput from history.* No production history yet; a configurable assumption is honest and replaceable later.
+
+**Consequences.** Numbers are estimates and the UI says so. Timezones are UTC dates.
+
+## D-071 PM copilot: facts first, plan-then-apply kept
+Date: 2026-10-13. Status: accepted.
+
+**Context.** The assistant should answer "who is free...", "which jobs are at risk", "propose assignments for job X" and "draft a quote for client Y" without letting a model invent capacity or prices.
+
+**Decision.** `agency/copilot.pm_query` parses the question (`heuristic_pm.parse_pm`, English and Serbian) and computes the answer from the database before the model is called; the result goes into `context.pm.query` and the system prompt (version 2026-10-13.1) tells the model to quote it. The built-in planner answers from the same result (`heuristic_pm.pm_answer`). New plan actions `create_assignment` and `draft_quote` are applied by a human like every other action; a draft quote becomes a CRM deal in stage `proposal` (a real quote needs a file for TM analysis).
+
+**Rejected.**
+- *Give the model tools to query the database.* The single-shot plan contract and its validation stay simpler and testable with mocks.
+- *Draft quotes as `quotes` rows without a file.* Quotes are file analyses (TM bands, repetitions); a deal holds a priced proposal honestly.
+
+**Consequences.** Without the pm module no pm facts reach the model and pm actions are dropped by validation.

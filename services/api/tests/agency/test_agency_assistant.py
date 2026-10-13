@@ -377,7 +377,7 @@ def test_locale_reaches_the_model_prompt(db, monkeypatch):
     _, msg = _ask(c, h, "Hoću dashboard sa prihodom.", locale="DE")
     payload = llm.calls[0]["payload"]
     assert payload["locale"] == "de" and payload["message"] == "Hoću dashboard sa prihodom."
-    assert '"locale"' in llm.calls[0]["system"] and assistant.ASSISTANT_PROMPT_VERSION == "2026-10-08.1"
+    assert '"locale"' in llm.calls[0]["system"] and assistant.ASSISTANT_PROMPT_VERSION == "2026-10-13.1"
     assert msg["content"] == "Hier ist ein Plan."
     assert msg["plan"][0]["data"]["widgets"][0]["title"] == "Umsatz"
 

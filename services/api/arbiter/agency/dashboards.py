@@ -2,7 +2,7 @@
 
 Definitions (period = last 30, 90 or 365 days; every query scoped by org):
   revenue           sum of job revenue for jobs delivered in the period (recognised at delivery)
-  margin            that revenue minus engine and reviewer cost of the same jobs
+  margin            that revenue minus engine, reviewer and own-vendor cost of the same jobs
   margin_pct        margin / revenue * 100 (null without revenue)
   jobs_active       jobs now in running | review | ready | merging (not period bound)
   jobs_overdue      jobs past due_at and not delivered, settled or cancelled (now)
@@ -236,7 +236,7 @@ def _revenue_cost(c: _Ctx, start: Any, end: Any) -> tuple[Decimal, Decimal]:
     rev, cost = c.s.execute(
         select(
             func.coalesce(func.sum(Job.revenue), ZERO),
-            func.coalesce(func.sum(Job.cost_engines + Job.cost_reviewers), ZERO),
+            func.coalesce(func.sum(Job.cost_engines + Job.cost_reviewers + Job.cost_vendors), ZERO),
         ).where(
             Job.org_id == c.org_id,
             Job.state.in_(DELIVERED_JOB_STATES),
@@ -496,7 +496,7 @@ def table(c: _Ctx, metric: str) -> dict[str, Any]:
                 CrmAccount.id,
                 CrmAccount.name,
                 func.coalesce(func.sum(Job.revenue), ZERO),
-                func.coalesce(func.sum(Job.cost_engines + Job.cost_reviewers), ZERO),
+                func.coalesce(func.sum(Job.cost_engines + Job.cost_reviewers + Job.cost_vendors), ZERO),
                 func.count(Job.id),
             )
             .join(Job, Job.account_id == CrmAccount.id)

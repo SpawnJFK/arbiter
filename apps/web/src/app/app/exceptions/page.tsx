@@ -22,6 +22,7 @@ const KIND_TONE: Record<string, Tone> = {
   term_question: "info",
   overdue: "warn",
   client_review: "accent",
+  deadline_risk: "warn",
 };
 
 const KIND_ACTION: Record<string, string> = {
@@ -30,6 +31,7 @@ const KIND_ACTION: Record<string, string> = {
   term_question: k("app.exceptions.action.term_question"),
   overdue: k("app.exceptions.action.overdue"),
   client_review: k("app.exceptions.action.client_review"),
+  deadline_risk: k("app.exceptions.action.deadline_risk"),
 };
 
 export default async function ExceptionsPage() {

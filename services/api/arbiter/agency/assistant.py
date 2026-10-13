@@ -47,6 +47,7 @@ from arbiter.agency.schemas import (
     Tier,
     WorkflowIn,
 )
+from arbiter.agency.vendor_schemas import CreateAssignmentData, DraftQuoteData
 from arbiter.config import get_settings
 from arbiter.contracts import EngineError, LlmClient
 from arbiter.engines.registry import get_llm
@@ -71,7 +72,7 @@ from arbiter.models import (
 
 log = logging.getLogger(__name__)
 
-ASSISTANT_PROMPT_VERSION = "2026-10-08.1"
+ASSISTANT_PROMPT_VERSION = "2026-10-13.1"
 HISTORY_TURNS = 10
 ACTION_TYPES = (
     "create_workflow",
@@ -85,6 +86,9 @@ ACTION_TYPES = (
     "create_glossary",
     "add_terms",
     "create_webhook",
+    # module pm (PM copilot)
+    "create_assignment",
+    "draft_quote",
 )
 REF = re.compile(r"^@(\d{1,3})$")
 
@@ -134,6 +138,11 @@ Action types and their data (fields marked ? are optional; money and rates are d
 - add_terms: {glossary_id, terms: [{source_lang, target_lang, source_term, target_term?,
     kind (mandatory|preferred|forbidden|do_not_translate), note?}]}
 - create_webhook: {url, events: [job.delivered|job.failed|job.needs_attention|quote.expired]}
+- create_assignment (project management): {job_id, step (human_review|second_review), mode (vendor),
+    vendor_ids: [ranked vendor ids from context.pm], strategy (sequential|broadcast)}
+  Offers the human step of a job to the agency's own vendors (first to accept wins).
+- draft_quote (project management): {account_id, source_lang, target_langs, words, tier}
+  Records a priced proposal for a client (from its price list) as a deal in stage proposal.
 
 References: an id field may point at an object created by an EARLIER action of the same
 plan as "@<index>" (0-based), e.g. an account with "price_list_id": "@2" and
@@ -157,6 +166,14 @@ Rules:
    "reply". Reviewers cannot be created by a plan; they join through the reviewer community.
 7. Keep "reply" short and concrete: what the plan does and any questions. Do not repeat every
    field of every action.
+8. Project management questions (who is free for a language pair and volume by a date, which
+   jobs are at risk, who should do a job, a quote for a client) are answered from
+   context.pm.query, which the platform computed from the database (planner rows with
+   free_words, earliest_finish, can_meet and price; deadline risk rows; ranked suggestions for a
+   job; a quote estimate). Quote its numbers exactly. When context.pm.query.missing is set, ask
+   for what is missing. Propose create_assignment only with vendor ids from context.pm.query
+   (eligible ones, best first, at most three) and draft_quote only with the estimate's
+   account_id, languages, words and tier. Vendors themselves are never created by a plan.
 """
 
 
@@ -215,6 +232,8 @@ DATA_MODELS: dict[str, type[BaseModel]] = {
     "create_glossary": GlossaryData,
     "add_terms": TermsData,
     "create_webhook": WebhookData,
+    "create_assignment": CreateAssignmentData,
+    "draft_quote": DraftQuoteData,
 }
 # Reference fields: data key -> action type that must create the referenced object.
 REF_FIELDS: dict[str, dict[str, str]] = {
@@ -242,6 +261,8 @@ class Action(BaseModel):
         "create_glossary",
         "add_terms",
         "create_webhook",
+        "create_assignment",
+        "draft_quote",
     ]
     summary: str = Field(default="", max_length=500)
     data: dict[str, Any] = Field(default_factory=dict)
@@ -369,7 +390,20 @@ def build_context(session: Session, org: Organization) -> dict[str, Any]:
         "margin_90d": margin,
         "words_delivered_90d": words,
         "open_activities": int(open_acts),
+        **({"pm": _pm_context(session, org)} if _pm_enabled(org) else {}),
     }
+
+
+def _pm_enabled(org: Organization) -> bool:
+    from arbiter.platform.modules import org_has_module
+
+    return org_has_module(org, "pm")
+
+
+def _pm_context(session: Session, org: Organization) -> dict[str, Any]:
+    from arbiter.agency import copilot
+
+    return copilot.pm_context(session, org)
 
 
 # --------------------------------------------------------------------------- validation
@@ -469,6 +503,12 @@ def _semantic_check(kind: str, model: BaseModel, org: Organization, regulated: b
         reg = model.regulated if model.regulated is not None else regulated
         if reg and model.default_tier in HUMANLESS_TIERS:
             raise Invalid(REGULATED_REASON)
+    elif kind == "draft_quote":
+        assert isinstance(model, DraftQuoteData)
+        if regulated and model.tier in HUMANLESS_TIERS:
+            raise Invalid(REGULATED_REASON)
+    elif kind == "create_assignment" and not _pm_enabled(org):
+        raise Invalid("the project management module is not enabled")
     elif kind == "create_webhook":
         assert isinstance(model, WebhookData)
         webhooks.check_url(model.url)
@@ -509,6 +549,13 @@ def think(
 ) -> tuple[str, list[dict[str, Any]], str]:
     """(reply, validated plan, model_version) for one user message, answered in `locale`."""
     context = build_context(session, org)
+    pm_query = None
+    if _pm_enabled(org):
+        from arbiter.agency import copilot
+
+        pm_query = copilot.pm_query(session, org, content)
+        if pm_query is not None:
+            context.setdefault("pm", {})["query"] = pm_query
     user_text = _user_text(session, thread, content)
     fallback_note = ""
     try:
@@ -554,7 +601,12 @@ def think(
         except EngineError as e:
             log.warning("assistant model failed, using the built-in planner: %s", e)
             fallback_note = "The AI model failed to answer; this answer comes from the built-in planner."
-    reply, raw = heuristic_plan(content, context, locale)
+    if pm_query is not None:
+        from arbiter.agency.heuristic_pm import pm_answer
+
+        reply, raw = pm_answer(pm_query, locale)
+    else:
+        reply, raw = heuristic_plan(content, context, locale)
     plan, notes = validate_plan(raw, org, user_text)
     if notes:
         reply += "\n\n" + "\n".join(f"- {n}" for n in notes)
@@ -784,6 +836,14 @@ def _exec(
         session.flush()
         extra["secret"] = h.secret  # shown once, in this apply response only (like POST /webhooks)
         return h.id, None
+    if kind == "create_assignment":
+        from arbiter.agency import copilot
+
+        return copilot.apply_create_assignment(session, org, data, user_id)
+    if kind == "draft_quote":
+        from arbiter.agency import copilot
+
+        return copilot.apply_draft_quote(session, org, data, user_id)
     raise Invalid(f"unknown action type {kind}")
 
 

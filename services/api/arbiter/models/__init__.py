@@ -48,6 +48,15 @@ from arbiter.models.strings import (
     StringTranslation,
 )
 from arbiter.models.tenancy import ApiKey, Organization, User
+from arbiter.models.vendors import (
+    NumberSeries,
+    PurchaseOrder,
+    Vendor,
+    VendorAbsence,
+    VendorAssignment,
+    VendorDocument,
+    VendorInvoice,
+)
 from arbiter.models.workbench import Audit, AuditSegment, SegmentComment, TmAlignment
 
 __all__ = [
@@ -122,6 +131,13 @@ __all__ = [
     "Webhook",
     "WebhookDelivery",
     "WorkItem",
+    "NumberSeries",
+    "PurchaseOrder",
+    "Vendor",
+    "VendorAbsence",
+    "VendorAssignment",
+    "VendorDocument",
+    "VendorInvoice",
     "new_id",
     "utcnow",
 ]

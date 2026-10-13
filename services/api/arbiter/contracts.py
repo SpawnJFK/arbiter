@@ -83,9 +83,15 @@ class MtResult:
     error: str | None = None
 
 
+# Where an engine processes data (D-057). "local" = never leaves the process (mocks).
+# An org with processing_region "eu" may only use engines whose region is "eu" or "local".
+Region = Literal["eu", "us", "global", "local"]
+
+
 class MtEngine(Protocol):
     name: str
     supports_glossary: bool
+    region: str  # Region
 
     def available(self) -> bool: ...
 
@@ -96,6 +102,7 @@ class LlmClient(Protocol):
     """A chat model returning JSON. Every judge, senate role and editor goes through this."""
 
     name: str
+    region: str  # Region
 
     def available(self) -> bool: ...
 

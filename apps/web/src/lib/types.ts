@@ -50,7 +50,13 @@ export interface Org {
   data_retention_days: number;
   /** Modules that work for this org (platform.modules). Absent = all (older API). */
   modules?: string[];
+  /** D-057: "eu" sends every LLM/MT call to EU-only engines (add-on). */
+  processing_region?: ProcessingRegion;
+  /** Own models: approved segments may train this org's fine-tuned model. */
+  training_consent?: boolean;
 }
+
+export type ProcessingRegion = "global" | "eu";
 
 /** `GET /admin/orgs` (routes/admin.py). */
 export interface OrgWithUsage extends Org {
@@ -69,6 +75,8 @@ export type OrgPatch = Partial<
     | "regulated"
     | "vertical"
     | "data_retention_days"
+    | "processing_region"
+    | "training_consent"
   >
 >;
 
@@ -964,4 +972,176 @@ export interface ApplyResult {
   note?: string;
   warnings?: string[];
   skipped?: boolean;
+}
+
+// ---------------------------------------------------------------- engines (routes/engines.py)
+
+export type EnginePurpose = "mt" | "judge" | "senate" | "editor";
+export type EngineRegion = "eu" | "us" | "global";
+export type CredentialSource = "org" | "platform" | "env" | "none";
+
+export interface EnginePrice {
+  unit: string;
+  input: string;
+  output: string | null;
+}
+
+export interface EngineCatalogEntry {
+  provider: string;
+  name: string;
+  capabilities: ("llm" | "mt" | "training")[];
+  glossary: boolean;
+  regions: EngineRegion[];
+  models: string[];
+  secret_fields: string[];
+  config_fields: string[];
+  price: EnginePrice;
+  model_prices: Record<string, EnginePrice>;
+  configured: CredentialSource;
+}
+
+export interface EngineCatalog {
+  items: EngineCatalogEntry[];
+  processing_region: ProcessingRegion;
+  currency: string;
+  note: string;
+}
+
+export interface EngineCredential {
+  id: string;
+  scope: "org" | "platform";
+  provider: string;
+  label: string;
+  secret_hint: string;
+  config: Record<string, string | boolean>;
+  enabled: boolean;
+  engine: string;
+  created_at: string | null;
+  last_tested_at: string | null;
+  last_test_ok: boolean | null;
+  last_test_error: string | null;
+}
+
+export interface EngineCredentialInput {
+  provider: string;
+  label?: string;
+  secret: Record<string, string> | string;
+  config?: Record<string, string | boolean>;
+  enabled?: boolean;
+}
+
+export interface EngineTestResult {
+  ok: boolean;
+  error: string | null;
+  detail: string;
+  credential: EngineCredential;
+}
+
+export interface EngineRoute {
+  id: string;
+  scope: "org" | "platform";
+  source_lang: string | null;
+  target_lang: string | null;
+  content_type: string | null;
+  purpose: EnginePurpose;
+  engines: string[];
+  fallback: boolean;
+  enabled: boolean;
+  note: string;
+}
+
+export type EngineRouteInput = Omit<EngineRoute, "id" | "scope">;
+
+export interface EngineBudget {
+  id: string;
+  provider: string;
+  monthly_cap: string;
+  currency: string;
+  period: string;
+  spent: string;
+  remaining: string;
+  exceeded: boolean;
+  enabled: boolean;
+}
+
+export interface EnginePreviewPurpose {
+  ok: boolean;
+  engines?: string[];
+  source?: string;
+  processing_region?: ProcessingRegion;
+  skipped?: Record<string, string>;
+  code?: string;
+  message?: string;
+}
+
+export interface EnginePreview {
+  processing_region: ProcessingRegion;
+  purposes: Record<EnginePurpose, EnginePreviewPurpose>;
+}
+
+// ---------------------------------------------------------------- own models (routes/training.py)
+
+export type TrainingState = "created" | "running" | "evaluating" | "ready" | "exported" | "failed" | "cancelled";
+
+export interface DatasetPreview {
+  candidates: number;
+  examples: number;
+  train: number;
+  validation: number;
+  dropped: Record<string, number>;
+  train_words: number;
+  train_tokens_estimate: number;
+  min_examples: number;
+  enough: boolean;
+  consent: boolean;
+  estimated_cost: Record<string, string>;
+  currency: string;
+}
+
+export interface TrainingJob {
+  id: string;
+  source_lang: string;
+  target_lang: string;
+  domain: string;
+  provider: string;
+  base_model: string;
+  state: TrainingState;
+  dataset_stats: Partial<DatasetPreview> & { eval?: { segments: number; failures: number } };
+  cost: string;
+  currency: string;
+  result_model_id: string | null;
+  endpoint: string | null;
+  custom_model_id: string | null;
+  error: string | null;
+  created_at: string | null;
+  finished_at: string | null;
+}
+
+export interface CustomModel {
+  id: string;
+  engine: string;
+  name: string;
+  source_lang: string;
+  target_lang: string;
+  domain: string;
+  base_model: string;
+  provider_model_id: string;
+  endpoint: string;
+  region: EngineRegion;
+  active: boolean;
+  training_job_id: string | null;
+  scoreboard: { mean_qe: number; mean_edit_distance: number; segments_measured: number } | null;
+  created_at: string | null;
+}
+
+export interface CustomModelInput {
+  name: string;
+  source_lang: string;
+  target_lang: string;
+  domain?: string;
+  endpoint: string;
+  provider_model_id: string;
+  credential_id?: string | null;
+  region: EngineRegion;
+  training_job_id?: string | null;
 }

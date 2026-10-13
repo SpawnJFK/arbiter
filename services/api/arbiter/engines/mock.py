@@ -111,6 +111,7 @@ class MockMt:
     """Deterministic MtEngine. Always available, zero cost."""
 
     supports_glossary = True
+    region = "local"  # never leaves the process
 
     def __init__(
         self, name: str = "mock-mt", *, faults: Iterable[str] = (), model_version: str = "mock-mt-1"
@@ -168,6 +169,8 @@ class MockLlm:
 
     ``fail_on`` lists roles/tasks for which it raises EngineError (simulates an outage).
     """
+
+    region = "local"
 
     def __init__(
         self, name: str = "mock-llm", *, fail_on: Iterable[str] = (), model_version: str = "mock-llm-1"
@@ -266,6 +269,8 @@ class ScriptedLlm:
     used; without a default the call raises EngineError, so an unexpected call is loud.
     Thread-safe because senate roles run concurrently.
     """
+
+    region = "local"
 
     def __init__(
         self,

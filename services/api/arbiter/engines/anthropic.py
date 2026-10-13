@@ -25,6 +25,7 @@ JSON_ONLY = "\n\nRespond with a single JSON object only. No prose, no code fence
 
 class AnthropicClient:
     name = "anthropic"
+    region = "global"  # Anthropic API: global processing
 
     def __init__(
         self,

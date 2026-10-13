@@ -88,6 +88,7 @@ def from_xml(xml: str) -> str:
 
 class DeepLEngine:
     name = "deepl"
+    region = "eu"  # DeepL processes in the EU
     supports_glossary = False
 
     def __init__(

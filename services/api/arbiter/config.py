@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # Auth
     jwt_secret: str = Field(default="dev-only-change-me-not-for-production-use", min_length=32)
     jwt_ttl_minutes: int = 60 * 12
-    # Master key for secrets stored in the database (SSO client secrets, BYOK keys). Comma
+    # Master key for secrets stored in the database (SSO client secrets, engine keys; D-056). Comma
     # separated for rotation: the first key encrypts, every key decrypts. A Fernet key
     # (urlsafe base64 of 32 bytes) or any passphrase of 32+ characters (derived with HKDF).
     secrets_key: str = Field(default="dev-only-secrets-key-change-me-not-for-production", min_length=32)
@@ -55,9 +55,34 @@ class Settings(BaseSettings):
     google_api_key: str = ""
     embedding_provider: Literal["mock", "openai"] = "mock"
 
+    # EU processing route (D-057). Bedrock: AWS keys for the platform account; model is an
+    # EU geographic inference profile id, which routes only among EU regions.
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    bedrock_region: str = "eu-central-1"
+    bedrock_model: str = "eu.anthropic.claude-opus-5"
+    # Claude on Vertex AI: service account JSON (whole file content), project and location.
+    vertex_service_account_json: str = ""
+    vertex_project: str = ""
+    vertex_location: str = "eu"
+    vertex_model: str = "claude-opus-5"
+
+    # Fine-tuning providers for own models (arbiter.training).
+    together_api_key: str = ""
+    fireworks_api_key: str = ""
+    fireworks_account_id: str = ""
+
     # Engines used when no scoreboard data exists for a pair (R-MT-02).
     default_mt_engine: str = "mock-mt"
     default_judge_engine: str = "mock-llm"
+    # Minimum measured segments before the scoreboard ranks an engine (custom models are
+    # measured on a held-out set, which is smaller).
+    scoreboard_min_segments: int = 200
+    custom_model_min_eval_segments: int = 50
+
+    # Own models (LoRA fine-tunes per client, with consent).
+    training_min_examples: int = 200
+    training_validation_ratio: float = 0.1
 
     # Quality defaults (spec: QE layer)
     default_threshold: float = 78.0

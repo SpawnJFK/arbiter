@@ -14,8 +14,20 @@ from collections.abc import Iterator
 import pytest
 
 os.environ["ARBITER_ENV"] = "test"
-for _k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "DEEPL_API_KEY", "GOOGLE_API_KEY"):
+for _k in (
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "DEEPL_API_KEY",
+    "GOOGLE_API_KEY",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "VERTEX_SERVICE_ACCOUNT_JSON",
+    "TOGETHER_API_KEY",
+    "FIREWORKS_API_KEY",
+):
     os.environ[f"ARBITER_{_k}"] = ""
+# Secrets at rest use the built-in dev-only key in tests (never a real one).
+os.environ.pop("ARBITER_SECRETS_KEY", None)
 TEST_DB_URL = os.environ.get(
     "ARBITER_TEST_DATABASE_URL", "postgresql+psycopg://arbiter:arbiter@localhost:5432/arbiter_test"
 )

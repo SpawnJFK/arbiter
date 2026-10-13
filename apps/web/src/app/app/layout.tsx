@@ -46,6 +46,8 @@ export default async function CustomerLayout({ children }: { children: React.Rea
           label: t("app.layout.organisation"),
           items: [
             { href: "/app/quality", label: t("app.layout.quality"), icon: "chart", module: "ai" },
+            { href: "/app/engines", label: t("app.layout.engines"), icon: "flow", module: "engine" },
+            { href: "/app/training", label: t("app.layout.ownModels"), icon: "sparkle", module: "engine" },
             { href: "/app/settings", label: t("app.layout.settings"), icon: "gear" },
           ],
         },

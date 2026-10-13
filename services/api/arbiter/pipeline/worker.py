@@ -46,6 +46,10 @@ def _handler(kind: str) -> Callable[[Session, dict[str, Any]], None] | None:
         return _webhook
     if kind == "email.send":
         return _email
+    if kind.startswith("training."):
+        from arbiter.training.service import HANDLERS as TRAINING
+
+        return TRAINING.get(kind)
     return None
 
 
@@ -106,6 +110,10 @@ def run_one(factory: sessionmaker[Session], worker_id: str) -> bool:
                 from arbiter import notify
 
                 notify.mark_failed(s, payload["message_id"], error.splitlines()[0])
+            if dead and kind.startswith("training.") and "training_job_id" in payload:
+                from arbiter.training.service import fail as fail_training
+
+                fail_training(s, payload["training_job_id"], error.splitlines()[0])
             s.commit()
     return True
 

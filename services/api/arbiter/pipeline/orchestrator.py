@@ -53,14 +53,16 @@ from arbiter.contracts import (
     TermViolation,
 )
 from arbiter.domain.states import transition
-from arbiter.engines.registry import available_mt, get_llm, get_mt
+from arbiter.engines import routing
+from arbiter.engines.budgets import FailoverLlm
+from arbiter.engines.errors import BudgetExceeded, RoutingBlocked
+from arbiter.engines.registry import EngineContext, get_llm, get_mt
 from arbiter.fileproc.base import InlineCode, codes_of, from_tagged, plain_text, to_tagged
 from arbiter.fileproc.registry import detect_and_extract
 from arbiter.linguistic import glossary as gl
 from arbiter.linguistic import tm
 from arbiter.models import (
     ControlSample,
-    EngineScore,
     EscapedError,
     FileAsset,
     Job,
@@ -188,34 +190,91 @@ def _create_threshold(session: Session, job: Job) -> Threshold | None:
     return _threshold(session, job)
 
 
-def _engine_names(session: Session, job: Job) -> list[str]:
-    """R-MT-02: engines ordered by our own scoreboard for this pair and domain; default first otherwise."""
-    settings = get_settings()
-    avail = available_mt()
-    if not settings.is_test and not settings.default_mt_engine.startswith("mock"):
-        avail = [n for n in avail if "mock" not in n]
-    board = (
-        session.execute(
-            select(EngineScore)
-            .where(
-                EngineScore.source_lang == job.source_lang,
-                EngineScore.target_lang == job.target_lang,
-                EngineScore.domain.in_([job.content_type, "general"]),
-                EngineScore.segments_measured >= 200,
-            )
-            .order_by(EngineScore.mean_qe.desc())
-        )
-        .scalars()
-        .all()
+def _engine_ctx(session: Session, job: Job) -> EngineContext:
+    return EngineContext(session, job.org_id)
+
+
+def _route(session: Session, job: Job, purpose: str) -> routing.RouteChoice:
+    """R-MT-02 / D-058: routes > scoreboard > settings default, then region and budget filters."""
+    return routing.choose(
+        session,
+        org=_org(session, job),
+        purpose=purpose,
+        source_lang=job.source_lang,
+        target_lang=job.target_lang,
+        content_type=job.content_type,
+        context=_engine_ctx(session, job),
     )
-    ranked = [b.engine for b in board if b.engine in avail]
-    first = [settings.default_mt_engine] if settings.default_mt_engine in avail else []
-    rest = [n for n in avail if n not in ranked and n not in first]
-    return list(dict.fromkeys(ranked + first + rest))
 
 
-def _judge() -> LlmClient:
-    return get_llm(get_settings().default_judge_engine)
+def _engine_names(session: Session, job: Job) -> list[str]:
+    """R-MT-02: engines ordered by routing rules, then our own scoreboard, then the default."""
+    return _route(session, job, "mt").engines
+
+
+def _record_route(session: Session, job: Job, choice: routing.RouteChoice) -> None:
+    events.record(session, job, "engine_route", **choice.as_event())
+
+
+def _judge(session: Session | None = None, job: Job | None = None, purpose: str = "judge") -> LlmClient:
+    """The LLM for a purpose (judge | senate | editor). Without a job: the settings default."""
+    if session is None or job is None:
+        return get_llm(get_settings().default_judge_engine)
+    choice = _route(session, job, purpose)
+    ctx = _engine_ctx(session, job)
+    clients: list[LlmClient] = []
+    for name in choice.engines:
+        try:
+            clients.append(routing.wrap_llm(get_llm(name, context=ctx), session, job.org_id))
+        except EngineError as e:  # provider not configured: router skips it
+            log.warning("llm %s skipped: %s", name, e)
+    if not clients:
+        raise EngineError(f"no LLM reachable for {purpose}")
+    _record_route(session, job, choice)
+    return clients[0] if len(clients) == 1 else FailoverLlm(clients)
+
+
+def _routing_blocked(session: Session, job: Job, exc: RoutingBlocked, step: str) -> None:
+    """A routing rule (EU processing, budget) forbids every engine. Never silent, never a
+    fallback to a forbidden engine: the reason is in provenance and the job's webhook."""
+    from arbiter import webhooks
+
+    if isinstance(exc, BudgetExceeded):
+        since = utcnow() - timedelta(hours=24)
+        from arbiter.models import ProvenanceEvent
+
+        flagged = session.execute(
+            select(func.count())
+            .select_from(ProvenanceEvent)
+            .where(
+                ProvenanceEvent.job_id == job.id,
+                ProvenanceEvent.event == "engine_budget_exceeded",
+                ProvenanceEvent.at >= since,
+            )
+        ).scalar_one()
+        events.record(
+            session, job, "engine_budget_exceeded", step=step, providers=exc.providers, reason=str(exc)
+        )
+        if not flagged:
+            webhooks.emit(
+                session,
+                job.org_id,
+                "job.needs_attention",
+                {"job_id": job.id, "reason": "budget_exceeded", "providers": exc.providers},
+            )
+        # The job stays running and tries again every hour: raising the cap (or a new month)
+        # resumes it without anyone touching the job.
+        run_at = utcnow() + timedelta(hours=1)
+        enqueue(
+            session,
+            f"job.{step}",
+            {"job_id": job.id},
+            run_at=run_at,
+            idempotency_key=f"{job.id}:{step}:budget:{run_at:%Y%m%d%H}",
+        )
+        return
+    events.record(session, job, "routing_blocked", step=step, code=exc.code, reason=str(exc))
+    fail_job(session, job.id, str(exc))
 
 
 def _ctx(session: Session, job: Job, seg: Segment, hits: list[TermHit], style: list[str]) -> SegmentContext:
@@ -447,7 +506,23 @@ def translate(session: Session, job_id: str) -> None:
         events.record(session, job, "translated", segments=len(pending), engines=[])
         enqueue(session, "job.score", {"job_id": job.id}, idempotency_key=f"{job.id}:score")
         return
-    names = _engine_names(session, job)
+    try:
+        _run_engines(session, job, org, wf, to_engine, len(pending))
+    except RoutingBlocked as e:
+        _routing_blocked(session, job, e, "translate")
+
+
+def _run_engines(
+    session: Session,
+    job: Job,
+    org: Organization,
+    wf: dict[str, Any] | None,
+    to_engine: list[tuple[Segment, MtRequest, list[TermHit]]],
+    n_pending: int,
+) -> None:
+    choice = _route(session, job, "mt")
+    names = choice.engines
+    _record_route(session, job, choice)
     if not names:
         raise EngineError("no MT engine available")
     mt_step = wfl.step(wf, "mt")
@@ -460,10 +535,11 @@ def translate(session: Session, job_id: str) -> None:
     use_senate = (bool((org.settings or {}).get("translation_senate")) or forced) and len(names) >= 2
     if forced and not use_senate:
         events.record(session, job, "translation_senate_skipped", reason="fewer than two engines available")
+    ctx = _engine_ctx(session, job)
     engines: list[MtEngine] = []
     for n in names:
         try:
-            engines.append(get_mt(n))
+            engines.append(routing.wrap_mt(get_mt(n, context=ctx), session, job.org_id))
         except EngineError as e:  # provider down or not configured: router skips it
             log.warning("engine %s skipped: %s", n, e)
     if not engines:
@@ -472,7 +548,7 @@ def translate(session: Session, job_id: str) -> None:
     for start in range(0, len(to_engine), MT_BATCH):
         batch = to_engine[start : start + MT_BATCH]
         if use_senate:
-            judge = _judge()
+            judge = _judge(session, job, "senate")
             for seg, req, hits in batch:
                 verdict = translation_senate(
                     req, engines[:3], judge, lambda t, h=hits: _violations(t, h, job.target_lang)
@@ -503,10 +579,20 @@ def translate(session: Session, job_id: str) -> None:
             seg.engine = res.engine
             seg.engine_target_tagged = res.target_tagged
             _set_target(
-                session, job, seg, res.target_tagged or "", origin="mt", actor=res.engine, error=res.error
+                session,
+                job,
+                seg,
+                res.target_tagged or "",
+                origin="mt",
+                actor=res.engine,
+                error=res.error,
+                model_version=res.model_version,
+                processing_region=choice.region,
             )
             transition(seg, "segment", "translated")
-    events.record(session, job, "translated", segments=len(pending), engines=names)
+    events.record(
+        session, job, "translated", segments=n_pending, engines=names, processing_region=choice.region
+    )
     enqueue(session, "job.score", {"job_id": job.id}, idempotency_key=f"{job.id}:score")
 
 
@@ -554,7 +640,14 @@ def score(session: Session, job_id: str) -> None:
     suspended = bool(thr and thr.auto_approval_suspended)
     terms = _terms_for(session, job)
     style, _ = _style(session, job)
-    judge = _judge()
+    try:
+        judge = _judge(session, job, "judge")
+        senate = _judge(session, job, "senate")
+        editor = _judge(session, job, "editor")
+    except RoutingBlocked as e:
+        _routing_blocked(session, job, e, "score")
+        return
+    region = routing.processing_region(org)
     segs = _segments(session, job, ["translated"])
     n_qe = n_senate = 0
     for seg in segs:
@@ -606,11 +699,12 @@ def score(session: Session, job_id: str) -> None:
             errors=errors,
             threshold=job.threshold,
             safety_offset=safety,
+            processing_region=region,
         )
 
         if decision == "senate":
             n_senate += 1
-            verdict = review_senate(ctx, judge)
+            verdict = review_senate(ctx, senate)
             _add_cost(job, verdict.usage.cost)
             _store_senate(session, job, seg, "review", verdict)
             seg.signals = {**seg.signals, "errors": [_err_dict(e) for e in verdict.confirmed]}
@@ -634,7 +728,7 @@ def score(session: Session, job_id: str) -> None:
         if decision == "ai_edit":
             # Routing label only: the segment's final decision is "ai_reviewed", never "ai_edit".
             seg.decision = "ai_reviewed"
-            _ai_edit(session, job, seg, ctx, judge, hits)
+            _ai_edit(session, job, seg, ctx, editor, hits)
             continue
         seg.decision = decision
         if decision == "auto_approve":
@@ -1008,8 +1102,13 @@ def deadline(session: Session, job_id: str) -> None:
         webhooks.emit(session, job.org_id, "job.needs_attention", {"job_id": job.id, "reason": "deadline"})
         _notify(session, job, "job.needs_attention", "deadline")
         return
+    if policy == "ai_fallback":
+        try:
+            judge = _judge(session, job, "senate")
+        except RoutingBlocked as e:
+            _routing_blocked(session, job, e, "deadline")
+            return
     job.no_reviewer_fallback_used = True
-    judge = _judge()
     terms = _terms_for(session, job)
     style, _ = _style(session, job)
     for seg in open_segs:

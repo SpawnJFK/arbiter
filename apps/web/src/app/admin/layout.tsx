@@ -15,7 +15,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       ],
     },
     { label: t("admin.layout.customers"), items: [{ href: "/admin/orgs", label: t("admin.layout.organisations"), icon: "building" }] },
-    { label: t("admin.layout.platform"), items: [{ href: "/admin/languages", label: t("admin.layout.languages"), icon: "globe" }] },
+    {
+      label: t("admin.layout.platform"),
+      items: [
+        { href: "/admin/languages", label: t("admin.layout.languages"), icon: "globe" },
+        { href: "/admin/engines", label: t("admin.layout.engines"), icon: "key" },
+      ],
+    },
   ];
   return (
     <AppShell sections={sections} user={user} context={t("admin.layout.context")}>

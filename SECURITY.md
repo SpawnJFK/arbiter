@@ -23,7 +23,8 @@ In scope: the Arbiter web app, API, webhooks and file processing. Out of scope: 
 - XML parsing with entity resolution and network access disabled.
 - Segment text goes to external AI providers only for organizations that opted in.
 - Append-only provenance for every segment (database trigger).
-- Secrets only via environment variables, never in the repository.
+- Secrets only via environment variables, never in the repository. Engine keys entered in the UI (platform keys, customer BYOK) are encrypted at rest with Fernet under `ARBITER_SECRETS_KEY`, never returned by the API (last 4 characters only) and decrypted only when a client is built (D-056).
+- Organizations with EU processing only reach engines that process in the EU; when none is configured the job fails visibly instead of falling back (D-057).
 - Nightly off-site backups (EU object storage) with periodic restore drills. Use an encrypted rclone remote (crypt) for backups.
 
 ## For contributors and agents

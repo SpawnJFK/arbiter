@@ -45,15 +45,43 @@ ENGINE_RATES: dict[str, Rate] = {
     # Fallbacks when the model id is unknown: priced as the most expensive tier.
     "anthropic": Rate("tokens", Decimal("5"), Decimal("25")),
     "openai": Rate("tokens", Decimal("1.5"), Decimal("12")),
+    # Claude through AWS Bedrock / Google Vertex: regional (EU) endpoints carry a premium
+    # over the global list price, so the fallback is the top tier plus 10 %.
+    "bedrock": Rate("tokens", Decimal("5.5"), Decimal("27.5")),
+    "vertex": Rate("tokens", Decimal("5.5"), Decimal("27.5")),
+    # Hosted or self-hosted open-weight models (vLLM, fine-tunes): override per credential
+    # with config price_in_per_m / price_out_per_m when the contract price is known.
+    "openai_compatible": Rate("tokens", Decimal("1"), Decimal("3")),
+    "compat": Rate("tokens", Decimal("1"), Decimal("3")),
+    "custom": Rate("tokens", Decimal("1"), Decimal("3")),
 }
+
+# Fine-tuning: price per 1M training tokens (tokens x epochs), conservative.
+TRAINING_RATES: dict[str, Decimal] = {
+    "together": Decimal("3"),
+    "fireworks": Decimal("3"),
+    "manual": Decimal("0"),
+}
+
+
+def _model_candidates(model: str) -> list[str]:
+    """Bedrock ids ("eu.anthropic.claude-opus-5-v1:0") and path-style ids
+    ("publishers/anthropic/models/claude-opus-5") are matched on their model part too."""
+    out = [model]
+    if "anthropic." in model:
+        out.append(model.rsplit("anthropic.", 1)[1])
+    if "/" in model:
+        out.append(model.rsplit("/", 1)[1])
+    return out
 
 
 def rate_for(engine: str, model: str | None = None) -> Rate:
     if model:
         # longest prefix wins so "gpt-5-mini" is not priced as "gpt-5"
-        for prefix in sorted(LLM_MODEL_RATES, key=len, reverse=True):
-            if model.startswith(prefix):
-                return LLM_MODEL_RATES[prefix]
+        for candidate in _model_candidates(model):
+            for prefix in sorted(LLM_MODEL_RATES, key=len, reverse=True):
+                if candidate.startswith(prefix):
+                    return LLM_MODEL_RATES[prefix]
     base = engine.split(":", 1)[0]
     if base == "llm-mt" and ":" in engine:
         return rate_for(engine.split(":", 1)[1], model)
@@ -67,9 +95,10 @@ def estimate_cost(
     input_tokens: int = 0,
     output_tokens: int = 0,
     characters: int = 0,
+    rate: Rate | None = None,
 ) -> Decimal:
-    """Estimated cost, rounded UP to 6 decimals."""
-    rate = rate_for(engine, model)
+    """Estimated cost, rounded UP to 6 decimals. ``rate`` overrides the table (contract price)."""
+    rate = rate or rate_for(engine, model)
     if rate.unit == "chars":
         cost = Decimal(characters) * rate.input_per_m / MILLION
     else:

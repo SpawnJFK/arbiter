@@ -80,13 +80,13 @@ One key space per organization, kept 24 h. Same key + same body on the same endp
 | POST | /auth/password/reset | public | `{token, password(>=8)}` | `{token, user}` (signed in). Accepts reset and invitation links; single use, expiring; every other open link of the user is revoked. 422 `invalid_token` |
 | GET | /me | any | | `{user\|null, org\|null}` (org null for reviewers/admin; user null for API keys) |
 | GET | /org | cust | | `Org` |
-| PATCH | /org | pm | `{name?, default_tier?, no_reviewer_policy?, ai_subprocessors_opt_in?, regulated?, vertical?, data_retention_days?(1..3650)}` | `Org` |
+| PATCH | /org | pm | `{name?, default_tier?, no_reviewer_policy?, ai_subprocessors_opt_in?, regulated?, vertical?, data_retention_days?(1..3650), processing_region?: global\|eu, training_consent?}` | `Org`. `processing_region: eu` needs the `eu_processing` add-on (422 otherwise); regulated orgs may set it |
 | GET | /api-keys | pm | | list of `{id, name, prefix, scopes, created_at, last_used_at}` (not revoked) |
 | POST | /api-keys | pm (users only) | `{name, scopes[]}` | 201 key view + `key` (shown once). An API key cannot create keys (422) |
 | DELETE | /api-keys/{id} | pm | | 204 (revokes) |
 
 `User`: `{id, email, name, role, org_id}`.
-`Org`: `{id, name, slug, plan, default_tier, no_reviewer_policy: wait|ai_fallback|partial, ai_subprocessors_opt_in, regulated, vertical, data_retention_days}`.
+`Org`: `{id, name, slug, plan, default_tier, no_reviewer_policy: wait|ai_fallback|partial, ai_subprocessors_opt_in, regulated, vertical, data_retention_days, processing_region: global|eu, training_consent}`.
 
 ## Files, quotes, projects, jobs
 
@@ -224,7 +224,67 @@ Payouts: in dev/test/staging a mock provider "sends" them. **In production no pa
 | GET | /usage | cust | `?period=YYYY-MM` | `{period, words, ai_units, review_decisions, storage_gb, amount, currency}` |
 | GET | /invoices | cust | | list of `{id, number, period, lines[], subtotal, tax, tax_rate, tax_note, total, currency, status, issued_at, created_at}` |
 
-Webhook events: `job.delivered, job.failed, job.needs_attention, quote.expired`. Delivery is at-least-once; receivers dedupe on `event_id`. Signature header `Arbiter-Signature: t=<unix>,v1=<hex hmac sha256 of "t.body">`.
+Webhook events: `job.delivered, job.failed, job.needs_attention, quote.expired`. `job.needs_attention` reasons: `human_review`, `client_review`, `deadline`, `budget_exceeded` (with `providers`). Delivery is at-least-once; receivers dedupe on `event_id`. Signature header `Arbiter-Signature: t=<unix>,v1=<hex hmac sha256 of "t.body">`.
+
+## Engines (module `engine`)
+
+Every route below answers 404 `module_disabled` when the org has not enabled the `engine` module. Writes need the `engines.manage` permission (role pm; API keys do not have it).
+
+| Method | Path | Role | Body / query | Returns |
+|---|---|---|---|---|
+| GET | /engines/catalog | cust | | `{items: CatalogEntry[], processing_region, currency, note}` |
+| GET | /engines/preview | pm | `?source_lang&target_lang&content_type=general` | `{processing_region, purposes: {mt\|judge\|senate\|editor: {ok, engines[], source, skipped} \| {ok: false, code: no_eu_engine\|budget_exceeded\|no_engine, message}}}` |
+| GET | /engines | engines.manage | | list of `Credential` (org BYOK keys) |
+| POST | /engines | engines.manage | `{provider, label?, secret: string \| {field: value}, config?: {}, enabled=true}` | 201 `Credential`. Needs the `byok` add-on. The secret is encrypted and never returned |
+| PATCH | /engines/{id} | engines.manage | `{label?, secret?, config?, enabled?}` | `Credential`. A new secret clears the last test result |
+| DELETE | /engines/{id} | engines.manage | | 204 |
+| POST | /engines/{id}/test | engines.manage | | `{ok, error, detail, credential}`. One tiny real call (never in the test environment); result stored on the credential |
+| GET | /engines/routes | engines.manage | | list of `Route` (this org's rules) |
+| POST | /engines/routes | engines.manage | `{purpose=mt, source_lang?, target_lang?, content_type?, engines[1..10], fallback=true, enabled=true, note?}` | 201 `Route` |
+| PATCH | /engines/routes/{id} | engines.manage | same fields, all optional | `Route` |
+| DELETE | /engines/routes/{id} | engines.manage | | 204 |
+| GET | /engines/budgets | engines.manage | | list of `Budget` |
+| PUT | /engines/budgets/{provider} | engines.manage | `{monthly_cap: decimal >= 0, enabled=true}` | `Budget` (upsert) |
+| DELETE | /engines/budgets/{provider} | engines.manage | | 204; 404 when none |
+
+`CatalogEntry`: `{provider, name, capabilities: [llm|mt|training], glossary, regions: [eu|us|global], models[], secret_fields[], config_fields[], price: {unit, input, output|null}, model_prices: {model: price}, configured: org|platform|env|none}`. Prices are estimates (pricing.py).
+`Credential`: `{id, scope: org|platform, provider, label, secret_hint ("...WXYZ"), config, enabled, engine (provider name, or compat:<id> for openai_compatible), created_at, last_tested_at, last_test_ok, last_test_error}`.
+Providers and secret fields: `anthropic`, `openai`, `deepl`, `google` (`api_key`); `bedrock` (`access_key_id`, `secret_access_key`; config `model`, `aws_region`); `vertex` (`service_account_json`; config `model`, `project`, `location`, `endpoint`); `openai_compatible` (`api_key`, may be empty; config `endpoint`, `model`, `region`, `json_mode`, `price_in_per_m`, `price_out_per_m`); `together`, `fireworks` (`api_key`; fireworks config `account_id`). Org endpoints must be public https hosts in prod; platform endpoints may be private.
+`Route`: `{id, scope, source_lang, target_lang, content_type, purpose: mt|judge|senate|editor, engines[], fallback, enabled, note}`. Null match fields mean "any".
+`Budget`: `{id, provider, monthly_cap, currency, period (YYYY-MM), spent, remaining, exceeded, enabled}` (money as decimal strings).
+
+Engine names (routes, scoreboard, provenance): `mock-mt`, `mock-llm`, `anthropic`, `openai`, `bedrock`, `vertex`, `deepl`, `google`, `compat:<credential id>`, `custom:<custom model id>`, `llm-mt:<llm name>`.
+
+Resolution of a provider key for a call: org BYOK > platform key in the database > environment variable. Routing for a job: org route > platform route (more matching fields first) > scoreboard > settings default > anything available; then the processing-region filter (eu: only `eu` engines, never a fallback outside) and the budget filter. A job of an EU org without an EU engine fails with `no EU engine configured`; a job whose engines are all at their cap stays `running`, gets a `job.needs_attention` webhook (`budget_exceeded`) and retries every hour.
+
+### Platform engines (admin)
+
+| Method | Path | Role | Body / query | Returns |
+|---|---|---|---|---|
+| GET | /admin/engines/catalog | admin | | catalog with `configured: platform\|env\|none` |
+| GET / POST | /admin/engines | admin | as /engines | platform `Credential`s (scope platform) |
+| PATCH / DELETE | /admin/engines/{id} | admin | as /engines/{id} | |
+| POST | /admin/engines/{id}/test | admin | | as /engines/{id}/test |
+| GET / POST | /admin/engines/routes | admin | as /engines/routes | platform default routes (org_id null) |
+| PATCH / DELETE | /admin/engines/routes/{id} | admin | | |
+
+## Own models (module `engine`, add-on `custom_models`)
+
+| Method | Path | Role | Body / query | Returns |
+|---|---|---|---|---|
+| POST | /training/datasets/preview | pm | `{source_lang, target_lang, domain=general}` | `{candidates, examples, train, validation, dropped, train_words, train_tokens_estimate, min_examples, enough, consent, estimated_cost: {provider: decimal}, currency}` (counts only; works without consent) |
+| GET | /training/jobs | pm | | list of `TrainingJob` |
+| POST | /training/jobs | engines.manage | `{source_lang, target_lang, domain=general, provider: manual\|together\|fireworks, base_model}` | 201 `TrainingJob`. 422 `training_consent_required` without `org.training_consent`; 422 when fewer than `ARBITER_TRAINING_MIN_EXAMPLES` examples; EU orgs only with `manual` |
+| GET | /training/jobs/{id} | pm | | `TrainingJob` |
+| POST | /training/jobs/{id}/refresh | engines.manage | | `TrainingJob` (polls the provider once; the worker also polls via `training.poll`) |
+| GET | /training/jobs/{id}/dataset | engines.manage | `?split=train\|validation` | JSONL file (chat format) |
+| GET | /custom-models | pm | | list of `CustomModel` with `scoreboard` |
+| POST | /custom-models | engines.manage | `{name, source_lang, target_lang, domain?, endpoint, provider_model_id, credential_id?, region: eu\|us\|global, base_model?, training_job_id?}` | 201 `CustomModel` (with `training_job_id` of an exported job: the job moves to `evaluating`) |
+| POST | /custom-models/{id}/activate | engines.manage | | `CustomModel` (active: may compete in routing) |
+| POST | /custom-models/{id}/deactivate | engines.manage | | `CustomModel` |
+
+`TrainingJob`: `{id, source_lang, target_lang, domain, provider, base_model, state: created|running|evaluating|ready|exported|failed|cancelled, dataset_stats, cost, currency, result_model_id, endpoint, custom_model_id, error, created_at, finished_at}`.
+`CustomModel`: `{id, engine ("custom:<id>"), name, source_lang, target_lang, domain, base_model, provider_model_id, endpoint, region, active, training_job_id, scoreboard: {mean_qe, mean_edit_distance, segments_measured}|null, created_at}`.
 
 ---
 

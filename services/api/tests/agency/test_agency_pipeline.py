@@ -153,7 +153,7 @@ class ProblemLlm(MockLlm):
 
 
 def test_threshold_row_created_and_evidence_header_and_no_ai_edit(db, monkeypatch):
-    monkeypatch.setattr(orchestrator, "_judge", lambda: ProblemLlm())
+    monkeypatch.setattr(orchestrator, "_judge", lambda *a, **kw: ProblemLlm())
     c = client()
     h = register(c)
     assert c.get("/v1/quality/thresholds", headers=h).json()["items"] == []

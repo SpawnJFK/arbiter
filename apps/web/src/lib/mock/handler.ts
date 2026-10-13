@@ -390,6 +390,25 @@ async function route(c: Ctx): Promise<Response | null> {
     }
   }
 
+  // --- engines and own models: read-only demo data so the pages render without a backend
+  const enginesPath = a === "engines" ? p.slice(1) : a === "admin" && b === "engines" ? p.slice(2) : null;
+  if (enginesPath) {
+    if (m !== "GET") return err(422, "invalid", "Demo mode: engine settings are read-only.");
+    if (enginesPath[0] === "catalog") return json(mockEngineCatalog());
+    if (enginesPath[0] === "preview") return err(404, "not_found", "No preview in demo mode.");
+    return json({ items: [], next_offset: null });
+  }
+  if (a === "training" || a === "custom-models") {
+    if (a === "training" && b === "datasets" && m === "POST") {
+      return json({
+        candidates: 0, examples: 0, train: 0, validation: 0, dropped: {}, train_words: 0, train_tokens_estimate: 0,
+        min_examples: 200, enough: false, consent: false, estimated_cost: { manual: "0.00" }, currency: "EUR",
+      });
+    }
+    if (m !== "GET") return err(422, "invalid", "Demo mode: training is not available.");
+    return json({ items: [], next_offset: null });
+  }
+
   // --- files / quotes / projects / jobs
   if (a === "files" && m === "POST") {
     const value = c.form?.get("file");
@@ -824,4 +843,31 @@ async function route(c: Ctx): Promise<Response | null> {
   if (a === "invoices" && m === "GET") return list(F.INVOICES, c.q);
 
   return agencyRoute({ method: m, parts: p, q: c.q, body: c.body, role: c.role, org: s.org, jobs: s.jobs, projects: s.projects });
+}
+
+function mockEngineCatalog() {
+  const price = (input: string, output: string | null, unit = "1M tokens") => ({ unit, input, output });
+  const entry = (provider: string, name: string, capabilities: string[], regions: string[], p: ReturnType<typeof price>) => ({
+    provider,
+    name,
+    capabilities,
+    glossary: capabilities.includes("llm"),
+    regions,
+    models: [],
+    secret_fields: ["api_key"],
+    config_fields: [],
+    price: p,
+    model_prices: {},
+    configured: "none",
+  });
+  return {
+    items: [
+      entry("anthropic", "Anthropic API", ["llm", "mt"], ["global"], price("5", "25")),
+      entry("bedrock", "Claude on AWS Bedrock", ["llm", "mt"], ["eu", "us", "global"], price("5.5", "27.5")),
+      entry("deepl", "DeepL API", ["mt"], ["eu"], price("25", null, "1M characters")),
+    ],
+    processing_region: "global",
+    currency: "EUR",
+    note: "",
+  };
 }

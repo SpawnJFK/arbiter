@@ -52,6 +52,7 @@ def build(session: Session, job: Job) -> dict[str, Any]:
         for r in session.execute(select(SenateRun).where(SenateRun.job_id == job.id)).scalars()
     }
     decisions = Counter(s.decision or "unknown" for s in segs)
+    processing = _processing(prov, org)
     return {
         "schema": "arbiter.evidence/1",
         "generated_at": utcnow().isoformat(),
@@ -74,6 +75,7 @@ def build(session: Session, job: Job) -> dict[str, Any]:
                 "regulated": org.regulated if org else None,
             },
         },
+        "processing": processing,
         "summary": {
             "decisions": dict(decisions),
             "auto_approved": job.auto_approved_count,
@@ -112,6 +114,37 @@ def build(session: Session, job: Job) -> dict[str, Any]:
     }
 
 
+def _processing(prov: dict[str | None, list[dict[str, Any]]], org: Organization | None) -> dict[str, Any]:
+    """Where the job was processed (D-057): region, engine per purpose, every model seen."""
+    routes: dict[str, dict[str, Any]] = {}
+    regions: set[str] = set()
+    for ev in prov.get(None, []):
+        if ev["event"] != "engine_route":
+            continue
+        data = ev["data"] or {}
+        regions.add(str(data.get("processing_region") or "global"))
+        routes[str(data.get("purpose"))] = {
+            "engine": (data.get("engines") or [None])[0],
+            "fallbacks": (data.get("engines") or [])[1:],
+            "source": data.get("source"),
+        }
+    models = sorted(
+        {
+            str(ev["model_version"])
+            for events in prov.values()
+            for ev in events
+            if ev.get("model_version") and ev["event"] in ("target_set", "qe_scored")
+        }
+    )
+    setting = ((org.settings or {}).get("processing_region") if org else None) or "global"
+    return {
+        "region": ", ".join(sorted(regions)) if regions else setting,
+        "org_setting": setting,
+        "routes": routes,
+        "models": models,
+    }
+
+
 def to_json(pack: dict[str, Any]) -> bytes:
     return orjson.dumps(pack, option=orjson.OPT_INDENT_2)
 
@@ -142,6 +175,15 @@ def to_pdf(pack: dict[str, Any]) -> bytes:
             st["BodyText"],
         ),
     ]
+    proc = pack.get("processing") or {}
+    if proc:
+        engines = ", ".join(f"{k}: {v.get('engine')}" for k, v in sorted((proc.get("routes") or {}).items()))
+        story.append(
+            Paragraph(
+                f"Processing region {proc.get('region')} · engines {engines or 'none'}",
+                st["BodyText"],
+            )
+        )
     if j["no_reviewer_fallback_used"]:
         story.append(
             Paragraph(

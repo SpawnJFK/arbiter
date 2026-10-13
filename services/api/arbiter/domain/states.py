@@ -59,7 +59,17 @@ class PayoutState(StrEnum):
     blocked = "blocked"
 
 
-S, J, T, P = SegmentState, JobState, TaskState, PayoutState
+class TrainingState(StrEnum):
+    created = "created"
+    running = "running"
+    evaluating = "evaluating"
+    ready = "ready"
+    exported = "exported"  # manual provider: dataset handed to an external trainer
+    failed = "failed"
+    cancelled = "cancelled"
+
+
+S, J, T, P, TR = SegmentState, JobState, TaskState, PayoutState, TrainingState
 
 SEGMENT_TRANSITIONS: dict[SegmentState, set[SegmentState]] = {
     S.pending: {S.translated, S.auto_approved},
@@ -105,11 +115,22 @@ PAYOUT_TRANSITIONS: dict[PayoutState, set[PayoutState]] = {
     P.settled: set(),
 }
 
+TRAINING_TRANSITIONS: dict[TrainingState, set[TrainingState]] = {
+    TR.created: {TR.running, TR.exported, TR.failed, TR.cancelled},
+    TR.running: {TR.evaluating, TR.failed, TR.cancelled},
+    TR.evaluating: {TR.ready, TR.failed},
+    TR.exported: {TR.evaluating, TR.ready, TR.failed, TR.cancelled},  # external model registered later
+    TR.ready: set(),
+    TR.failed: set(),
+    TR.cancelled: set(),
+}
+
 _MACHINES = {
     "segment": SEGMENT_TRANSITIONS,
     "job": JOB_TRANSITIONS,
     "task": TASK_TRANSITIONS,
     "payout": PAYOUT_TRANSITIONS,
+    "training": TRAINING_TRANSITIONS,
 }
 
 

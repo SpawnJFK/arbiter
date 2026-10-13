@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     google_api_key: str = ""
     embedding_provider: Literal["mock", "openai"] = "mock"
 
-    # EU processing route (D-052). Bedrock: AWS keys for the platform account; model is an
+    # EU processing route (D-057). Bedrock: AWS keys for the platform account; model is an
     # EU geographic inference profile id, which routes only among EU regions.
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""

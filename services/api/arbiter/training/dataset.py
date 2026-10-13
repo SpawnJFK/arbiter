@@ -1,4 +1,4 @@
-"""Training data for an org's own model (D-054).
+"""Training data for an org's own model (D-059).
 
 Only segments a human approved (decision "reviewed", state reviewed or delivered) of one
 org, one language pair and one domain, and only while org.settings["training_consent"] is

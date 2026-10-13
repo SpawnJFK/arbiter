@@ -115,7 +115,7 @@ class OrgPatch(BaseModel):
     regulated: bool | None = None
     vertical: str | None = Field(default=None, max_length=60)
     data_retention_days: int | None = Field(default=None, ge=1, le=3650)
-    # D-052: "eu" routes every LLM/MT call through EU-only engines (add-on).
+    # D-057: "eu" routes every LLM/MT call through EU-only engines (add-on).
     processing_region: Literal["global", "eu"] | None = None
     # Own models: approved segments may train this org's fine-tuned model.
     training_consent: bool | None = None

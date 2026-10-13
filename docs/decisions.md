@@ -746,7 +746,7 @@ Date: 2026-10-09. Status: accepted.
 
 ---
 
-## D-051 Engine keys in the database, encrypted, resolved org BYOK > platform > environment
+## D-056 Engine keys in the database, encrypted, resolved org BYOK > platform > environment
 Date: 2026-10-13. Status: accepted.
 
 **Context.** Engine keys lived only in `ARBITER_*` environment variables: one key per provider for the whole platform, changed by a redeploy. The engine module is sold to enterprises that bring their own provider contracts, and the platform admin needs to rotate keys without a deploy.
@@ -762,7 +762,7 @@ Date: 2026-10-13. Status: accepted.
 
 ---
 
-## D-052 EU processing: Bedrock EU inference profiles, Vertex "eu", DeepL; no silent fallback
+## D-057 EU processing: Bedrock EU inference profiles, Vertex "eu", DeepL; no silent fallback
 Date: 2026-10-13. Status: accepted.
 
 **Context.** Claude goes through Anthropic's own API by default (global processing). EU customers, regulated ones first, need every AI and MT call processed in the EU. This is sold as an add-on.
@@ -774,16 +774,16 @@ Date: 2026-10-13. Status: accepted.
 - *Falling back to a global engine when no EU engine is configured.* A silent breach of what the customer bought.
 - *Google SDKs (google-auth) for Vertex.* Two HTTP calls do the job; pyjwt and cryptography are already dependencies.
 
-**Consequences.** The Vertex multi-region host and the exact Bedrock profile ids must be checked against the provider consoles before the first EU customer (no Context7 in the build session). Training providers that serve from the US cannot be used by EU orgs (D-054).
+**Consequences.** The Vertex multi-region host and the exact Bedrock profile ids must be checked against the provider consoles before the first EU customer (no Context7 in the build session). Training providers that serve from the US cannot be used by EU orgs (D-059).
 
 ---
 
-## D-053 Engine routing rules and monthly budgets
+## D-058 Engine routing rules and monthly budgets
 Date: 2026-10-13. Status: accepted.
 
 **Context.** R-MT-02 ordered engines by the scoreboard, then the settings default. Agencies want explicit rules per pair and content type (e.g. DeepL for EN to DE legal), per purpose (MT, judge, senate, editor), and a cost ceiling per provider.
 
-**Decision.** Table `engine_routes` (org_id null = platform default; source_lang, target_lang, content_type nullable = any; purpose; ordered `engines`; `fallback`; enabled). Precedence in `arbiter.engines.routing.choose`: org rule before platform rule, then the rule with more matching fields, then the scoreboard (MT only), the settings default and anything available; `fallback=false` stops after the rule's own list; senate and editor fall back to the judge rule. Then the region filter (D-052) and the budget filter. Table `engine_budgets` (org, provider, monthly cap, currency, period, spent) is checked before calls (capped providers are dropped by the router, and wrappers check again before each call) and charged after each call with one atomic UPDATE. When every engine is capped the job stays `running`, provenance records `engine_budget_exceeded`, a `job.needs_attention` webhook (`budget_exceeded`) goes out at most once a day, and the step is retried every hour, so raising the cap or a new month resumes the job without anyone touching it.
+**Decision.** Table `engine_routes` (org_id null = platform default; source_lang, target_lang, content_type nullable = any; purpose; ordered `engines`; `fallback`; enabled). Precedence in `arbiter.engines.routing.choose`: org rule before platform rule, then the rule with more matching fields, then the scoreboard (MT only), the settings default and anything available; `fallback=false` stops after the rule's own list; senate and editor fall back to the judge rule. Then the region filter (D-057) and the budget filter. Table `engine_budgets` (org, provider, monthly cap, currency, period, spent) is checked before calls (capped providers are dropped by the router, and wrappers check again before each call) and charged after each call with one atomic UPDATE. When every engine is capped the job stays `running`, provenance records `engine_budget_exceeded`, a `job.needs_attention` webhook (`budget_exceeded`) goes out at most once a day, and the step is retried every hour, so raising the cap or a new month resumes the job without anyone touching it.
 
 **Rejected.**
 - *Failing the job when the cap is reached.* The owner would have to find and resume every job by hand after raising the cap.
@@ -794,7 +794,7 @@ Date: 2026-10-13. Status: accepted.
 
 ---
 
-## D-054 Own models: per-client LoRA fine-tunes with consent, measured on the scoreboard
+## D-059 Own models: per-client LoRA fine-tunes with consent, measured on the scoreboard
 Date: 2026-10-13. Status: accepted.
 
 **Context.** A model trained on one client's approved translations can beat general engines for that client. It must never be trained without consent, never trained on another client's data, and only used when it measures better.

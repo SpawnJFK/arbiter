@@ -83,7 +83,7 @@ class MtResult:
     error: str | None = None
 
 
-# Where an engine processes data (D-052). "local" = never leaves the process (mocks).
+# Where an engine processes data (D-057). "local" = never leaves the process (mocks).
 # An org with processing_region "eu" may only use engines whose region is "eu" or "local".
 Region = Literal["eu", "us", "global", "local"]
 

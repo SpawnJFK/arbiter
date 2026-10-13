@@ -3,15 +3,15 @@
 Names:
     mock-mt, mock-llm                 in-process mocks (region "local")
     anthropic, openai                 LLM APIs
-    bedrock, vertex                   Claude through AWS Bedrock / Google Vertex (EU route, D-052)
+    bedrock, vertex                   Claude through AWS Bedrock / Google Vertex (EU route, D-057)
     deepl, google                     classic MT
     compat:<credential id>            an OpenAI-compatible endpoint (vLLM, Mistral, hosted models)
     custom:<custom model id>          an org's own fine-tuned model (MT only)
     llm-mt:<llm name>                 any LLM above used as an MT engine
 
-Credentials (D-051): with an EngineContext (session + org), each provider's key is
+Credentials (D-056): with an EngineContext (session + org), each provider's key is
 resolved org BYOK > platform key in the DB > environment; without one, the environment
-only (the behaviour before D-051). Building a client never touches the network.
+only (the behaviour before D-056). Building a client never touches the network.
 
 Safety rule: when settings.env == "test" ONLY mocks are handed out, whatever keys the
 environment or the database holds. This is a second fence behind conftest blanking the

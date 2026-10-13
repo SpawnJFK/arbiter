@@ -1,4 +1,4 @@
-"""Own models (D-054): dataset export with consent, providers (mocked), evaluation onto the
+"""Own models (D-059): dataset export with consent, providers (mocked), evaluation onto the
 scoreboard, activation, EU rules and the API."""
 
 from __future__ import annotations

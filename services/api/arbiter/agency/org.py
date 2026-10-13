@@ -30,7 +30,7 @@ def update_org(org: Organization, data: dict[str, Any]) -> Organization:
     if extra.get("processing_region") == "eu":
         from arbiter.platform.modules import org_has_addon
 
-        # D-052: sold as an add-on. Regulated organizations may use it like any other.
+        # D-057: sold as an add-on. Regulated organizations may use it like any other.
         if not org_has_addon(org, "eu_processing"):
             raise Invalid("the EU processing add-on is not enabled for this organization")
     regulated = data.get("regulated", org.regulated)

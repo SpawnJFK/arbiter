@@ -1,4 +1,4 @@
-"""Credential resolution (D-051), routing precedence and the region / budget filters (D-053, R-MT-02)."""
+"""Credential resolution (D-056), routing precedence and the region / budget filters (D-058, R-MT-02)."""
 
 from __future__ import annotations
 

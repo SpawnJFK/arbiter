@@ -1,4 +1,4 @@
-"""Pipeline + engine routing: EU processing (D-052), budgets, provenance and evidence."""
+"""Pipeline + engine routing: EU processing (D-057), budgets, provenance and evidence."""
 
 from __future__ import annotations
 

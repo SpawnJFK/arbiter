@@ -1,4 +1,4 @@
-"""Encryption at rest for secrets stored in the database (engine credentials, D-051).
+"""Encryption at rest for secrets stored in the database (engine credentials, D-056).
 
 Fernet (AES-128-CBC + HMAC-SHA256, from `cryptography`) with keys from ARBITER_SECRETS_KEY.
 The setting is a comma separated list, newest first: the first key encrypts, every key

@@ -5,7 +5,7 @@ Last updated: 2026-10-09. Phase: P00 next (`phases/README.md`).
 ## Exists (built and tested locally)
 - **File processing**: 10 formats behind `FormatHandler` (docx, xlsx, pptx, html, md, json, po, txt, csv, xliff), segmenter, tagged text model, round-trip tests, XLIFF 2.1 export.
 - **Linguistic**: TM (context 101 / exact / fuzzy via pg_trgm / semantic via pgvector), TMX import with rights confirmation, glossaries with org-wide temporal versions (D-016), four term kinds, Snowball term matching, CSV/TBX import and export, term questions.
-- **Engines**: mock, Anthropic, OpenAI, DeepL, Google Basic v2 (D-021), LLM MT, tag protection, cost estimates, registry and scoreboard routing. Engine module (2026-10-13): encrypted engine keys in the DB with org BYOK > platform > env resolution (D-051), Claude on AWS Bedrock and Google Vertex plus generic OpenAI-compatible endpoints, per-org EU processing route with no silent fallback (D-052), routing rules and monthly budgets (D-053), own models: consented dataset export, Together / Fireworks / manual training, held-out evaluation onto the scoreboard, activation (D-054). Web: /app/engines, /app/training, settings region + consent, /admin/engines.
+- **Engines**: mock, Anthropic, OpenAI, DeepL, Google Basic v2 (D-021), LLM MT, tag protection, cost estimates, registry and scoreboard routing. Engine module (2026-10-13): encrypted engine keys in the DB with org BYOK > platform > env resolution (D-056), Claude on AWS Bedrock and Google Vertex plus generic OpenAI-compatible endpoints, per-org EU processing route with no silent fallback (D-057), routing rules and monthly budgets (D-058), own models: consented dataset export, Together / Fireworks / manual training, held-out evaluation onto the scoreboard, activation (D-059). Web: /app/engines, /app/training, settings region + consent, /admin/engines.
 - **Quality**: hard QA (tags D-009, numbers, glossary), QE judge (MQM-Core D-010), review senate with arbitration (D-019, D-020), translation senate (D-023), AI editor, calibration with control samples, PROMPT_VERSION tracking (D-022).
 - **Pipeline**: Postgres queue + worker (D-031), prepare/translate/score/deadline/merge steps, no_reviewer_policy (D-035), evidence pack JSON + PDF (D-033), webhooks (D-032), append-only provenance.
 - **Community**: reviewer apply, qualification tests, task queue, second review, pay (D-024), score (D-025), disputes (D-026), payouts with ledger (D-027, D-028).
@@ -25,7 +25,7 @@ Last updated: 2026-10-09. Phase: P00 next (`phases/README.md`).
 - Deployment, backups in cron, restore drill (P02).
 - Payment provider; real payout provider; legal and tax review; security pass (P03).
 - Okapi sidecar (P06), COMET plugin (D-005), SSO (P07).
-- Engine module: no real call made yet against Bedrock, Vertex (EU host), Together or Fireworks; one small real call per provider before the first customer (D-052, D-054). No resume endpoint for failed jobs (EU route failures need one once the owner adds an EU engine).
+- Engine module: no real call made yet against Bedrock, Vertex (EU host), Together or Fireworks; one small real call per provider before the first customer (D-057, D-059). No resume endpoint for failed jobs (EU route failures need one once the owner adds an EU engine).
 
 ## Known limitations
 - No Snowball stemmer for some languages (e.g. sl, uk, bg, and others outside the Snowball set): exact matching only there.

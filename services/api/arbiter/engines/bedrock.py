@@ -1,4 +1,4 @@
-"""Claude through AWS Bedrock, Converse API (LlmClient). The EU processing route (D-052).
+"""Claude through AWS Bedrock, Converse API (LlmClient). The EU processing route (D-057).
 
 Model id and AWS region come from the engine credential config (or the ARBITER_BEDROCK_*
 settings). For EU processing the model id is an EU geographic inference profile, e.g.

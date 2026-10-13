@@ -1,4 +1,4 @@
-"""Claude on Google Vertex AI (LlmClient). The second EU processing route (D-052).
+"""Claude on Google Vertex AI (LlmClient). The second EU processing route (D-057).
 
 Endpoint (Anthropic models on Vertex take the Messages API body through rawPredict):
 

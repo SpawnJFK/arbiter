@@ -1,4 +1,4 @@
-"""EU route engines (D-052) and the OpenAI-compatible client, with stubbed transports only."""
+"""EU route engines (D-057) and the OpenAI-compatible client, with stubbed transports only."""
 
 from __future__ import annotations
 

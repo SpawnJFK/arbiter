@@ -12,7 +12,7 @@ class RoutingBlocked(EngineError):
 
 
 class NoEngineInRegion(RoutingBlocked):
-    """processing_region "eu" and no EU engine is configured (D-052). Never falls back."""
+    """processing_region "eu" and no EU engine is configured (D-057). Never falls back."""
 
     code = "no_eu_engine"
 

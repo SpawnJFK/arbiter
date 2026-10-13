@@ -195,7 +195,7 @@ def _engine_ctx(session: Session, job: Job) -> EngineContext:
 
 
 def _route(session: Session, job: Job, purpose: str) -> routing.RouteChoice:
-    """R-MT-02 / D-053: routes > scoreboard > settings default, then region and budget filters."""
+    """R-MT-02 / D-058: routes > scoreboard > settings default, then region and budget filters."""
     return routing.choose(
         session,
         org=_org(session, job),

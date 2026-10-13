@@ -14,7 +14,7 @@ to engine_scores as engine `custom:<model id>`, so the scoreboard decides whethe
 is used: an active model ranks above the default only when it measures better. A model is
 never used before an admin activates it (POST /v1/custom-models/{id}/activate).
 
-EU processing (D-052): an org with processing_region "eu" may only train with a provider
+EU processing (D-057): an org with processing_region "eu" may only train with a provider
 whose inference runs in the EU (today: the manual provider with an EU-hosted trainer), and a
 model is evaluated only when its endpoint is declared "eu". Data never leaves the region.
 """

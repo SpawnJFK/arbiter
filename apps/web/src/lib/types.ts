@@ -46,7 +46,7 @@ export interface Org {
   regulated: boolean;
   vertical: string | null;
   data_retention_days: number;
-  /** D-052: "eu" sends every LLM/MT call to EU-only engines (add-on). */
+  /** D-057: "eu" sends every LLM/MT call to EU-only engines (add-on). */
   processing_region?: ProcessingRegion;
   /** Own models: approved segments may train this org's fine-tuned model. */
   training_consent?: boolean;

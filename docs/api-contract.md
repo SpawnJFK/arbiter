@@ -345,7 +345,7 @@ Messages import rules:
 
 # Software strings (module `strings`)
 
-Key-value localization for apps and websites, on the same engines, TM, glossary, QE and reviewer community as documents (D-051, D-052, D-053). Every `/v1/strings` route requires the `strings` module (404 `module_disabled` otherwise) and a permission: `strings.read` (pm, client, API key), `strings.write` (pm, API key), `strings.publish` (pm, API key; releases and distribution tokens). Branch parameters accept a branch id or name; omitted means `main`. Language codes are BCP-47 (`pt_br` -> `pt-BR`).
+Key-value localization for apps and websites, on the same engines, TM, glossary, QE and reviewer community as documents (D-060, D-061, D-062). Every `/v1/strings` route requires the `strings` module (404 `module_disabled` otherwise) and a permission: `strings.read` (pm, client, API key), `strings.write` (pm, API key), `strings.publish` (pm, API key; releases and distribution tokens). Branch parameters accept a branch id or name; omitted means `main`. Language codes are BCP-47 (`pt_br` -> `pt-BR`).
 
 | Method | Path | Body / query | Returns |
 |---|---|---|---|

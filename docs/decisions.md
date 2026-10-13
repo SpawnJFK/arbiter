@@ -746,7 +746,7 @@ Date: 2026-10-09. Status: accepted.
 
 ---
 
-## D-051 Software strings: own key-value model, copy-on-write branches, merge by base version
+## D-060 Software strings: own key-value model, copy-on-write branches, merge by base version
 Date: 2026-10-13. Status: accepted. (Parallel branches may also use this number; renumber at merge.)
 
 **Context.** The `strings` module (the Lokalise / Phrase Strings / Crowdin category) needs keys with values per language, plurals, branches for feature work and releases. The document pipeline (files, jobs, segments) models paragraphs of one file in one language pair per job, which fits neither keys that live for years nor many target languages per key.
@@ -763,7 +763,7 @@ Date: 2026-10-13. Status: accepted. (Parallel branches may also use this number;
 
 ---
 
-## D-052 Human review of strings through carrier jobs, not a second task type
+## D-061 Human review of strings through carrier jobs, not a second task type
 Date: 2026-10-13. Status: accepted.
 
 **Context.** Strings need the same reviewer community (routing by pair and level, holds, pay, control grading, disputes). `review_tasks.segment_id` is a foreign key to `segments`, and every community flow reads the segment.
@@ -778,7 +778,7 @@ Date: 2026-10-13. Status: accepted.
 
 ---
 
-## D-053 Strings translation flow, states and what ships
+## D-062 Strings translation flow, states and what ships
 Date: 2026-10-13. Status: accepted.
 
 **Context.** Strings must use the same engines, TM, glossary, hard QA, QE judge and tier rules as documents, but an app string ships continuously, not as a delivered file, and a broken placeholder crashes the app.

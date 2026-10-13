@@ -6,7 +6,7 @@ the `main` branch is a real row created with the project, and a translation row 
 branch_id = <feature branch> overrides the main row for that key and language only inside
 the branch. Keys created in a branch belong to it until the branch is merged. Merge applies
 branch rows whose main counterpart did not change since they were copied (base_version);
-otherwise it reports a conflict for the user to resolve (D-051).
+otherwise it reports a conflict for the user to resolve (D-060).
 
 string_history is append-only (trigger below), the strings counterpart of provenance_events.
 """

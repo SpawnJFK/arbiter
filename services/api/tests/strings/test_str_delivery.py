@@ -1,5 +1,5 @@
 """Releases + OTA (R-STR-REL-*), branches + merge (R-STR-04/05) and human review through the
-reviewer community (D-052)."""
+reviewer community (D-061)."""
 
 from __future__ import annotations
 

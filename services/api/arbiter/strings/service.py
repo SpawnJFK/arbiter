@@ -7,7 +7,7 @@ Rules (ids referenced from tests and docs):
             back to `machine` (they were checked against the old source) with event
             source_changed.
   R-STR-04  Copy-on-write branches: writing in a branch creates a branch row that records the
-            main row's version (base_version); reads prefer the branch row (D-051).
+            main row's version (base_version); reads prefer the branch row (D-060).
   R-STR-05  Merge applies branch rows whose main row is unchanged since the copy; a main row
             that moved on is a conflict, listed for resolution (keep branch / keep main).
   R-STR-06  Import never overwrites base-language text from a bilingual file (PO, XLIFF):
@@ -611,7 +611,7 @@ def update_key(
     changes: dict[str, Any],
     actor: str,
 ) -> StringKey:
-    """Key metadata is shared by every branch (D-051); only creation and values are branch scoped."""
+    """Key metadata is shared by every branch (D-060); only creation and values are branch scoped."""
     writable(branch)
     changed: dict[str, Any] = {}
     for f in KEY_FIELDS:

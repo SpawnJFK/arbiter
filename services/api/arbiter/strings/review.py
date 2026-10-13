@@ -1,4 +1,4 @@
-"""Human review of string translations through the existing reviewer community (D-052).
+"""Human review of string translations through the existing reviewer community (D-061).
 
 Review tasks reference a segment of a job (review_tasks.segment_id is a foreign key), and the
 whole community flow (routing by language pair and level, holds, pay, control grading,

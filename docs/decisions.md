@@ -746,7 +746,7 @@ Date: 2026-10-09. Status: accepted.
 
 ---
 
-## D-051 Editor splits and merges map back onto extraction slots (`signals.slots`)
+## D-063 Editor splits and merges map back onto extraction slots (`signals.slots`)
 Date: 2026-10-13. Status: accepted.
 
 **Context.** The workbench splits and merges segments inside a unit, but every format handler merges a target map with exactly the segment count of the extraction (`resolve_segments` refuses anything else).
@@ -761,7 +761,7 @@ Date: 2026-10-13. Status: accepted.
 
 ---
 
-## D-052 Auditor runs on the work queue in batches, AI judge sampled deterministically
+## D-064 Auditor runs on the work queue in batches, AI judge sampled deterministically
 Date: 2026-10-13. Status: accepted.
 
 **Context.** Standalone audits of bilingual files can have tens of thousands of segments, need visible progress and must keep AI cost under the customer's control.
@@ -776,7 +776,7 @@ Date: 2026-10-13. Status: accepted.
 
 ---
 
-## D-053 Sentence alignment: Gale-Church with an embedding term, banded, pure Python
+## D-065 Sentence alignment: Gale-Church with an embedding term, banded, pure Python
 Date: 2026-10-13. Status: accepted.
 
 **Context.** TM alignment and document-pair audits need sentence alignment without new heavy dependencies (no numpy in the API image).
@@ -791,7 +791,7 @@ Date: 2026-10-13. Status: accepted.
 
 ---
 
-## D-054 Comments are internal, queries are the client channel
+## D-066 Comments are internal, queries are the client channel
 Date: 2026-10-13. Status: accepted.
 
 **Context.** Translators and PMs need notes on segments; some questions must go to the client, who should not see internal discussion.

@@ -324,6 +324,65 @@ def store(
     return entry
 
 
+def import_pairs(
+    session: Session,
+    org_id: str,
+    source_lang: str,
+    target_lang: str,
+    pairs: list[tuple[str, str]],
+    rights_confirmed_by: str,
+    *,
+    content_type: str = "general",
+) -> dict:
+    """Store reviewed (source_tagged, target_tagged) pairs, e.g. from an alignment, like a TMX
+    import: R-TM-01 rights must be confirmed, R-TM-05 imports never overwrite reviewed work.
+    Returns {imported, skipped}."""
+    if not (rights_confirmed_by or "").strip():
+        raise ValueError("rights_confirmed_by is required: we only learn from TM the client owns (R-TM-01)")
+    imported = skipped = 0
+    clean = [(s, t) for s, t in pairs if tagged_plain(s).strip() and tagged_plain(t).strip()]
+    skipped += len(pairs) - len(clean)
+    for start in range(0, len(clean), 256):
+        chunk = clean[start : start + 256]
+        vectors = embed([tagged_plain(s) for s, _ in chunk])
+        for (src, tgt), vec in zip(chunk, vectors, strict=True):
+            _, action = _upsert(
+                session,
+                org_id,
+                source_lang,
+                target_lang,
+                src,
+                tgt,
+                content_type=content_type,
+                context_hash=None,
+                origin="import",
+                job_id=None,
+                rights_confirmed_by=rights_confirmed_by.strip(),
+                embedding=vec,
+            )
+            if action in ("inserted", "updated"):
+                imported += 1
+            else:
+                skipped += 1
+        session.flush()
+    return {"imported": imported, "skipped": skipped}
+
+
+def set_source(entry: TmEntry, source_tagged: str) -> None:
+    """Edit the source of an entry in the TM editor: rehash and re-embed it."""
+    entry.source_tagged = source_tagged
+    entry.source_plain = tagged_plain(source_tagged)
+    entry.source_hash = source_hash(source_tagged, entry.source_lang)
+    entry.embedding = embed([entry.source_plain])[0]
+    entry.updated_at = datetime.now(UTC)
+
+
+def set_target(entry: TmEntry, target_tagged: str) -> None:
+    entry.target_tagged = target_tagged
+    entry.target_plain = tagged_plain(target_tagged)
+    entry.updated_at = datetime.now(UTC)
+
+
 # ============================================================== TMX
 
 
@@ -388,6 +447,31 @@ def _seg_to_tagged(seg: Any, idmap: _IdMap) -> str:
 
     walk(seg)
     return "".join(out)
+
+
+def tmx_pairs(data: bytes, source_lang: str, target_lang: str) -> list[tuple[str, str, str]]:
+    """Read a TMX without storing it: (tuid, source_tagged, target_tagged) for every tu that has a
+    tuv in both languages (primary subtag match). Used by the auditor; target may be empty."""
+    root = etree.fromstring(data, _secure_parser())
+    out: list[tuple[str, str, str]] = []
+    for n, tu in enumerate((el for el in root.iter() if _local(el) == "tu"), start=1):
+        tuvs = []
+        for c in tu:
+            if _local(c) == "tuv":
+                lang = c.get(_XML_LANG) or c.get("lang") or ""
+                seg = next((s for s in c if _local(s) == "seg"), None)
+                if seg is not None and lang:
+                    tuvs.append((lang, seg))
+        src = next((seg for lg, seg in tuvs if primary_lang(lg) == primary_lang(source_lang)), None)
+        if src is None:
+            continue
+        tgt = next((seg for lg, seg in tuvs if primary_lang(lg) == primary_lang(target_lang)), None)
+        idmap = _IdMap()
+        src_tagged = _seg_to_tagged(src, idmap)
+        tgt_tagged = _seg_to_tagged(tgt, idmap) if tgt is not None else ""
+        if tagged_plain(src_tagged).strip():
+            out.append((tu.get("tuid") or str(n), src_tagged, tgt_tagged))
+    return out
 
 
 def import_tmx(

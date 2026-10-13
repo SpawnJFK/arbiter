@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/misc";
 import { contentTypeLabel } from "@/lib/langs";
-import { withAuth } from "@/lib/server-api";
+import { getMe, withAuth } from "@/lib/server-api";
+import { TermExtract } from "./term-extract";
 import { TermsManager } from "./terms-manager";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -18,6 +19,7 @@ export default async function GlossaryPage({ params }: { params: Promise<{ id: s
   // The contract has no GET /glossaries/{id}; find it in the list.
   const [list, terms] = await withAuth((api) => Promise.all([api.glossaries({ limit: 200 }), api.terms(id, { limit: 200 })]), next);
   const glossary = list.items.find((g) => g.id === id);
+  const { user } = await getMe();
   return (
     <>
       <PageHeader
@@ -30,6 +32,7 @@ export default async function GlossaryPage({ params }: { params: Promise<{ id: s
         description={glossary ? t("app.glossaries.detail.version", { contentType: glossary.content_type ? contentTypeLabel(t, glossary.content_type) : t("app.glossaries.allContent"), version: glossary.version }) : undefined}
       />
       <TermsManager glossaryId={id} initial={terms} />
+      {user.role === "pm" && <TermExtract glossaryId={id} />}
     </>
   );
 }

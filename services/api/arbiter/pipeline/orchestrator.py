@@ -57,7 +57,7 @@ from arbiter.engines import routing
 from arbiter.engines.budgets import FailoverLlm
 from arbiter.engines.errors import BudgetExceeded, RoutingBlocked
 from arbiter.engines.registry import EngineContext, get_llm, get_mt
-from arbiter.fileproc.base import InlineCode, codes_of, from_tagged, plain_text, to_tagged
+from arbiter.fileproc.base import InlineCode, codes_of, plain_text, to_tagged
 from arbiter.fileproc.registry import detect_and_extract
 from arbiter.linguistic import glossary as gl
 from arbiter.linguistic import tm
@@ -74,7 +74,7 @@ from arbiter.models import (
     new_id,
     utcnow,
 )
-from arbiter.pipeline import events
+from arbiter.pipeline import events, units
 from arbiter.pipeline.queue import enqueue
 from arbiter.quality import calibration
 from arbiter.quality.editor import apply_fixes
@@ -1170,16 +1170,9 @@ def merge(session: Session, job_id: str) -> None:
     assert fa is not None
     original = storage.get(fa.storage_key)
     segs = _segments(session, job)
-    targets: dict[str, list[Any]] = {}
-    for seg in segs:
-        codes = _codes(seg)
-        try:
-            content = from_tagged(seg.target_tagged or seg.source_tagged, codes)
-        except ValueError:
-            content = from_tagged(seg.source_tagged, codes)
-        targets.setdefault(seg.unit_id, []).append((seg.seg_index, content))
-    target_map = {u: [c for _, c in sorted(v, key=lambda x: x[0])] for u, v in targets.items()}
-    out = get_handler(fa.filename).merge(original, target_map, job.target_lang)
+    # Editor splits and merges change the segment count of a unit; units.target_map maps
+    # the segments back onto the extraction slots the handler expects.
+    out = get_handler(fa.filename).merge(original, units.target_map(segs), job.target_lang)
     base, _, ext = fa.filename.rpartition(".")
     out_name = (
         f"{base or fa.filename}.{job.target_lang}.{ext}" if base else f"{fa.filename}.{job.target_lang}"

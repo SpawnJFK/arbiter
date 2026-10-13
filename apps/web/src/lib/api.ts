@@ -84,6 +84,7 @@ import type {
 } from "./types";
 import type { LocaleInfo } from "./i18n/locales";
 import { platformEndpoints } from "./platform-api";
+import { workbenchEndpoints } from "./api-workbench";
 
 export class ApiError extends Error {
   status: number;
@@ -195,6 +196,7 @@ export function createApi(item: Transport) {
 
   return {
     downloadUrl: item.downloadUrl,
+    ...workbenchEndpoints(item),
 
     // Auth and account (login/register are handled by /api/session, not here)
     me: () => get<Me>("/me"),

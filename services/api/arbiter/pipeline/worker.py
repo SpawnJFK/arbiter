@@ -59,6 +59,10 @@ def _handler(kind: str) -> Callable[[Session, dict[str, Any]], None] | None:
         from arbiter.training.service import HANDLERS as TRAINING
 
         return TRAINING.get(kind)
+    if kind.startswith("audit."):
+        from arbiter.auditor import service as audit_service
+
+        return audit_service.HANDLERS.get(kind)
     return None
 
 
@@ -123,6 +127,10 @@ def run_one(factory: sessionmaker[Session], worker_id: str) -> bool:
                 from arbiter.training.service import fail as fail_training
 
                 fail_training(s, payload["training_job_id"], error.splitlines()[0])
+            if dead and kind.startswith("audit.") and "audit_id" in payload:
+                from arbiter.auditor import service as audit_service
+
+                audit_service.fail(s, payload["audit_id"], error.splitlines()[0])
             s.commit()
     return True
 

@@ -131,4 +131,7 @@ class Segment(Base):
     engine_target_tagged: Mapped[str | None] = mapped_column(Text, nullable=True)  # what the engine produced
     edit_distance: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_control_sample: Mapped[bool] = mapped_column(default=False)
+    # Workbench (migration 0008): a PM lock keeps a segment out of edits and bulk replace.
+    locked_by: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = created_at_column()

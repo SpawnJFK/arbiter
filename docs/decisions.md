@@ -921,3 +921,61 @@ Date: 2026-10-13. Status: accepted.
 - *Treat placeholders as plain text and rely on regex QA only.* Engines then see and sometimes translate `{name}`; codes make them untouchable.
 
 **Consequences.** OTA bundles are immutable per version (cached for a year) and `latest` is short-cached with ETag revalidation. Private projects use a distribution token (only its hash is stored); the internal project id never appears in public URLs.
+---
+
+## D-063 Editor splits and merges map back onto extraction slots (`signals.slots`)
+Date: 2026-10-13. Status: accepted.
+
+**Context.** The workbench splits and merges segments inside a unit, but every format handler merges a target map with exactly the segment count of the extraction (`resolve_segments` refuses anything else).
+
+**Decision.** Each segment carries `signals["slots"]`: 1 as extracted, 0 for the second half of a split (its target is appended to the previous slot), k for a merge of k extracted segments (target in the first slot, k-1 empty slots). `pipeline/units.py` regroups segments into slots for `merge()`, the XLIFF export and the live preview. Splits keep the exact source on both sides (no character lost), merges join sources with one space (none for zh/ja/th/lo/km/my, none when re-merging a split).
+
+**Rejected.**
+- *Re-extract and re-segment the unit on merge.* The translator's segmentation would be lost and targets would have to be redistributed by guesswork.
+- *Teach every handler variable segment counts.* Ten handlers, each with round-trip guarantees; one regroup function is safer.
+
+**Consequences.** A merged segment ends with the inter-sentence whitespace of the original unit moved after it (for example a trailing space in a Markdown paragraph); harmless in markup formats, visible in plain text. Merge refuses two segments that reuse a code id.
+
+---
+
+## D-064 Auditor runs on the work queue in batches, AI judge sampled deterministically
+Date: 2026-10-13. Status: accepted.
+
+**Context.** Standalone audits of bilingual files can have tens of thousands of segments, need visible progress and must keep AI cost under the customer's control.
+
+**Decision.** `audit.parse` reads the file into `audit_segments`, `audit.check` handles 100 segments per work item and commits progress, `audit.finish` runs consistency checks, the scorecard (quality/scorecard.py, shared with job LQA) and records AI usage. Idempotency keys include an attempt number so a retried audit runs again. `ai_mode` none | sample | full; sample picks `ai_sample_pct` of the segments by hash of audit id and position (a rerun samples the same segments). Hard QA issues count in the MQM score (blocking or error = major, warning = minor, info = neutral).
+
+**Rejected.**
+- *One work item for the whole audit.* No progress, and a crash late in a big file redoes everything.
+- *Random sampling.* Two runs of the same audit would disagree.
+
+**Consequences.** A new state machine `audit` in domain/states.py (queued, running, done, failed; failed -> queued on retry). The worker marks an audit failed when its item dies.
+
+---
+
+## D-065 Sentence alignment: Gale-Church with an embedding term, banded, pure Python
+Date: 2026-10-13. Status: accepted.
+
+**Context.** TM alignment and document-pair audits need sentence alignment without new heavy dependencies (no numpy in the API image).
+
+**Decision.** linguistic/align.py: Gale-Church dynamic program over 1-1, 1-0, 0-1, 2-1, 1-2, 2-2 beads with the classic priors, plus SIM_WEIGHT x (1 - cosine) of the sides' embeddings (folded 256 -> 64 dimensions), inside a diagonal band; above 2 million cells it falls back to lengths only. Confidence = 0.7 x length probability + 0.3 x similarity. Aligned pairs are stored as plain text (two separately extracted files do not share code ids).
+
+**Rejected.**
+- *Hunalign or bleualign as a sidecar.* Another process and dictionary per language pair for a first version.
+- *Embedding-only alignment.* With the mock provider cross-language similarity is weak; lengths carry most of the signal until a multilingual embedding provider is configured.
+
+**Consequences.** Omitted long sentences tend to become 2-1 beads rather than 1-0 (a known Gale-Church weakness); the review grid shows confidence so a human catches them before commit.
+
+---
+
+## D-066 Comments are internal, queries are the client channel
+Date: 2026-10-13. Status: accepted.
+
+**Context.** Translators and PMs need notes on segments; some questions must go to the client, who should not see internal discussion.
+
+**Decision.** `segment_comments.kind` comment | query. Client users see only queries, cannot open threads and answer by replying; a client reply reopens a resolved query. A new query emits the new webhook event `job.query.opened`. Comments survive a segment merge (re-pointed to the survivor, no FK).
+
+**Rejected.**
+- *One kind with a visibility flag.* Easy to leak an internal note by toggling the wrong flag.
+
+**Consequences.** `/queries` is the client portal inbox; the editor filters segments by open queries.

@@ -48,6 +48,13 @@ KNOWN_DEBT: set[tuple[str, str]] = {
     ("strings/translate.py", "arbiter.engines.tags"),
     ("strings/translate.py", "arbiter.quality.checks"),
     ("strings/translate.py", "arbiter.quality.qe"),
+    # auditor module, merged in parallel with this check (integration debt, D-064):
+    ("auditor/report.py", "arbiter.quality.scorecard"),
+    ("auditor/service.py", "arbiter.engines.registry"),
+    ("auditor/service.py", "arbiter.quality.checks"),
+    ("auditor/service.py", "arbiter.quality.judge"),
+    ("auditor/service.py", "arbiter.quality.mqm"),
+    ("auditor/service.py", "arbiter.quality.scorecard"),
 }
 
 

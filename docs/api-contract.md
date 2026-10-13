@@ -520,3 +520,81 @@ Formats (`format` names): `json` (flat), `json_nested` (next-intl, vue-i18n), `i
 String QA codes (blocking unless noted): `empty_value`, `placeholder_changed` (a missing placeholder in a plural form is a warning), `icu_syntax`, `icu_structure`, `plural_forms_missing`, `length_exceeded`, `array_length` (warning). Machine output also gets the document hard checks (`tag_missing` etc.; placeholders travel as standalone codes). Blocked translations never ship in pulls (unless `include_blocked`) or releases.
 
 CLI for CI: `cli/arbiter-strings.mjs` (`push`, `pull`, `release`, `status`; zero dependencies), documented in `cli/README.md`.
+
+
+# Workbench, TM tools, LQA, auditor (modules `tms`, `ai`, `auditor`)
+
+Every route below is gated by its module (`require_module`): a disabled module answers 404 `module_disabled`.
+
+## Segment editor (module `tms`)
+
+| Method | Path | Role | Body / query | Returns |
+|---|---|---|---|---|
+| GET | /jobs/{id}/editor/segments | cust | `?state=a,b&decision=&locked=&has_comment=&open_query=&qa=&tm_band=none\|lt75\|75-84\|85-94\|95-99\|100\|101&q=&offset=&limit<=200` | list of `EditorSegment` plus `total` |
+| POST | /jobs/{id}/segments/{seg}/check | cust | `{target_tagged}` | `{issues[], blocking, terms[], term_violations[]}`. Hard QA on a draft, nothing saved |
+| GET | /jobs/{id}/segments/{seg}/assist | cust | | `{tm_matches: [{entry_id, kind, score, source_tagged, target_tagged, diff: [{op: equal\|delete\|insert, text}]}], terms[]}`; diff runs from the match source to this source |
+| POST | /jobs/{id}/segments/{seg}/mt | pm | `{engine?}` | `{target_tagged, engine, model_version}`; org routing (scoreboard, default, workflow engine); not saved, cost added to the job |
+| POST | /jobs/{id}/segments/{seg}/split | pm | `{source_offset, target_offset?}` (offsets in the tagged strings) | `{segments: [EditorSegment, EditorSegment], segment_count}`; 422 inside a code, an escape or an open pair, or without `target_offset` when the segment has a target; 422 `tag_error` when a half loses its codes |
+| POST | /jobs/{id}/segments/{seg}/merge-next | pm | | `{segment, segment_count}`; only the next segment of the same unit, else 409 |
+| POST | /jobs/{id}/segments/lock | pm | `{segment_ids[], locked=true}` | `{changed, locked}` |
+| POST | /jobs/{id}/find-replace | cust | `{find, replace?, regex, case_sensitive, whole_word, scope: target\|source\|both, states?, segment_ids?, apply=false, force=false}` | `{items: [{segment_id, seq, state, locked, source_matches, target_matches, source_tagged, before, after, skip_reason}], total_matches, segments, changed, skipped, applied}`. Text runs only; `skip_reason`: `locked`, `approved`, `state`, `tag_error`, `unchanged`; `force` (PM only) includes locked and approved segments |
+| GET | /jobs/{id}/comments | cust | `?segment_id=&kind=comment\|query&resolved=` | list of `Comment` (client: queries only) |
+| POST | /jobs/{id}/comments | cust | `{body, kind=comment\|query, segment_id?, parent_id?, mentions?}` | 201 `Comment`. Clients only reply to queries (403 on a new thread). A new query emits webhook `job.query.opened` |
+| PATCH | /comments/{id} | cust | `{resolved}` | the thread root `Comment` |
+| GET | /queries | cust | | open query threads of the org: `Comment` + `{filename, segment_seq, source_tagged, target_tagged, replies[]}` |
+| GET | /jobs/{id}/preview | cust | | `text/html` of the target document (html, markdown, docx rendered; other formats side by side); header `X-Preview-Mode: rich\|side_by_side`, CSP `sandbox` |
+| GET | /tm/concordance | cust | `?q=&source_lang=&target_lang=&side=both\|source\|target&limit<=100` | `{items: [{entry_id, source_tagged, target_tagged, score, origin, updated_at}]}` |
+
+Locks: PATCH `/jobs/{id}/segments/{seg}` and `/approve` answer 409 `segment_locked` for a locked segment unless the caller is a PM or an API key. `Segment` gains `locked`.
+
+`EditorSegment` = `Segment` + `{unit_id, seg_index, word_count, locked, locked_by, locked_at, qa_count, comment_threads, open_queries, slots}`. `slots` maps editor splits (0 = second half of a split) and merges (k = covers k extracted segments) back onto the file (pipeline/units.py).
+
+`Comment`: `{id, job_id, segment_id, thread_id, parent_id, kind, author_id, author_role, body, mentions[], resolved, resolved_by, resolved_at, created_at}`.
+
+## TM tools (module `tms`)
+
+| Method | Path | Role | Body / query | Returns |
+|---|---|---|---|---|
+| GET | /tm/entries | cust | `?q=&source_lang=&target_lang=&origin=review\|import\|client&status=approved\|imported\|stale&created_from=&created_to=` | list of `TmEntry` |
+| PATCH | /tm/entries/{id} | pm | `{source_tagged?, target_tagged?, status?: approved\|stale}` | `TmEntry` (source edits rehash and re-embed) |
+| DELETE | /tm/entries/{id} | pm | | 204 |
+| POST | /tm/entries/bulk | pm | `{ids[], action: delete\|mark_stale\|mark_approved}` | `{changed, action}` |
+| POST | /tm/align | pm | multipart `source_file`, `target_file`, `source_lang`, `target_lang`, `content_type?` | 201 `Alignment` (review grid, nothing stored yet) |
+| GET | /tm/align/{id} | cust | | `Alignment` |
+| POST | /tm/align/{id}/commit | pm | `{rights_confirmed: true, pairs?: [{index, accepted, source?, target?}]}` | `{imported, skipped, alignment}`; 422 `rights_not_confirmed`, 409 when already committed |
+| POST | /glossaries/{id}/extract | pm | multipart: `job_id` or `file` + `source_lang`, `target_lang?`, `min_freq=2`, `limit=50` | `{source_lang, target_lang, job_id, filename, items: [{source_term, frequency, words, variants[], target_candidates: [{term, score, count}]}]}` |
+| POST | /glossaries/{id}/extract/accept | pm | `{terms: [{source_term, target_term?, kind, source_lang, target_lang, note?}]}` | 201 list of `Term` |
+| GET | /tm/qa | cust | `?source_lang=&target_lang=&glossary_id=&limit=` | `{inconsistent: [{source_tagged, variants: [{target_tagged, entry_ids[], origins[], updated_at}]}], glossary_violations: [{entry_id, source_tagged, target_tagged, violations[]}]}` |
+
+`TmEntry`: `{id, source_lang, target_lang, content_type, source_tagged, target_tagged, status, origin, job_id, has_context, rights_confirmed_by, created_at, updated_at}`.
+`Alignment`: `{id, source_lang, target_lang, source_filename, target_filename, content_type, status: review|committed, committed_count, pairs: [{index, src[], tgt[], source, target, confidence 0..1, accepted}], stats: {pairs, one_to_one, unaligned, low_confidence}, created_at, committed_at}`.
+
+## LQA scorecards (module `ai`)
+
+| Method | Path | Role | Returns |
+|---|---|---|---|
+| GET | /jobs/{id}/lqa | cust | `Scorecard` + `{job_id, segments_with_errors, sources: {reviewer, senate}, errors: [{segment_id, seq, dimension, severity, span, explanation, source, source_text, target_text}]}` |
+| GET | /jobs/{id}/lqa.pdf | cust | PDF |
+| GET | /jobs/{id}/lqa.xlsx | cust | XLSX (sheets Summary, Errors) |
+| GET | /lqa/settings | cust | `{threshold, weights{dimension: factor}, dimensions[]}` |
+| PUT | /lqa/settings | pm | body `{threshold?, weights?, reset?}`; 422 on an unknown dimension or out-of-range value |
+
+`Scorecard`: `{word_count, error_count, by_dimension: {dimension: {neutral, minor, major, critical, penalty}}, by_severity, penalty, score, threshold, passed, weights}`. Score = 100 - penalty*100/words, penalty = sum(severity weight 0/1/5/25 x dimension weight). Default threshold 95.
+
+## Auditor (module `auditor`)
+
+| Method | Path | Role | Body / query | Returns |
+|---|---|---|---|---|
+| POST | /audits | pm | multipart `file` (XLIFF 1.2/2.x, TMX, CSV/TSV, XLSX) or `file` + `target_file` (any supported document format, aligned), `source_lang`, `target_lang`, `name?`, `glossary_id?`, `ai_mode=none\|sample\|full`, `ai_sample_pct=10`, `threshold?`, `consistency=true`, `content_type?` | 201 `Audit` (state `queued`; worker steps `audit.parse`, `audit.check` per 100 segments, `audit.finish`) |
+| GET | /audits | cust | | list of `Audit` |
+| GET | /audits/{id} | cust | | `Audit` (poll `progress` 0..1) |
+| GET | /audits/{id}/segments | cust | `?severity=a,b&min_severity=&dimension=&code=&with_issues=` | list of `AuditSegment` plus `total` |
+| GET | /audits/{id}/stats | cust | | `{by_max_severity}` |
+| GET | /audits/{id}/report.pdf | cust | | PDF; 409 before `done` |
+| GET | /audits/{id}/report.xlsx | cust | | XLSX; 409 before `done` |
+| GET | /audits/{id}/annotated.xlf | cust | | the uploaded XLIFF with one note per finding (`from`/`category` `arbiter-auditor`); a fresh XLIFF 2.1 for other inputs; 409 before `done` |
+| POST | /audits/{id}/retry | pm | | `Audit` back to `queued`; 409 unless `failed` |
+
+`Audit`: `{id, name, source_lang, target_lang, input_format: xliff|tmx|csv|xlsx|pair, filename, target_filename, glossary_id, settings, state: queued|running|done|failed, progress, segments_total, segments_done, word_count, mqm_score, verdict: pass|fail|null, ai_units (decimal string), summary: {segments, words, segments_with_issues, issues_by_code, issues_by_severity, ai: {mode, sample_pct, checked, failed, units}, consistency: {inconsistent_translations, inconsistent_sources}, scorecard, notes}, error, created_at, started_at, finished_at}`.
+`AuditSegment`: `{id, seq, ref, source_tagged, target_tagged, word_count, issues: [{code, severity, message, blocking, kind: qa|term|consistency, dimension, mqm_severity}], mqm_errors[], ai_checked, score, max_severity, dimensions[]}`.
+AI judge calls are metered as `ai_unit` usage (0.05 per judged segment, key `<audit id>:ai`).

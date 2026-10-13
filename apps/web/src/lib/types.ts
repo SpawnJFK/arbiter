@@ -665,6 +665,7 @@ export const WEBHOOK_EVENTS = [
   "job.delivered",
   "job.failed",
   "job.needs_attention",
+  "job.query.opened",
   "quote.expired",
   "strings.release.published",
 ] as const;

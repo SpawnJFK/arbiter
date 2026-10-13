@@ -4,8 +4,8 @@ Two callers, one final schema:
   * the test suite (and `create_schema()` in general) builds the CURRENT schema from the
     models with metadata.create_all;
   * Alembic builds it step by step: migration 0001 calls `create_schema(conn, revision="0001")`,
-    which leaves out every object a later, hand-written migration adds (LATER_TABLES and
-    LATER_COLUMNS below), so `alembic upgrade head` on an empty database runs 0002+ for real
+    which leaves out every object a later, hand-written migration adds (LATER_TABLES,
+    LATER_COLUMNS and LATER_INDEXES below), so `alembic upgrade head` on an empty database runs 0002+ for real
     and ends with the same schema as create_all.
 When a new migration adds tables or columns, list them here too.
 """
@@ -62,18 +62,34 @@ LATER_TABLES: frozenset[str] = frozenset(
         "string_history",
         "string_releases",
         "string_batches",
+        # 0008_workbench_auditor
+        "segment_comments",
+        "tm_alignments",
+        "audits",
+        "audit_segments",
     }
 )
 LATER_COLUMNS: dict[str, frozenset[str]] = {
     "projects": frozenset({"account_id", "workflow_template_id"}),
     "jobs": frozenset({"account_id", "workflow", "client_approved_at", "senate_count"}),
     "users": frozenset({"role_id"}),  # 0005_platform
+    "segments": frozenset({"locked_by", "locked_at"}),
+}
+# Indexes a later migration adds to a table that 0001 already created.
+LATER_INDEXES: dict[str, frozenset[str]] = {
+    "tm_entries": frozenset({"ix_tm_trgm_target"}),
 }
 
 
-def _without(table: Table, meta: MetaData, drop: frozenset[str]) -> Table:
-    """Copy of `table` into `meta` minus the columns in `drop` (and their FKs and indexes)."""
+def _without(
+    table: Table, meta: MetaData, drop: frozenset[str], drop_indexes: frozenset[str] = frozenset()
+) -> Table:
+    """Copy of `table` into `meta` minus the columns in `drop` (and their FKs and indexes)
+    and minus the indexes named in `drop_indexes`."""
     t = table.to_metadata(meta)
+    for ix in list(t.indexes):
+        if ix.name in drop_indexes:
+            t.indexes.discard(ix)
     for name in drop:
         col = t.c[name]
         for fk in list(col.foreign_keys):
@@ -92,7 +108,12 @@ def metadata_0001() -> MetaData:
     for table in Base.metadata.sorted_tables:
         if table.name in LATER_TABLES:
             continue
-        _without(table, meta, LATER_COLUMNS.get(table.name, frozenset()))
+        _without(
+            table,
+            meta,
+            LATER_COLUMNS.get(table.name, frozenset()),
+            LATER_INDEXES.get(table.name, frozenset()),
+        )
     return meta
 
 

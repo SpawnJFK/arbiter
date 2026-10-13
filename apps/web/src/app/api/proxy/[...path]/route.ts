@@ -9,8 +9,20 @@ type Ctx = { params: Promise<{ path: string[] }> };
 // Request headers worth forwarding to the backend; everything else (cookies!) stays here.
 const FORWARD_REQ = ["accept", "content-type", "idempotency-key", "if-none-match"];
 // Response headers worth passing back to the browser.
-// `location`: downloads from object storage answer 302 to a short-lived presigned URL.
-const FORWARD_RES = ["content-type", "content-disposition", "content-length", "etag", "cache-control", "retry-after", "location"];
+const FORWARD_RES = [
+  "content-type",
+  "content-disposition",
+  "content-length",
+  "etag",
+  "cache-control",
+  "retry-after",
+  // Downloads from object storage answer 302 to a short-lived presigned URL.
+  "location",
+  // The job preview (GET /jobs/{id}/preview) is sandboxed by its own CSP.
+  "content-security-policy",
+  "x-content-type-options",
+  "x-preview-mode",
+];
 
 /**
  * Thin authenticated proxy: /api/proxy/<path> -> <API>/v1/<path>, adding the Bearer token from

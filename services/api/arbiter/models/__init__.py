@@ -48,11 +48,14 @@ from arbiter.models.strings import (
     StringTranslation,
 )
 from arbiter.models.tenancy import ApiKey, Organization, User
+from arbiter.models.workbench import Audit, AuditSegment, SegmentComment, TmAlignment
 
 __all__ = [
     "AccountToken",
     "ApiKey",
     "AssistantMessage",
+    "Audit",
+    "AuditSegment",
     "AssistantThread",
     "AuditEvent",
     "CrmAccount",
@@ -94,6 +97,7 @@ __all__ = [
     "ReviewerScoreEvent",
     "ReviewerTest",
     "Segment",
+    "SegmentComment",
     "SenateRun",
     "StringBatch",
     "StringBranch",
@@ -107,6 +111,7 @@ __all__ = [
     "TermQuestion",
     "TestAttempt",
     "Threshold",
+    "TmAlignment",
     "TmEntry",
     "UiLocale",
     "UploadSession",

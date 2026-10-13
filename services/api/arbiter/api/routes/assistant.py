@@ -15,12 +15,12 @@ from sqlalchemy import select
 
 from arbiter.agency import assistant
 from arbiter.agency.common import normalize_locale
-from arbiter.api.deps import DB, PM, Paging, Principal, listing
+from arbiter.api.deps import DB, PM, Paging, Principal, listing, require_module
 from arbiter.api.routes.projects import idempotent_post
 from arbiter.errors import NotFound
 from arbiter.models import AssistantMessage, AssistantThread
 
-router = APIRouter(tags=["assistant"])
+router = APIRouter(tags=["assistant"], dependencies=[require_module("pm")])
 
 
 def _uid(p: Principal) -> str | None:

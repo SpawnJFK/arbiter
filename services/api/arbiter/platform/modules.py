@@ -18,7 +18,8 @@ Rules:
   with error code `module_disabled` (the feature does not exist for that org).
 - Modules never import each other's internals; they talk through contracts.py and the
   pipeline hooks. Removing a module's package must not break import of the others
-  (enforced by tests/platform/test_module_isolation.py once modules land).
+  (tests/platform/test_module_isolation.py checks the imports statically; MODULE_PACKAGES
+  there maps packages to modules).
 - Entitlements live in org.settings["modules"] (list of module keys). Billing writes them
   (plan purchase); the platform admin can override. Default for a new org: DEFAULT_MODULES.
 """
@@ -57,3 +58,35 @@ def org_has_module(org: Any, module: str) -> bool:
         return True
     enabled = org_modules(org)
     return module in enabled and all(dep in enabled for dep in MODULES[module]["depends_on"])
+
+
+def effective_modules(org: Any) -> list[str]:
+    """Modules that actually work for the org (enabled and every dependency enabled)."""
+    return [m for m in MODULES if org_has_module(org, m)]
+
+
+def catalog(org: Any) -> list[dict[str, Any]]:
+    effective = set(effective_modules(org))
+    return [
+        {"key": k, "name": v["name"], "depends_on": list(v["depends_on"]), "enabled": k in effective}
+        for k, v in MODULES.items()
+    ]
+
+
+def module_problems(modules: list[str]) -> list[str]:
+    """Why a module list cannot be stored (unknown keys, missing dependencies). Empty = fine."""
+    problems = [f"unknown module {m!r}" for m in modules if m not in MODULES]
+    chosen = set(modules)
+    for m in modules:
+        for dep in MODULES.get(m, {}).get("depends_on", []):
+            if dep not in chosen:
+                problems.append(f"module {m!r} needs {dep!r}")
+    return problems
+
+
+def set_org_modules(org: Any, modules: list[str]) -> list[str]:
+    """Store the entitlement list (caller validated it). Returns the stored list in catalog order.
+    The settings dict is replaced, not mutated, so SQLAlchemy sees the JSON change."""
+    ordered = [m for m in MODULES if m in set(modules)]
+    org.settings = {**(org.settings or {}), "modules": ordered}
+    return ordered

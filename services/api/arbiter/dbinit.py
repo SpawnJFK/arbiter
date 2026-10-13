@@ -16,6 +16,7 @@ from sqlalchemy import Connection, MetaData, Table, text
 
 import arbiter.models  # noqa: F401  (registers every table on Base.metadata)
 from arbiter.db import Base
+from arbiter.models.platform import AUDIT_APPEND_ONLY_TRIGGER_SQL
 from arbiter.models.provenance import APPEND_ONLY_TRIGGER_SQL
 
 EXTENSIONS_SQL = ("CREATE EXTENSION IF NOT EXISTS vector", "CREATE EXTENSION IF NOT EXISTS pg_trgm")
@@ -39,11 +40,19 @@ LATER_TABLES: frozenset[str] = frozenset(
         "upload_sessions",
         "email_messages",
         "account_tokens",
+        # 0005_platform
+        "roles",
+        "user_invites",
+        "audit_events",
+        "sso_configs",
+        "sso_domains",
+        "sso_states",
     }
 )
 LATER_COLUMNS: dict[str, frozenset[str]] = {
     "projects": frozenset({"account_id", "workflow_template_id"}),
     "jobs": frozenset({"account_id", "workflow", "client_approved_at", "senate_count"}),
+    "users": frozenset({"role_id"}),  # 0005_platform
 }
 
 
@@ -78,8 +87,11 @@ def create_schema(conn: Connection, revision: str | None = None) -> None:
     meta = metadata_0001() if revision == "0001" else Base.metadata
     meta.create_all(conn)
     conn.execute(text(APPEND_ONLY_TRIGGER_SQL))
+    if revision != "0001":  # migration 0005 creates audit_events and its trigger
+        conn.execute(text(AUDIT_APPEND_ONLY_TRIGGER_SQL))
 
 
 def drop_schema(conn: Connection) -> None:
     Base.metadata.drop_all(conn)
     conn.execute(text("DROP FUNCTION IF EXISTS provenance_append_only() CASCADE"))
+    conn.execute(text("DROP FUNCTION IF EXISTS audit_append_only() CASCADE"))

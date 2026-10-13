@@ -9,11 +9,11 @@ from sqlalchemy import select
 
 from arbiter.agency import dashboards as dsh
 from arbiter.agency.schemas import DashboardIn, DashboardPatch
-from arbiter.api.deps import DB, PM, Customer, Paging, Principal, listing
+from arbiter.api.deps import DB, PM, Customer, Paging, Principal, listing, require_module
 from arbiter.api.routes.projects import idempotent_post
 from arbiter.models import Dashboard
 
-router = APIRouter(tags=["dashboards"])
+router = APIRouter(tags=["dashboards"], dependencies=[require_module("pm")])
 
 
 def _uid(p: Principal) -> str | None:

@@ -1,10 +1,10 @@
-"""Password reset and invitation acceptance.
+"""Password reset (team invitations are accepted at /v1/auth/invite/accept, see routes/platform.py).
 
     POST /v1/auth/password/forgot  {email}            -> 202 {ok: true}   (always the same answer)
     POST /v1/auth/password/reset   {token, password}  -> 200 {token, user} (signed in)
 
-Tokens are single use, expire (ARBITER_PASSWORD_RESET_TTL_MINUTES, invites
-ARBITER_INVITE_TTL_HOURS) and only their SHA-256 is stored. Asking again invalidates the
+Tokens are single use, expire (ARBITER_PASSWORD_RESET_TTL_MINUTES) and only their SHA-256
+is stored. Asking again invalidates the
 previous link. `forgot` never reveals whether an address has an account.
 """
 
@@ -48,7 +48,7 @@ def forgot(body: ForgotIn, db: DB) -> JSONResponse:
 
 @router.post("/auth/password/reset")
 def reset(body: ResetIn, db: DB) -> dict[str, Any]:
-    user = notify.consume_token(db, body.token, ("reset", "invite"))
+    user = notify.consume_token(db, body.token, ("reset",))
     if user is None or not user.is_active:
         raise InvalidToken("this link is invalid or has expired; ask for a new one")
     user.password_hash = security.hash_password(body.password)

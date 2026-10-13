@@ -201,19 +201,18 @@ def request_password_reset(session: Session, email: str) -> bool:
     return True
 
 
-def send_invite(session: Session, user: User, inviter: str, org_name: str) -> EmailMessage:
-    """Invitation with a set-password link (the reset page accepts invite tokens too)."""
-    settings = get_settings()
-    hours = settings.invite_ttl_hours
-    token = issue_token(session, user, "invite", timedelta(hours=hours))
-    link = f"{settings.web_base_url.rstrip('/')}/reset-password?token={token}&invite=1"
+def send_invite(
+    session: Session, user: User, *, link: str, inviter: str, org_name: str, hours: int
+) -> EmailMessage:
+    """Team invitation email. The link and its single-use token come from
+    arbiter.platform.team (user_invites, accepted at /v1/auth/invite/accept); this only sends it."""
     return queue_email(
         session,
         to=user.email,
         template="user_invite",
         context={
             "name": user.name or user.email,
-            "inviter": inviter,
+            "inviter": inviter or org_name,
             "org_name": org_name,
             "link": link,
             "hours": hours,

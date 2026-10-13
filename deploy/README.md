@@ -73,6 +73,7 @@ Fill in at minimum:
 - `DOMAIN` (e.g. `example.com`, no `app.` prefix) and `ACME_EMAIL`
 - `POSTGRES_PASSWORD`: `openssl rand -base64 32 | tr -d '/+='`
 - `ARBITER_JWT_SECRET`: `openssl rand -hex 48`
+- `ARBITER_SECRETS_KEY`: a Fernet key, `python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` (encrypts SSO client secrets at rest; keep a copy, losing it means re-entering every IdP secret)
 - `ARBITER_ENV=prod`
 - provider keys you actually use (`ARBITER_ANTHROPIC_API_KEY`, `ARBITER_OPENAI_API_KEY`, `ARBITER_DEEPL_API_KEY`, `ARBITER_GOOGLE_API_KEY`) and set `ARBITER_DEFAULT_MT_ENGINE` / `ARBITER_DEFAULT_JUDGE_ENGINE` away from the mock engines
 - `RCLONE_REMOTE` for backups (step 8)

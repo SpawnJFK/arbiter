@@ -71,6 +71,7 @@ import type {
   WebhookEvent,
 } from "./types";
 import type { LocaleInfo } from "./i18n/locales";
+import { platformEndpoints } from "./platform-api";
 
 export class ApiError extends Error {
   status: number;
@@ -372,6 +373,9 @@ export function createApi(item: Transport) {
     deleteWebhook: (id: string) => del(`/webhooks/${enc(id)}`),
     usage: (period?: string) => get<Usage>("/usage", { period }),
     invoices: (p?: ListParams) => get<ListResponse<Invoice>>("/invoices", page(p)),
+
+    // Platform: modules, roles, team, audit log, SSO (src/lib/platform-api.ts)
+    ...platformEndpoints(item),
   };
 }
 

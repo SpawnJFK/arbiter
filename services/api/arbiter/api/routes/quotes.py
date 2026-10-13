@@ -9,13 +9,13 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from arbiter.agency import crm, pricelists
-from arbiter.api.deps import DB, Customer
+from arbiter.api.deps import DB, Customer, require_module
 from arbiter.api.routes.projects import idempotent_replay, idempotent_store
 from arbiter.billing.quotes import build_quote, quote_view
 from arbiter.errors import Invalid, NotFound
 from arbiter.models import FileAsset, Quote, utcnow
 
-router = APIRouter(tags=["quotes"])
+router = APIRouter(tags=["quotes"], dependencies=[require_module("tms")])
 
 
 class QuoteIn(BaseModel):

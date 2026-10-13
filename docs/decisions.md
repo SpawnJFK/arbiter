@@ -743,3 +743,72 @@ Date: 2026-10-09. Status: accepted.
 - *Read the key from an environment variable in the file.* Cursor's support for env interpolation in MCP headers differs across versions; a gitignored file is predictable.
 
 **Consequences.** Pulling the commit that untracks the file deletes the owner's local copy; Context7 in Cursor is off until P00 item 16 writes the new file.
+
+## D-051 Blob storage behind one interface (local or S3) with presigned direct uploads; email through the work queue
+Date: 2026-10-13. Status: accepted.
+
+**Context.** Uploads of up to 1 GB went through the API as multipart bodies, which does not survive a CDN or proxy body limit and ties files to one box. There was no way to send email (password reset, invites, job notifications).
+
+**Decision.** `arbiter/storage.py` exposes one `Storage` protocol with two backends picked by `ARBITER_STORAGE_BACKEND`: `local` (files under `storage_dir`, direct uploads go to the API's own HMAC-signed `PUT /v1/uploads/{id}/blob`) and `s3` (any S3-compatible store, browser PUTs to a presigned URL and downloads through presigned GETs). The browser flow is the same in both: `POST /v1/uploads`, PUT the bytes, `POST /v1/uploads/{id}/complete`. Email is queued: `notify.queue_email()` writes an `email_messages` row and an `email.send` work item in the caller's transaction; the worker sends through `log` (dev, test) or `smtp`. Single-use links (password reset) store only a SHA-256 in `account_tokens`.
+
+**Rejected.**
+- *Keeping multipart uploads only.* Body limits at the edge and memory pressure on the API for large files.
+- *Sending email inline in the request.* A slow or failing mail server would fail or roll back the change that caused the email.
+- *A provider-specific email SDK.* SMTP works with every transactional provider, so switching is a settings change.
+
+**Consequences.** `POST /v1/files` stays for small files and as a fallback. Delivery state of every email is visible in `email_messages`; dead `email.send` items mark the message `failed`.
+
+## D-052 Module gating at router level; disabled module = 404 `module_disabled`
+Date: 2026-10-13. Status: accepted.
+
+**Context.** Arbiter is sold as separable modules (`platform/modules.py`). Existing routes had no notion of entitlement, and the web showed every section to everyone.
+
+**Decision.** Each product route module declares `APIRouter(dependencies=[require_module("<key>")])`, so a new route in that file is gated without anyone remembering to add it. Entitlements stay in `org.settings["modules"]`; the platform admin edits them with `PUT /v1/admin/orgs/{id}/modules` (billing will write the same list). `Org.modules` in `/me` carries the effective list and the web hides nav sections of disabled modules. Module isolation is checked statically (`tests/platform/test_module_isolation.py`, ast), with the six cross-module imports that already existed listed as known debt.
+
+**Rejected.**
+- *A middleware mapping URL prefixes to modules.* A second place that must know every path; a renamed route silently becomes ungated.
+- *403 for a disabled module.* The feature does not exist for the org; 404 matches the tenancy rule and does not advertise what could be bought.
+- *Importing each package with another one deleted (sys.modules tricks).* Slow, flaky and order-dependent in one interpreter; the static check gives the same guarantee for imports.
+
+**Consequences.** Platform routes (auth, org, API keys, webhooks, usage, invoices, i18n, roles, team, audit, SSO) are never gated. Paying down the known debt (`engines.tags` used by quality, `quality.prompts` by engines, `engines.registry` by agency) means moving those helpers behind contracts.py.
+
+## D-053 Custom roles replace the base role's permissions; escalation guards; `audit.read` is explicit-only
+Date: 2026-10-13. Status: accepted.
+
+**Context.** Agencies need roles beyond pm and client (auditor, team lead, finance). The permission seam already allowed a principal-level override.
+
+**Decision.** `roles` table per org with `base_role` (pm or client, drives the coarse route guards) and `permissions` (patterns). A user with `role_id` gets exactly those permissions for `require_permission` checks; an empty list grants nothing. Nobody grants a permission they do not hold (`permissions.covers`), only a pm creates or assigns pm-based roles, nobody changes their own role, and an org always keeps one active pm. Team and role writes need a signed-in user, never an API key. `audit.read` is not granted by `*.read`, so clients and API keys do not read the audit log by default.
+
+**Rejected.**
+- *Custom permissions added on top of the base role.* Then a restricted role (read-only auditor) is impossible to express on a pm base.
+- *Permission-only routing with no base role.* Every existing route uses coarse role guards; rewriting all of them in this change is too large and risky.
+
+**Consequences.** Coarse guards still decide which routes a user can reach at all; permissions refine access on routes that check them (platform routes now; other modules can adopt `require_permission` gradually).
+
+## D-054 Audit log: append-only table, written in the request transaction
+Date: 2026-10-13. Status: accepted.
+
+**Context.** Enterprise buyers ask who changed org settings, keys, roles, SSO and production data.
+
+**Decision.** `audit_events` with a trigger rejecting UPDATE and DELETE (same pattern as provenance). `platform.audit.audit()` adds the row in the caller's session, so the event commits or rolls back with the change. A pure ASGI middleware puts client IP and user agent in a context variable; `X-Forwarded-For` is used only with `ARBITER_TRUST_PROXY_HEADERS`. Secret-looking keys in `data` are redacted; the CSV export guards against spreadsheet formula injection.
+
+**Rejected.**
+- *A generic middleware that logs every non-GET request.* No target ids or before/after values, and it logs failed requests as if they happened.
+- *Writing audit rows in a separate transaction.* Events for changes that were rolled back would remain.
+
+**Consequences.** Failed logins are not audited yet (the request transaction rolls back); that needs a separate short transaction and rate limiting, a later item.
+
+## D-055 SSO: OpenID Connect code flow with PKCE, domains proven by DNS TXT, pyjwt + httpx
+Date: 2026-10-13. Status: accepted.
+
+**Context.** Enterprise customers require login through their IdP. The stack already has pyjwt and httpx; authlib was an option.
+
+**Decision.** One OIDC IdP per org (`sso_configs`), client secret encrypted with Fernet under `ARBITER_SECRETS_KEY` (comma-separated keys for rotation). Email domains (`sso_domains`) route logins to an org only after a DNS TXT record (checked through DNS-over-HTTPS) or a platform admin verifies them. Login state, nonce and PKCE verifier live in a single-use `sso_states` row, consumed before validation. The id_token is checked with pyjwt against the IdP JWKS fetched with httpx (asymmetric algorithms only, issuer, audience, azp, expiry, nonce, `email_verified` not false). Unknown users are provisioned with the org's default role; an email owned by another org is never taken over. `enforce_sso` blocks password login and requires a verified domain first.
+
+**Rejected.**
+- *authlib.* A large dependency for a flow of about 200 lines; its JWKS fetching is harder to stub with httpx.MockTransport.
+- *Stateless signed state (JWT in the state parameter).* Cannot be made single use without a store, and would expose the PKCE verifier in the URL.
+- *Trusting a domain because the configuring admin's email is in it.* Anyone can register with any address; that is not proof of control.
+- *SAML now.* Most target IdPs (Entra ID, Okta, Google Workspace) speak OIDC; SAML is a later item.
+
+**Consequences.** The web exposes `/api/sso/start` and `/api/sso/callback`; the IdP must allow `<ARBITER_WEB_BASE_URL>/api/sso/callback` as redirect URI. SCIM provisioning and SAML are later items.

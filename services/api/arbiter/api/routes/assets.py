@@ -15,15 +15,16 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from arbiter.api.deps import DB, PM, Customer, Paging, Principal, listing
+from arbiter.api.deps import DB, PM, Customer, Paging, Principal, listing, require_module
 from arbiter.api.routes.jobs import actor_of, attachment
 from arbiter.api.routes.projects import idempotent_replay, idempotent_store
 from arbiter.errors import Conflict, Invalid, NotFound
 from arbiter.linguistic import glossary as gl
 from arbiter.linguistic import tm
 from arbiter.models import Glossary, Term, TermQuestion
+from arbiter.platform.audit import audit
 
-router = APIRouter(tags=["assets"])
+router = APIRouter(tags=["assets"], dependencies=[require_module("tms")])
 
 MAX_ASSET_BYTES = 100 * 1024 * 1024
 TermKind = Literal["mandatory", "preferred", "forbidden", "do_not_translate"]
@@ -261,14 +262,17 @@ def import_glossary(
     ext = _ext(file)
     data = _read(file)
     if ext in ("csv", "tsv", "txt"):
-        return gl.import_csv(db, g.id, data, source_lang=source_lang or None, target_lang=target_lang or None)
-    if ext in ("tbx", "xml"):
+        out = gl.import_csv(db, g.id, data, source_lang=source_lang or None, target_lang=target_lang or None)
+    elif ext in ("tbx", "xml"):
         sl = (source_lang or "").strip() or _tbx_lang(data)
         if not sl:
             raise Invalid("source_lang is required for this TBX file (no xml:lang on the root element)")
         targets = [target_lang] if target_lang else None
-        return gl.import_tbx(db, g.id, data, source_lang=sl, target_langs=targets)
-    raise Invalid("glossary import accepts .csv, .tsv or .tbx files")
+        out = gl.import_tbx(db, g.id, data, source_lang=sl, target_langs=targets)
+    else:
+        raise Invalid("glossary import accepts .csv, .tsv or .tbx files")
+    audit(db, p, "glossary.imported", "glossary", g.id, {"file": file.filename, "format": ext, "result": out})
+    return out
 
 
 @router.get("/glossaries/{glossary_id}/export")
@@ -315,7 +319,7 @@ def import_tm(
     if _ext(file) not in ("tmx", "xml"):
         raise Invalid("TM import accepts .tmx files")
     data = _read(file)
-    return tm.import_tmx(
+    out = tm.import_tmx(
         db,
         p.org_id,
         data,
@@ -323,6 +327,10 @@ def import_tm(
         content_type=content_type or "general",
         source_lang=source_lang or None,
     )
+    audit(
+        db, p, "tm.imported", "tm", p.org_id, {"file": file.filename, "rights_confirmed": True, "result": out}
+    )
+    return out
 
 
 @router.get("/tm/search")

@@ -14,12 +14,23 @@ from arbiter.api import security
 from arbiter.api.deps import DB, PM, Auth, Customer, Unauthorized
 from arbiter.errors import Conflict, Invalid, NotFound
 from arbiter.models import ApiKey, Organization, User, utcnow
+from arbiter.platform.audit import as_actor, audit
+from arbiter.platform.modules import effective_modules
+from arbiter.platform.permissions import granted_permissions
+from arbiter.platform.sso import SsoRequired, sso_enforced_for
 
 router = APIRouter(tags=["auth"])
 
 
 def user_view(u: User) -> dict[str, Any]:
-    return {"id": u.id, "email": u.email, "name": u.name, "role": u.role, "org_id": u.org_id}
+    return {
+        "id": u.id,
+        "email": u.email,
+        "name": u.name,
+        "role": u.role,
+        "role_id": u.role_id,
+        "org_id": u.org_id,
+    }
 
 
 def org_view(o: Organization) -> dict[str, Any]:
@@ -34,6 +45,8 @@ def org_view(o: Organization) -> dict[str, Any]:
         "regulated": o.regulated,
         "vertical": o.vertical,
         "data_retention_days": o.data_retention_days,
+        # Modules that work for this org (platform.modules); the web hides the others.
+        "modules": effective_modules(o),
     }
 
 
@@ -79,6 +92,14 @@ def register(body: RegisterIn, db: DB) -> dict[str, Any]:
     )
     db.add(user)
     db.flush()
+    audit(
+        db,
+        as_actor(user, org),
+        "org.created",
+        "organization",
+        org.id,
+        {"name": org.name, "owner": user.email},
+    )
     return {
         "token": security.issue_token(user.id, user.role, org.id),
         "user": user_view(user),
@@ -91,12 +112,28 @@ def login(body: LoginIn, db: DB) -> dict[str, Any]:
     user = db.execute(select(User).where(User.email == body.email.lower())).scalar_one_or_none()
     if user is None or not user.is_active or not security.verify_password(user.password_hash, body.password):
         raise Unauthorized("wrong email or password")
+    if sso_enforced_for(db, user):
+        raise SsoRequired("your organization requires single sign-on")
+    if user.org_id:
+        audit(
+            db,
+            as_actor(user, db.get(Organization, user.org_id)),
+            "auth.login",
+            "user",
+            user.id,
+            {"method": "password"},
+        )
     return {"token": security.issue_token(user.id, user.role, user.org_id), "user": user_view(user)}
 
 
 @router.get("/me")
 def me(p: Auth) -> dict[str, Any]:
-    return {"user": user_view(p.user) if p.user else None, "org": org_view(p.org) if p.org else None}
+    return {
+        "user": user_view(p.user) if p.user else None,
+        "org": org_view(p.org) if p.org else None,
+        # Granted permission patterns ("jobs.*", "*.read"); the web mirrors has_permission().
+        "permissions": sorted(granted_permissions(p)),
+    }
 
 
 @router.get("/org")
@@ -116,11 +153,16 @@ class OrgPatch(BaseModel):
 
 
 @router.patch("/org")
-def patch_org(body: OrgPatch, p: PM) -> dict[str, Any]:
+def patch_org(body: OrgPatch, p: PM, db: DB) -> dict[str, Any]:
     org = p.org
     assert org is not None
+    before = org_view(org)
     update_org(org, body.model_dump(exclude_none=True))  # R-SEG-12 rules live in agency.org
-    return org_view(org)
+    after = org_view(org)
+    changes = {k: {"from": before[k], "to": v} for k, v in after.items() if before.get(k) != v}
+    if changes:
+        audit(db, p, "org.updated", "organization", org.id, {"changes": changes})
+    return after
 
 
 class ApiKeyIn(BaseModel):
@@ -157,6 +199,7 @@ def create_key(body: ApiKeyIn, p: PM, db: DB) -> dict[str, Any]:
     k = ApiKey(org_id=p.org_id, name=body.name, prefix=prefix, secret_hash=secret_hash, scopes=body.scopes)
     db.add(k)
     db.flush()
+    audit(db, p, "api_key.created", "api_key", k.id, {"name": k.name, "prefix": k.prefix, "scopes": k.scopes})
     return {**_key_view(k), "key": full}
 
 
@@ -166,4 +209,5 @@ def revoke_key(key_id: str, p: PM, db: DB) -> Response:
     if k is None or k.org_id != p.org_id:
         raise NotFound("API key not found")
     k.revoked_at = utcnow()
+    audit(db, p, "api_key.revoked", "api_key", k.id, {"name": k.name, "prefix": k.prefix})
     return Response(status_code=204)

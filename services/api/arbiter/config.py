@@ -30,6 +30,21 @@ class Settings(BaseSettings):
     # Auth
     jwt_secret: str = Field(default="dev-only-change-me-not-for-production-use", min_length=32)
     jwt_ttl_minutes: int = 60 * 12
+    # Master key for secrets stored in the database (SSO client secrets, BYOK keys). Comma
+    # separated for rotation: the first key encrypts, every key decrypts. A Fernet key
+    # (urlsafe base64 of 32 bytes) or any passphrase of 32+ characters (derived with HKDF).
+    secrets_key: str = Field(default="dev-only-secrets-key-change-me-not-for-production", min_length=32)
+    # Origin of the web app; SSO redirect_uri is <web_base_url>/api/sso/callback, invite
+    # links point at <web_base_url>/accept-invite, and emails link back to it (password reset,
+    # job pages).
+    web_base_url: str = "http://localhost:3000"
+    invite_ttl_hours: int = 24 * 7
+    sso_state_ttl_seconds: int = 600
+    # DNS-over-HTTPS resolver (JSON API) used to check SSO domain TXT records.
+    doh_url: str = "https://cloudflare-dns.com/dns-query"
+    # Audit log: take the client IP from X-Forwarded-For (only behind a trusted reverse proxy).
+    trust_proxy_headers: bool = False
+    audit_export_max_rows: int = 50_000
 
     # Providers. Empty string = not configured.
     anthropic_api_key: str = ""
@@ -64,10 +79,7 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 6000
     page_size_max: int = 200
 
-    # Web app origin, used to build links in emails (password reset, invites, job pages).
-    web_base_url: str = "http://localhost:3000"
-
-    # Blob storage (D-0xx storage backends). local = files under storage_dir (dev, test,
+    # Blob storage (D-051 storage backends). local = files under storage_dir (dev, test,
     # single box); s3 = any S3-compatible object store (Hetzner Object Storage in production).
     storage_backend: Literal["local", "s3"] = "local"
     s3_endpoint_url: str = ""  # e.g. https://fsn1.your-objectstorage.com; empty = AWS default
@@ -91,7 +103,6 @@ class Settings(BaseSettings):
     smtp_security: Literal["starttls", "ssl", "none"] = "starttls"
     smtp_timeout_seconds: float = 20.0
     password_reset_ttl_minutes: int = 60
-    invite_ttl_hours: int = 72
 
     # Observability. Everything is off when its setting is empty.
     posthog_key: str = ""  # project API key (write-only, public by design)

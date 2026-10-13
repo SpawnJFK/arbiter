@@ -13,11 +13,11 @@ from sqlalchemy import select
 
 from arbiter.agency import workflows as wfl
 from arbiter.agency.schemas import WorkflowIn, WorkflowPatch
-from arbiter.api.deps import DB, PM, Paging, listing
+from arbiter.api.deps import DB, PM, Paging, listing, require_module
 from arbiter.api.routes.projects import idempotent_post
 from arbiter.models import WorkflowTemplate
 
-router = APIRouter(tags=["workflows"])
+router = APIRouter(tags=["workflows"], dependencies=[require_module("pm")])
 
 
 @router.get("/workflows")

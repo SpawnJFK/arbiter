@@ -9,14 +9,13 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t("password.reset.title"), referrer: "no-referrer" };
 }
 
-export default async function ResetPasswordPage({ searchParams }: { searchParams: Promise<{ token?: string; invite?: string }> }) {
+export default async function ResetPasswordPage({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
   const { t } = await getI18n();
-  const { token = "", invite } = await searchParams;
-  const isInvite = invite === "1";
+  const { token = "" } = await searchParams;
   return (
     <AuthCard
-      title={t(isInvite ? "password.reset.inviteTitle" : "password.reset.title")}
-      description={t(isInvite ? "password.reset.inviteDescription" : "password.reset.description")}
+      title={t("password.reset.title")}
+      description={t("password.reset.description")}
       footer={
         <Link href="/login" className="font-medium text-accent hover:underline">
           {t("password.backToSignIn")}

@@ -215,29 +215,28 @@ def test_reset_token_expiry_supersede_and_rate_limit(db):
     assert len(_emails(db, "password_reset")) == notify.RESET_LIMIT_PER_HOUR - 2  # 2 issued above
 
 
-def test_invite_link_sets_password(db):
+def test_invite_email_is_sent_and_link_sets_password(db):
+    """Team invites (platform) are delivered through notify: one queued email with the accept link."""
     c = client()
-    register(c, email="pm@example.com")
-    pm = db.execute(select(User).where(User.email == "pm@example.com")).scalar_one()
-    from arbiter.api import security
-
-    invited = User(
-        email="new@example.com",
-        name="New",
-        password_hash=security.hash_password("unusable-" + "x" * 20),
-        role="client",
-        org_id=pm.org_id,
+    h = register(c, email="pm@example.com")
+    r = c.post(
+        "/v1/users/invite", headers=h, json={"email": "new@example.com", "name": "New", "role": "client"}
     )
-    db.add(invited)
-    db.flush()
-    notify.send_invite(db, invited, inviter="PM", org_name="Acme GmbH")
+    assert r.status_code == 201, r.text
+    assert r.json()["email_sent"] is True
     db.commit()
     drain()
     mail = _emails(db, "user_invite")[0]
-    assert "invited you to join Acme GmbH" in mail.body_text and "72 hours" in mail.body_text
-    token = _link_token(mail.body_text)
-    r = c.post("/v1/auth/password/reset", json={"token": token, "password": "welcome-123"})
+    assert mail.to_address == "new@example.com" and mail.status == "logged"
+    assert "invited you to join Acme GmbH" in mail.body_text and "168 hours" in mail.body_text
+    m = re.search(r"accept-invite\?token=([A-Za-z0-9_\-]+)", mail.body_text)
+    assert m, mail.body_text
+    r = c.post("/v1/auth/invite/accept", json={"token": m.group(1), "password": "welcome-123"})
     assert r.status_code == 200 and r.json()["user"]["role"] == "client"
+    # invite tokens are not password-reset tokens
+    assert (
+        c.post("/v1/auth/password/reset", json={"token": m.group(1), "password": "x" * 12}).status_code == 422
+    )
 
 
 def test_job_delivered_email_goes_to_project_creator(db):

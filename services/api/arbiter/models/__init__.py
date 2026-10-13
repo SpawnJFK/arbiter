@@ -18,6 +18,7 @@ from arbiter.models.i18n import UiLocale, UiMessage
 from arbiter.models.integrations import IdempotencyRecord, Webhook, WebhookDelivery, WorkItem
 from arbiter.models.money import Invoice, LedgerEntry, Payout, Quote, UsageRecord
 from arbiter.models.ops import AccountToken, EmailMessage, UploadSession
+from arbiter.models.platform import AuditEvent, Role, SsoConfig, SsoDomain, SsoState, UserInvite
 from arbiter.models.provenance import ProvenanceEvent
 from arbiter.models.quality import (
     ControlSample,
@@ -43,6 +44,7 @@ __all__ = [
     "ApiKey",
     "AssistantMessage",
     "AssistantThread",
+    "AuditEvent",
     "CrmAccount",
     "CrmActivity",
     "CrmContact",
@@ -68,6 +70,10 @@ __all__ = [
     "QualityMetric",
     "Quote",
     "ReviewTask",
+    "Role",
+    "SsoConfig",
+    "SsoDomain",
+    "SsoState",
     "ReviewerPair",
     "ReviewerProfile",
     "ReviewerScoreEvent",
@@ -85,6 +91,7 @@ __all__ = [
     "UiMessage",
     "UsageRecord",
     "User",
+    "UserInvite",
     "Webhook",
     "WebhookDelivery",
     "WorkItem",

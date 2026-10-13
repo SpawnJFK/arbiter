@@ -50,6 +50,8 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20))  # admin | pm | client | reviewer
     org_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id"), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Custom role (models.platform.Role) of the same org; null = the built-in role only.
+    role_id: Mapped[str | None] = mapped_column(ForeignKey("roles.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = created_at_column()
 
 

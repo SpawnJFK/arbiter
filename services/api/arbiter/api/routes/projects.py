@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from arbiter.agency import crm
 from arbiter.agency import workflows as wfl
-from arbiter.api.deps import DB, PM, Customer, Paging, Principal, listing
+from arbiter.api.deps import DB, PM, Customer, Paging, Principal, listing, require_module
 from arbiter.api.routes.jobs import jobs_view
 from arbiter.billing.quotes import tier_allowed
 from arbiter.errors import Conflict, Invalid, NotFound
@@ -38,8 +38,9 @@ from arbiter.models import (
     utcnow,
 )
 from arbiter.pipeline import orchestrator
+from arbiter.platform.audit import audit
 
-router = APIRouter(tags=["projects"])
+router = APIRouter(tags=["projects"], dependencies=[require_module("tms")])
 
 IDEMPOTENCY_TTL = timedelta(hours=24)
 CENT = Decimal("0.01")
@@ -318,6 +319,14 @@ def create_project(
         orchestrator.start_job(db, job)
     db.flush()
     out = project_view(prj, jobs_view(db, p, jobs))
+    audit(
+        db,
+        p,
+        "project.created",
+        "project",
+        prj.id,
+        {"name": prj.name, "quote_id": quote.id, "tier": tier, "target_langs": langs, "price": str(price)},
+    )
     idempotent_store(db, p, "projects", idempotency_key, payload, 201, out)
     return JSONResponse(out, status_code=201)
 

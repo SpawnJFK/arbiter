@@ -13,7 +13,7 @@
 * the tax decision is stored as a final line {type: "tax", rate, amount, note}, because the
   invoices table has no notes column; invoice_view splits it out again.
 
-Provider-issued documents (D-053): while Paddle is the merchant of record it sells to the
+Provider-issued documents (D-074): while Paddle is the merchant of record it sells to the
 customer, charges VAT / sales tax and issues the tax invoice. We must not issue a second tax
 invoice for the same sale, so for paddle (and later stripe) payments the invoices table keeps
 a RECORD (kind, provider, provider_ref, provider_invoice_number, totals as reported) and the

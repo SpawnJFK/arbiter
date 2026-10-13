@@ -27,7 +27,7 @@ eta_hours (rough, for the client's expectations, not a promise):
   with REVIEW_WORDS_PER_HOUR = 500 and PARALLEL_REVIEWERS = 3.
 
 Tiers with human work (hybrid, full) also carry `platform_fee` {percent, basis_estimate,
-estimate} and `total_estimate` = price + fee estimate (D-052, billing.fees).
+estimate} and `total_estimate` = price + fee estimate (D-073, billing.fees).
 
 Regulated organizations never get `auto` or `ai_review` (R-SEG-12): those tiers are returned
 with available=false and a blocked_reason, and project creation must refuse them too.
@@ -234,7 +234,7 @@ def build_quote(
                 lang: {"per_word": str(r), "rule": rule} for lang, (r, rule) in lang_rates.items()
             }
         if tier in fees.HUMAN_TIERS:
-            # Platform fee on the human work (D-052), shown up front. Basis estimate: words a
+            # Platform fee on the human work (D-073), shown up front. Basis estimate: words a
             # human is expected to see times the reviewer edit rate (the upper pay rate).
             human_words = Decimal(word_count * len(langs)) * Decimal(str(1 - tier_auto))
             basis = (human_words * HUMAN_RATE_ESTIMATE).quantize(CENT, rounding=ROUND_HALF_UP)

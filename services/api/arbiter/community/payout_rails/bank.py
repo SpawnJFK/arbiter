@@ -1,4 +1,4 @@
-"""Bank transfer fallback rail: SEPA pain.001 XML, plain CSV and Wise batch CSV (D-052).
+"""Bank transfer fallback rail: SEPA pain.001 XML, plain CSV and Wise batch CSV (D-073).
 
 No API call: `send` validates the payee's bank details and leaves the payout `sent` and
 pending with provider_ref "bank:<idempotency key>". The admin then builds a batch file

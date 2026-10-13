@@ -1,4 +1,4 @@
-"""Reviewer payout method setup per rail: Payoneer onboarding, PayPal, SEPA, Wise (D-052)."""
+"""Reviewer payout method setup per rail: Payoneer onboarding, PayPal, SEPA, Wise (D-073)."""
 
 from __future__ import annotations
 

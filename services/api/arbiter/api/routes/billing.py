@@ -1,4 +1,4 @@
-"""Customer billing: plans, subscription, checkout, portal, credits, invoice documents (D-051).
+"""Customer billing: plans, subscription, checkout, portal, credits, invoice documents (D-072).
 
 Reads are open to every customer role; writes need the permission `billing.manage`
 (pm and admin roles by default). GET /billing/plans is public: the pricing page renders it.

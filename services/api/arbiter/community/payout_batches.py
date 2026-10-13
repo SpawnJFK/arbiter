@@ -1,4 +1,4 @@
-"""Bank transfer batches for the bank rail (D-052): build the file, then confirm payouts.
+"""Bank transfer batches for the bank rail (D-073): build the file, then confirm payouts.
 
 build_batch collects every payout that was sent through the bank rail (state sent,
 provider_ref "bank:...", method sepa or wise) and is not in a batch yet, writes the file to

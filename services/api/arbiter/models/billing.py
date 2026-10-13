@@ -1,4 +1,4 @@
-"""Subscription billing and payout rails (migration 0010, decisions D-051 and D-052).
+"""Subscription billing and payout rails (migration 0010, decisions D-072 and D-073).
 
 Our database is the source of truth for plans, subscriptions, entitlements, credits and
 usage. Payment providers (Paddle now, Stripe later, manual bank transfer) sit behind thin

@@ -66,7 +66,7 @@ def create_app() -> FastAPI:
 
     for router in ROUTERS:
         app.include_router(router, prefix="/v1")
-    # Payment provider webhooks: public, signature-checked, outside /v1 (D-051).
+    # Payment provider webhooks: public, signature-checked, outside /v1 (D-072).
     from arbiter.api.routes.billing import webhook_router
 
     app.include_router(webhook_router)

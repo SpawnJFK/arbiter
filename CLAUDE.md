@@ -65,9 +65,9 @@ services/api/arbiter/
   quality/           checks (hard QA), qe (decide), judge, senate, editor, mqm, calibration, prompts
   pipeline/          orchestrator (steps), queue (work_items), worker, events, evidence, hooks
   community/         profiles, testing, queue, review, pay, scoring, disputes, payouts, payout_accounts,
-                     payout_batches, payout_rails/ (payoneer, paypal, bank: D-052)
+                     payout_batches, payout_rails/ (payoneer, paypal, bank: D-073)
   billing/           quotes, pricing, usage, invoices, ledger, catalog (plans), credits, fees, entitlements,
-                     subscriptions, period_close, providers/ (paddle, stripe, manual: D-051)
+                     subscriptions, period_close, providers/ (paddle, stripe, manual: D-072)
   agency/            Agency OS: crm, pricelists, workflows, dashboards, assistant (+ heuristic), schemas
   api/               app.py (arbiter.api.app:app, /healthz), deps.py (auth, roles, paging), security.py
   api/routes/        auth, files, quotes, projects (+ idempotency helpers), jobs, assets, quality,

@@ -197,7 +197,7 @@ Reviewer statuses: `applied, active, suspended, banned`. Levels: `candidate, rev
 
 `Dispute`: `{id, task_id, reviewer_id, reason, status, decided_by, decision_note, due_at, created_at, decided_at}`.
 `Payout`: `{id, reviewer_id, amount, currency, state, method, provider_ref, failure_reason, created_at, sent_at}`.
-Payouts: in dev/test/staging without Payoneer/PayPal keys a mock provider "sends" them. In production (or with keys) `run` sends through the payout rails (`provider: "rails"`, D-052): Payoneer, PayPal or the bank-file rail by payout method. Rails answer pending; `POST /admin/payouts/refresh` polls, bank transfers are confirmed by the admin. Live provider credentials and a test payout are P03 items.
+Payouts: in dev/test/staging without Payoneer/PayPal keys a mock provider "sends" them. In production (or with keys) `run` sends through the payout rails (`provider: "rails"`, D-073): Payoneer, PayPal or the bank-file rail by payout method. Rails answer pending; `POST /admin/payouts/refresh` polls, bank transfers are confirmed by the admin. Live provider credentials and a test payout are P03 items.
 
 ## Integrations and billing
 
@@ -211,9 +211,9 @@ Payouts: in dev/test/staging without Payoneer/PayPal keys a mock provider "sends
 
 Webhook events: `job.delivered, job.failed, job.needs_attention, quote.expired`. Delivery is at-least-once; receivers dedupe on `event_id`. Signature header `Arbiter-Signature: t=<unix>,v1=<hex hmac sha256 of "t.body">`.
 
-`Invoice`: `{id, number, period, lines[], subtotal, tax, tax_rate, tax_note, total, currency, status: draft|issued|paid|void|refunded, issued_at, created_at, kind: usage|subscription|credit_pack|overage, provider: internal|paddle|stripe, provider_ref, provider_invoice_number, document_url, issued_by: us|paddle|stripe, due_at, paid_at}`. `provider != internal` means the payment provider (merchant of record) issued the tax invoice and this row is our record of it (D-053).
+`Invoice`: `{id, number, period, lines[], subtotal, tax, tax_rate, tax_note, total, currency, status: draft|issued|paid|void|refunded, issued_at, created_at, kind: usage|subscription|credit_pack|overage, provider: internal|paddle|stripe, provider_ref, provider_invoice_number, document_url, issued_by: us|paddle|stripe, due_at, paid_at}`. `provider != internal` means the payment provider (merchant of record) issued the tax invoice and this row is our record of it (D-074).
 
-## Subscription billing (D-051 to D-054)
+## Subscription billing (D-072 to D-075)
 
 Writes need permission `billing.manage` (roles `pm`, `admin`; not `client`, not API keys). Our database is the source of truth; providers are adapters (`arbiter/billing/providers`).
 
@@ -237,7 +237,7 @@ Writes need permission `billing.manage` (roles `pm`, `admin`; not `client`, not 
 
 Paddle webhook signature: `Paddle-Signature: ts=<unix>;h1=<hex HMAC-SHA256(secret, "<ts>:<raw body>")>` (several `h1` during secret rotation), 300 s tolerance. Each `(provider, event_id)` is stored once in `billing_events`; a replay answers `duplicate: true`. Events used: `subscription.*`, `transaction.completed`, `transaction.payment_failed`, `adjustment.created|updated` (approved refunds).
 
-Quotes: tiers `hybrid` and `full` carry `platform_fee: {percent, basis_estimate, estimate}` and `total_estimate` (D-052).
+Quotes: tiers `hybrid` and `full` carry `platform_fee: {percent, basis_estimate, estimate}` and `total_estimate` (D-073).
 
 ### Admin billing
 
@@ -254,7 +254,7 @@ Quotes: tiers `hybrid` and `full` carry `platform_fee: {percent, basis_estimate,
 | POST | /admin/invoices/{id}/mark-paid | | `Invoice` (our invoices only; activates a manual subscription or adds a credit lot) |
 | GET | /admin/billing/events | `?status=received\|processed\|ignored\|failed` | list of `{id, provider, event_id, event_type, status, error, received_at, processed_at}` |
 
-### Payout rails (D-052)
+### Payout rails (D-073)
 
 | Method | Path | Role | Body | Returns |
 |---|---|---|---|---|

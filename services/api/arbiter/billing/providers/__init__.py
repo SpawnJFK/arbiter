@@ -1,4 +1,4 @@
-"""Payment provider adapters and the registry that picks one (D-051).
+"""Payment provider adapters and the registry that picks one (D-072).
 
 provider_for(name, session)   a specific adapter (paddle | stripe | manual)
 default_provider(session, org)

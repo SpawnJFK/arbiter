@@ -1,4 +1,4 @@
-"""Platform fee on human review and vendor work (D-052).
+"""Platform fee on human review and vendor work (D-073).
 
 The customer pays the human work (reviewer pay, vendor cost) plus a platform fee: a percent
 of that work, configurable per organization, default 5 %, allowed range 0 to 8 % (the

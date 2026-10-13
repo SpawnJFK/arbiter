@@ -9,7 +9,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 /**
  * Paddle's hosted checkout opens on this page: the API creates a transaction whose checkout URL
- * is this page plus ?_ptxn=<transaction id>, and Paddle.js opens the overlay for it (D-051).
+ * is this page plus ?_ptxn=<transaction id>, and Paddle.js opens the overlay for it (D-072).
  * The page's domain must be approved in Paddle. Token and environment are public values.
  */
 export default async function PaddleCheckoutPage({ searchParams }: { searchParams: Promise<{ _ptxn?: string }> }) {

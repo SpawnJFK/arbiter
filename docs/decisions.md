@@ -746,7 +746,7 @@ Date: 2026-10-09. Status: accepted.
 
 ---
 
-## D-051 Subscription billing: Paddle as merchant of record, our database as source of truth
+## D-072 Subscription billing: Paddle as merchant of record, our database as source of truth
 Date: 2026-10-13. Status: accepted (owner approved).
 
 **Context.** Arbiter sells modules globally by card from day one and needs VAT and sales tax collected and filed in many jurisdictions, chargebacks handled and enterprise invoices with terms, PO numbers and bank transfer. There is no company yet in a country Stripe supports for this setup.
@@ -763,7 +763,7 @@ Date: 2026-10-13. Status: accepted (owner approved).
 
 ---
 
-## D-052 Payout rails and the platform fee
+## D-073 Payout rails and the platform fee
 Date: 2026-10-13. Status: accepted (owner approved).
 
 **Context.** Reviewers and vendors are paid worldwide. Payout fees differ by rail, and the marketplace charges the paying customer a transparent fee on human work.
@@ -779,7 +779,7 @@ Date: 2026-10-13. Status: accepted (owner approved).
 
 ---
 
-## D-053 Invoices: records of the provider's documents, our own only for manual billing; credits and overage
+## D-074 Invoices: records of the provider's documents, our own only for manual billing; credits and overage
 Date: 2026-10-13. Status: accepted.
 
 **Context.** With a merchant of record, the provider sells to the customer and issues the tax invoice. Issuing our own invoice for the same sale would double-document it.
@@ -795,7 +795,7 @@ Date: 2026-10-13. Status: accepted.
 
 ---
 
-## D-054 Entitlements follow the subscription; legacy orgs keep every module
+## D-075 Entitlements follow the subscription; legacy orgs keep every module
 Date: 2026-10-13. Status: accepted.
 
 **Context.** `platform/modules.py` reads `org.settings["modules"]` (default: every module). Billing must write it without breaking existing organizations.

@@ -1,4 +1,4 @@
-"""Plans catalog, credit wallet, entitlements and the platform fee (D-051, D-052, D-053)."""
+"""Plans catalog, credit wallet, entitlements and the platform fee (D-072, D-073, D-074)."""
 
 from __future__ import annotations
 

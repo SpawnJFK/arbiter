@@ -1,4 +1,4 @@
-"""Payout rails: Payoneer onboarding, PayPal batch, bank files, minimums per method (D-052).
+"""Payout rails: Payoneer onboarding, PayPal batch, bank files, minimums per method (D-073).
 
 Provider HTTP goes to an httpx.MockTransport; nothing leaves the machine.
 """

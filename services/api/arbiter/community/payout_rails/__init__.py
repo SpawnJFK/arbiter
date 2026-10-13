@@ -1,4 +1,4 @@
-"""Payout rails behind community.payouts.PayoutProvider (D-052).
+"""Payout rails behind community.payouts.PayoutProvider (D-073).
 
 RailRouter is a PayoutProvider that sends each payout through the rail of the payee's
 payout method:

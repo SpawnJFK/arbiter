@@ -1,4 +1,4 @@
-"""Prepaid credit wallet (D-053).
+"""Prepaid credit wallet (D-074).
 
 A credit is money the customer paid in advance (a credit pack bought through the payment
 provider) or was granted by the platform admin. It is spent on usage charges (overage at

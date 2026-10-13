@@ -1,4 +1,4 @@
-"""Provider adapters over httpx.MockTransport and signed webhook fixtures (D-051)."""
+"""Provider adapters over httpx.MockTransport and signed webhook fixtures (D-072)."""
 
 from __future__ import annotations
 

@@ -2,7 +2,7 @@
 
 Units: word | ai_unit | review_decision | storage_gb | platform_fee.
 
-platform_fee (D-052): quantity = the human work it is charged on, amount = the fee.
+platform_fee (D-073): quantity = the human work it is charged on, amount = the fee.
 
 AI units normalise model work across providers so the client sees one number. Per segment
 (starting values, roughly proportional to tokens spent per step with the default models):

@@ -659,7 +659,7 @@ export interface Usage {
   ai_units: string | number;
   review_decisions: number;
   storage_gb?: string;
-  /** Platform fee on human review / vendor work this period (D-052). */
+  /** Platform fee on human review / vendor work this period (D-073). */
   platform_fee?: Money;
   amount: Money;
 }
@@ -677,7 +677,7 @@ export interface Invoice {
   created_at?: ISODate | null;
   /** usage | subscription | credit_pack | overage | manual */
   kind?: string;
-  /** internal (our invoice) | paddle | stripe (a record of the provider's document, D-053) */
+  /** internal (our invoice) | paddle | stripe (a record of the provider's document, D-074) */
   provider?: string;
   provider_ref?: string | null;
   provider_invoice_number?: string | null;
@@ -688,7 +688,7 @@ export interface Invoice {
   paid_at?: ISODate | null;
 }
 
-// ====================================================================== Billing (D-051..D-053)
+// ====================================================================== Billing (D-072..D-074)
 
 export type ModuleKey = "tms" | "engine" | "ai" | "pm" | "auditor" | "strings" | "community";
 export type BillingInterval = "month" | "year";

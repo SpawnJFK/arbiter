@@ -1,4 +1,4 @@
-"""Payoneer Mass Payouts rail, API v4 style (D-052). Mocked in tests; verify against the
+"""Payoneer Mass Payouts rail, API v4 style (D-073). Mocked in tests; verify against the
 program's API reference with the sandbox credentials before the first live payout (P03).
 
     POST {login}/api/v2/oauth2/token                       client_credentials (basic auth)

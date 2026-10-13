@@ -1,4 +1,4 @@
-"""Paddle Billing (API v1) adapter. Paddle is the merchant of record (D-051).
+"""Paddle Billing (API v1) adapter. Paddle is the merchant of record (D-072).
 
 Endpoints used (base https://api.paddle.com, sandbox https://sandbox-api.paddle.com,
 `Authorization: Bearer <api key>`):
@@ -23,7 +23,7 @@ transaction.completed, transaction.payment_failed, adjustment.created|updated (r
 
 Paddle has no metered billing: overage is sent as a one-time charge at period close
 (report_usage returns False). Paddle has no Idempotency-Key header; period close is made
-idempotent on our side (one overage invoice record per org and period, D-053).
+idempotent on our side (one overage invoice record per org and period, D-074).
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ from arbiter.config import get_settings
 
 BASE_URLS = {"sandbox": "https://sandbox-api.paddle.com", "production": "https://api.paddle.com"}
 # Paddle SDKs default to 5 s; we allow 300 s of clock skew because a replay inside the window is
-# harmless: billing_events stores each event_id once (D-051).
+# harmless: billing_events stores each event_id once (D-072).
 SIGNATURE_TOLERANCE_S = 300
 SUBSCRIPTION_STATUS = {
     "active": "active",

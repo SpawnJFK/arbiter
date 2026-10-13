@@ -1,4 +1,4 @@
-"""Manual provider: bank transfer against OUR invoice; an admin marks it paid (D-051).
+"""Manual provider: bank transfer against OUR invoice; an admin marks it paid (D-072).
 
 Used for enterprise deals (payment terms, PO numbers, bank transfer) and whenever no payment
 provider is configured. "Checkout" issues an invoice (billing.invoices.issue_invoice) and

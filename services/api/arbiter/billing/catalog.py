@@ -1,4 +1,4 @@
-"""Plans and credit packs: the catalog customers buy from (D-051).
+"""Plans and credit packs: the catalog customers buy from (D-072).
 
 The catalog is DATA in the plans and credit_packs tables, edited by the platform admin.
 `STARTER_PLANS` and `STARTER_PACKS` below only seed an empty database (migration 0010 and

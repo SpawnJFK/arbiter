@@ -1,7 +1,7 @@
 """Platform-operator endpoints: reviewers, disputes, payouts, organizations, reviewer tests.
 
 Payouts: POST /admin/payouts/run accrues what is owed (run_payouts) and sends it through
-`payout_provider()`: the RailRouter (Payoneer, PayPal, bank-file rail by payout method, D-052)
+`payout_provider()`: the RailRouter (Payoneer, PayPal, bank-file rail by payout method, D-073)
 in production or whenever a Payoneer / PayPal key is configured; the in-memory
 MockPayoutProvider in dev, test and staging without keys. Rails answer "pending";
 POST /admin/payouts/refresh polls them, bank transfers are confirmed by the admin

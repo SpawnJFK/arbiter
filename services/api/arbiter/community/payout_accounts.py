@@ -1,4 +1,4 @@
-"""Payee payout accounts: method setup, onboarding status, minimum payout per method (D-052).
+"""Payee payout accounts: method setup, onboarding status, minimum payout per method (D-073).
 
 A payee (reviewer now; Agency OS vendors use the same table with payee_kind "vendor") picks a
 method and gives its details. The chosen method becomes ReviewerProfile.payout_method /

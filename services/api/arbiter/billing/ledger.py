@@ -11,7 +11,7 @@ Accounts used here:
   platform:payouts_in_transit    payout accrued or sent, not yet confirmed by the provider
   platform:cash                  money that actually left the platform
 
-Customer side (D-051, D-053):
+Customer side (D-072, D-074):
   org:<id>:credits               prepaid credit owed to the customer (wallet balance)
   org:<id>:receivable            charges the customer owes (platform fee, overage)
   platform:provider_clearing     money collected by the payment provider (merchant of

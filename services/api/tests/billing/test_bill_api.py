@@ -1,4 +1,4 @@
-"""Billing over HTTP: plans, checkout (manual and Paddle), webhooks, credits, admin (D-051..D-053)."""
+"""Billing over HTTP: plans, checkout (manual and Paddle), webhooks, credits, admin (D-072..D-074)."""
 
 from __future__ import annotations
 

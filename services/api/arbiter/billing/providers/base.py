@@ -1,4 +1,4 @@
-"""Payment provider adapter interface (D-051).
+"""Payment provider adapter interface (D-072).
 
 Our database is the source of truth for plans, subscriptions, entitlements, usage, credits
 and invoice records. A provider adapter only does what needs the provider:

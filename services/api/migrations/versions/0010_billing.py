@@ -1,4 +1,4 @@
-"""Subscription billing, credit wallet, provider events, payout rails (D-051, D-052, D-053).
+"""Subscription billing, credit wallet, provider events, payout rails (D-072, D-073, D-074).
 
 Tables: plans, credit_packs, subscriptions, billing_customers, credit_ledger, billing_events,
 payout_accounts, payout_batches. Columns on invoices: kind, provider, provider_ref,

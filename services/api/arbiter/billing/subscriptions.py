@@ -1,4 +1,4 @@
-"""Subscriptions, checkout, provider webhooks and admin overrides (D-051, D-053).
+"""Subscriptions, checkout, provider webhooks and admin overrides (D-072, D-074).
 
 Flow with Paddle (merchant of record):
   1. POST /billing/checkout -> start_checkout: validates plan/interval/currency/seats, makes

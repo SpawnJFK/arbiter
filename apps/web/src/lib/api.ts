@@ -380,7 +380,7 @@ export function createApi(item: Transport) {
     usage: (period?: string) => get<Usage>("/usage", { period }),
     invoices: (p?: ListParams) => get<ListResponse<Invoice>>("/invoices", page(p)),
 
-    // Billing (D-051..D-053). Plans are public (pricing page).
+    // Billing (D-072..D-074). Plans are public (pricing page).
     plans: () => get<PlansResponse>("/billing/plans"),
     billing: () => get<BillingOverview>("/billing/subscription"),
     checkout: (body: { plan: string; seats?: number; interval: BillingInterval; currency?: string }) =>
@@ -393,7 +393,7 @@ export function createApi(item: Transport) {
     invoiceDocument: (id: string) => get<{ url: string; provider: string }>(`/billing/invoices/${enc(id)}/document`),
     invoicePdfUrl: (id: string) => item.downloadUrl(`/billing/invoices/${enc(id)}/document`),
 
-    // Reviewer payout rails (D-052)
+    // Reviewer payout rails (D-073)
     payoutMethods: () => get<PayoutMethodsView>("/reviewer/payout-methods"),
     setupPayoutAccount: (method: RailMethod, details: Record<string, string>) =>
       post<PayoutAccountView>("/reviewer/payout-accounts", { method, details }),

@@ -1,4 +1,4 @@
-"""Entitlements: which modules an org may use, written to org.settings["modules"] (D-051).
+"""Entitlements: which modules an org may use, written to org.settings["modules"] (D-072).
 
 arbiter.platform.modules stays the only READER (org_has_module / require_module). This module
 is the only WRITER: it recomputes the list whenever a subscription changes or the platform
@@ -8,7 +8,7 @@ admin changes overrides.
             past_due; past_due keeps access while the provider retries the payment)
           = []  when the org had a subscription but none is current (lapsed or canceled)
           = everything (DEFAULT_MODULES) when the org never had a subscription: existing
-            orgs keep working until they buy a plan (legacy behaviour, D-051)
+            orgs keep working until they buy a plan (legacy behaviour, D-072)
     final = (base + overrides.add - overrides.remove) + the dependencies of what is left;
             a module whose dependency was explicitly removed is dropped too
 

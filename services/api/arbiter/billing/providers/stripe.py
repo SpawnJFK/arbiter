@@ -1,4 +1,4 @@
-"""Stripe adapter, same interface as Paddle. DISABLED unless configured (D-051).
+"""Stripe adapter, same interface as Paddle. DISABLED unless configured (D-072).
 
 Stripe becomes the second rail once a company exists in a Stripe-supported country. Until
 then `configured()` is False and the registry never picks it.

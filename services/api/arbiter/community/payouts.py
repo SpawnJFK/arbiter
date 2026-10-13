@@ -11,7 +11,7 @@ The ledger is the only source of truth for what a reviewer is owed (balance = su
                          the next run_payouts moves it back to accrued and re-sends it
                          with the SAME idempotency key, so the provider never pays twice.
 
-Rails (D-052): the PayoutProvider used in production is community.payout_rails.RailRouter,
+Rails (D-073): the PayoutProvider used in production is community.payout_rails.RailRouter,
 which picks Payoneer, PayPal or the bank-file rail by the payee's payout method. Rails answer
 "pending"; refresh_pending polls them and settles or fails the payout. A payee is paid once
 the balance reaches max(profile threshold, method minimum) (payout_accounts).

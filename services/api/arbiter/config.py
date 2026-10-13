@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # Seller (for invoices). Tax treatment needs legal/tax review before public launch.
     seller_country: str = ""
     vat_rate: str = "0"
-    # Seller details printed on OUR invoices (manual provider only; Paddle issues its own, D-053).
+    # Seller details printed on OUR invoices (manual provider only; Paddle issues its own, D-074).
     seller_name: str = ""
     seller_address: str = ""
     seller_vat_id: str = ""
@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     currency: str = "EUR"
     quote_validity_days: int = 14
 
-    # Billing (D-051). Our database is the source of truth; providers sit behind adapters.
+    # Billing (D-072). Our database is the source of truth; providers sit behind adapters.
     # billing_provider: which adapter sells subscriptions and credit packs. "auto" = paddle when
     # configured, else manual (bank transfer invoices). Stripe is only used when chosen AND
     # configured (second rail, later).
@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     platform_fee_percent_default: str = "5"
     platform_fee_percent_max: str = "8"
 
-    # Payout rails (D-052). Payoneer and PayPal first; bank transfer / Wise files as fallback.
+    # Payout rails (D-073). Payoneer and PayPal first; bank transfer / Wise files as fallback.
     payoneer_client_id: str = ""
     payoneer_client_secret: str = ""
     payoneer_program_id: str = ""

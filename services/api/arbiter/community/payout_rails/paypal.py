@@ -1,4 +1,4 @@
-"""PayPal Payouts API rail (D-052).
+"""PayPal Payouts API rail (D-073).
 
     POST /v1/oauth2/token            grant_type=client_credentials, HTTP basic client id:secret
     POST /v1/payments/payouts        {sender_batch_header: {sender_batch_id, email_subject},

@@ -49,7 +49,7 @@ class ReviewerProfile(Base):
     address: Mapped[str] = mapped_column(String(500), default="")
     date_of_birth: Mapped[str] = mapped_column(String(10), default="")
     identity_verified: Mapped[bool] = mapped_column(Boolean, default=False)
-    payout_method: Mapped[str] = mapped_column(String(20), default="")  # wise | paypal | sepa
+    payout_method: Mapped[str] = mapped_column(String(20), default="")  # payoneer | paypal | sepa | wise
     payout_details: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     payout_threshold: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("50"))
     score: Mapped[float] = mapped_column(Float, default=0.0)  # 0..100, see reviewers.scoring

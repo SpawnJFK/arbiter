@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     # Seller (for invoices). Tax treatment needs legal/tax review before public launch.
     seller_country: str = ""
     vat_rate: str = "0"
+    # Seller details printed on OUR invoices (manual provider only; Paddle issues its own, D-053).
+    seller_name: str = ""
+    seller_address: str = ""
+    seller_vat_id: str = ""
+    seller_iban: str = ""
+    seller_bic: str = ""
 
     # Auth
     jwt_secret: str = Field(default="dev-only-change-me-not-for-production-use", min_length=32)
@@ -55,6 +61,35 @@ class Settings(BaseSettings):
     # Money
     currency: str = "EUR"
     quote_validity_days: int = 14
+
+    # Billing (D-051). Our database is the source of truth; providers sit behind adapters.
+    # billing_provider: which adapter sells subscriptions and credit packs. "auto" = paddle when
+    # configured, else manual (bank transfer invoices). Stripe is only used when chosen AND
+    # configured (second rail, later).
+    billing_provider: Literal["auto", "paddle", "stripe", "manual"] = "auto"
+    web_base_url: str = "http://localhost:3000"  # checkout success/cancel and portal return
+    paddle_api_key: str = ""
+    paddle_webhook_secret: str = ""
+    paddle_environment: Literal["sandbox", "production"] = "sandbox"
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    # Platform fee on human review and vendor work, percent, charged to the paying customer.
+    platform_fee_percent_default: str = "5"
+    platform_fee_percent_max: str = "8"
+
+    # Payout rails (D-052). Payoneer and PayPal first; bank transfer / Wise files as fallback.
+    payoneer_client_id: str = ""
+    payoneer_client_secret: str = ""
+    payoneer_program_id: str = ""
+    payoneer_environment: Literal["sandbox", "production"] = "sandbox"
+    paypal_client_id: str = ""
+    paypal_client_secret: str = ""
+    paypal_environment: Literal["sandbox", "production"] = "sandbox"
+    # JSON object method -> minimum payout, e.g. {"paypal": "10"}; merged over the defaults.
+    payout_minimums: str = ""
+    payout_debtor_name: str = ""
+    payout_debtor_iban: str = ""
+    payout_debtor_bic: str = ""
 
     # Webhooks
     webhook_max_attempts: int = 10

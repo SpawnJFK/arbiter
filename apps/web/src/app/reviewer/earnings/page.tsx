@@ -1,6 +1,7 @@
 import { getI18n } from "@/lib/i18n/server";
 import type { Metadata } from "next";
 import { Badge } from "@/components/ui/badge";
+import { ButtonLink } from "@/components/ui/button";
 import { Card, CardHeader, Stat } from "@/components/ui/card";
 import { EmptyState, PageHeader } from "@/components/ui/misc";
 import { TBody, THead, Table, Td, Th, Tr } from "@/components/ui/table";
@@ -18,7 +19,15 @@ export default async function EarningsPage() {
   const [earnings, me] = await withAuth((api) => Promise.all([api.earnings(), api.reviewerMe()]), "/reviewer/earnings");
   return (
     <>
-      <PageHeader title={t("reviewer.earnings.earningsPayouts")} description={t("reviewer.earnings.everyDecisionYouSubmitIs")} />
+      <PageHeader
+        title={t("reviewer.earnings.earningsPayouts")}
+        description={t("reviewer.earnings.everyDecisionYouSubmitIs")}
+        actions={
+          <ButtonLink href="/reviewer/payouts" size="sm">
+            {t("reviewer.earnings.payoutMethods")}
+          </ButtonLink>
+        }
+      />
       <div className="mb-4 grid gap-3 sm:grid-cols-3">
         <Stat tone="ok" label={t("reviewer.earnings.available")} value={f.money(earnings.balance)} hint={t("reviewer.earnings.paidOutFrom", { payout_threshold: f.money(me.payout_threshold) })} />
         <Stat tone="warn" label={t("reviewer.earnings.inPayout")} value={f.money(earnings.pending)} hint={t("reviewer.earnings.accruedOrSentNotYet")} />

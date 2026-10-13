@@ -14,7 +14,20 @@ from collections.abc import Iterator
 import pytest
 
 os.environ["ARBITER_ENV"] = "test"
-for _k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "DEEPL_API_KEY", "GOOGLE_API_KEY"):
+for _k in (
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "DEEPL_API_KEY",
+    "GOOGLE_API_KEY",
+    "PADDLE_API_KEY",
+    "PADDLE_WEBHOOK_SECRET",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+    "PAYONEER_CLIENT_ID",
+    "PAYONEER_CLIENT_SECRET",
+    "PAYPAL_CLIENT_ID",
+    "PAYPAL_CLIENT_SECRET",
+):
     os.environ[f"ARBITER_{_k}"] = ""
 TEST_DB_URL = os.environ.get(
     "ARBITER_TEST_DATABASE_URL", "postgresql+psycopg://arbiter:arbiter@localhost:5432/arbiter_test"
@@ -65,3 +78,7 @@ def db() -> Iterator[Session]:
         session.commit()
     finally:
         session.close()
+
+
+# Billing provider fixtures (mock HTTP transport, provider env); helpers live in billing_fixtures.py.
+from billing_fixtures import mock_http, paddle_env, stripe_env  # noqa: E402, F401

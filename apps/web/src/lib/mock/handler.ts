@@ -27,6 +27,7 @@ import type {
 import * as F from "./fixtures";
 import { i18nRoute } from "./i18n";
 import { agencyRoute, agencyStore, snapshotFor } from "./agency";
+import { billingRoute } from "./billing";
 
 interface Store {
   org: Org;
@@ -347,6 +348,8 @@ function isCustomer(r: Role) {
 async function route(c: Ctx): Promise<Response | null> {
   const { method: m, parts: p, s } = c;
   const [a, b, cc, d, e] = p;
+  const billing = billingRoute(m, p);
+  if (billing) return billing;
 
   // --- account
   if (a === "me" && m === "GET") {
@@ -816,6 +819,5 @@ async function route(c: Ctx): Promise<Response | null> {
     return json({ period, words: 12000 + seed * 130, ai_units: String(36000 + seed * 390), review_decisions: 150 + seed, amount: (980 + seed * 11.3).toFixed(2) });
   }
   if (a === "invoices" && m === "GET") return list(F.INVOICES, c.q);
-
   return agencyRoute({ method: m, parts: p, q: c.q, body: c.body, role: c.role, org: s.org, jobs: s.jobs, projects: s.projects });
 }

@@ -89,7 +89,7 @@ class ProfilePatch(BaseModel):
     address: str | None = Field(default=None, max_length=500)
     date_of_birth: str | None = Field(default=None, max_length=10)
     country: str | None = Field(default=None, min_length=2, max_length=2)
-    payout_method: Literal["wise", "paypal", "sepa"] | None = None
+    payout_method: Literal["payoneer", "paypal", "sepa", "wise"] | None = None
     payout_details: dict[str, Any] | None = None
 
 

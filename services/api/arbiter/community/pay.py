@@ -13,6 +13,9 @@ Formula (starting values, to be tuned against real throughput and the market):
 
     LEVEL_MULT: candidate 1.0, reviewer 1.0, senior 1.25, domain_expert 1.5
 
+The paying customer is charged the platform fee on every credited amount (billing.fees,
+D-052): ledger platform:revenue:platform_fee <- org receivable, usage unit platform_fee.
+
 MIN_PER_TASK (0.02) applies only to paid decisions. Per-task amounts are rounded to the
 cent at the source, so every ledger movement and payout is in whole cents.
 """
@@ -23,11 +26,11 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy.orm import Session
 
-from arbiter.billing import ledger
+from arbiter.billing import fees, ledger
 from arbiter.community.transitions import move
 from arbiter.config import get_settings
 from arbiter.domain.states import assert_transition
-from arbiter.models import Job, ReviewTask
+from arbiter.models import Job, Organization, ReviewTask
 
 CENT = Decimal("0.01")
 MIN_PER_TASK = Decimal("0.02")
@@ -81,5 +84,9 @@ def credit_task(session: Session, task: ReviewTask) -> None:
         job = session.get(Job, task.job_id)
         if job is not None:
             job.cost_reviewers = Decimal(job.cost_reviewers or 0) + amount
+            org = session.get(Organization, job.org_id)
+            if org is not None:
+                # The customer pays the platform fee on this human work (D-052).
+                fees.charge_fee(session, org, amount, ref=task.id, job_id=job.id, kind="review")
     move(task, "task", "payable")
     session.flush()

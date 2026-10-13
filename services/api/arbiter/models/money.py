@@ -67,6 +67,16 @@ class Invoice(Base):
     status: Mapped[str] = mapped_column(String(20), default="draft")  # draft | issued | paid | void
     issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = created_at_column()
+    # 0010 (D-053). usage | subscription | credit_pack | overage | manual
+    kind: Mapped[str] = mapped_column(String(20), default="usage")
+    # internal = our own invoice (manual provider, bank transfer); paddle/stripe = a record of
+    # the provider's document: the merchant of record issues the tax invoice, we link to it.
+    provider: Mapped[str] = mapped_column(String(20), default="internal")
+    provider_ref: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    provider_invoice_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    provider_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Payout(Base):

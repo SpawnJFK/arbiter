@@ -26,6 +26,9 @@ eta_hours (rough, for the client's expectations, not a promise):
   full     = machine + words_total / (REVIEW_WORDS_PER_HOUR * PARALLEL_REVIEWERS)
   with REVIEW_WORDS_PER_HOUR = 500 and PARALLEL_REVIEWERS = 3.
 
+Tiers with human work (hybrid, full) also carry `platform_fee` {percent, basis_estimate,
+estimate} and `total_estimate` = price + fee estimate (D-052, billing.fees).
+
 Regulated organizations never get `auto` or `ai_review` (R-SEG-12): those tiers are returned
 with available=false and a blocked_reason, and project creation must refuse them too.
 """
@@ -41,7 +44,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from arbiter import storage
-from arbiter.billing import pricing
+from arbiter.billing import fees, pricing
 from arbiter.billing.ledger import money
 from arbiter.community.errors import Invalid
 from arbiter.config import get_settings
@@ -57,6 +60,8 @@ PARALLEL_REVIEWERS = 3
 REGULATED_REASON = "Regulated vertical: every segment needs a human reviewer (R-SEG-12)."
 _WORD = re.compile(r"\w+", re.U)
 CENT = Decimal("0.01")
+# Reviewer pay per word used to estimate the platform fee basis on quotes (community.pay edit rate).
+HUMAN_RATE_ESTIMATE = Decimal("0.012")
 
 
 def count_words(text: str) -> int:
@@ -228,6 +233,13 @@ def build_quote(
             entry["rates_by_lang"] = {
                 lang: {"per_word": str(r), "rule": rule} for lang, (r, rule) in lang_rates.items()
             }
+        if tier in fees.HUMAN_TIERS:
+            # Platform fee on the human work (D-052), shown up front. Basis estimate: words a
+            # human is expected to see times the reviewer edit rate (the upper pay rate).
+            human_words = Decimal(word_count * len(langs)) * Decimal(str(1 - tier_auto))
+            basis = (human_words * HUMAN_RATE_ESTIMATE).quantize(CENT, rounding=ROUND_HALF_UP)
+            entry["platform_fee"] = fees.quote_fee(org, basis)
+            entry["total_estimate"] = money(price + Decimal(entry["platform_fee"]["estimate"]))
         if org.regulated and tier in ("auto", "ai_review"):
             entry["available"] = False
             entry["blocked_reason"] = REGULATED_REASON

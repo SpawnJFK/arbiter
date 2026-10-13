@@ -1,5 +1,6 @@
 import { getI18n } from "@/lib/i18n/server";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState, PageHeader } from "@/components/ui/misc";
@@ -37,7 +38,9 @@ export default async function OrgsPage() {
               {items.map((o) => (
                 <Tr key={o.id}>
                   <Td>
-                    <div className="font-medium">{o.name}</div>
+                    <Link href={`/admin/billing?org=${encodeURIComponent(o.id)}`} className="font-medium hover:underline">
+                      {o.name}
+                    </Link>
                     <div className="font-mono text-[11.5px] text-faint">{o.slug}</div>
                   </Td>
                   <Td>{t.enumLabel(o.plan)}</Td>

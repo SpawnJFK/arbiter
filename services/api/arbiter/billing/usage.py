@@ -1,6 +1,8 @@
 """Usage metering: idempotent usage records per org and month.
 
-Units: word | ai_unit | review_decision | storage_gb.
+Units: word | ai_unit | review_decision | storage_gb | platform_fee.
+
+platform_fee (D-052): quantity = the human work it is charged on, amount = the fee.
 
 AI units normalise model work across providers so the client sees one number. Per segment
 (starting values, roughly proportional to tokens spent per step with the default models):
@@ -25,7 +27,7 @@ from arbiter.community.errors import Invalid
 from arbiter.config import get_settings
 from arbiter.models import UsageRecord, utcnow
 
-UNITS = ("word", "ai_unit", "review_decision", "storage_gb")
+UNITS = ("word", "ai_unit", "review_decision", "storage_gb", "platform_fee")
 AI_UNITS_PER_SEGMENT: dict[str, Decimal] = {
     "qe": Decimal("0.05"),
     "ai_reviewer": Decimal("0.15"),
@@ -107,6 +109,9 @@ def usage_view(session: Session, org_id: str, period: str | None = None) -> dict
         "ai_units": str(qty.get("ai_unit", Decimal("0")).quantize(Decimal("0.01"))),
         "review_decisions": int(qty.get("review_decision", Decimal("0"))),
         "storage_gb": str(qty.get("storage_gb", Decimal("0")).quantize(Decimal("0.01"))),
+        "platform_fee": money(
+            sum((Decimal(a or 0) for u, _, a in rows if u == "platform_fee"), Decimal("0"))
+        ),
         "amount": money(amount),
         "currency": get_settings().currency,
     }

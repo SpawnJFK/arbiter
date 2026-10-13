@@ -14,6 +14,9 @@ export default async function PublicLayout({ children }: { children: React.React
             {t("layout.arbiter")}
           </Link>
           <nav aria-label={t("layout.site")} className="ml-auto flex items-center gap-1 sm:gap-2">
+            <Link href="/pricing" className="rounded-md px-2.5 py-1.5 text-[13.5px] text-muted hover:text-fg">
+              {t("layout.pricing")}
+            </Link>
             <Link href="/reviewers/apply" className="hidden rounded-md px-2.5 py-1.5 text-[13.5px] text-muted hover:text-fg sm:block">
               {t("layout.forReviewers")}
             </Link>
@@ -32,6 +35,9 @@ export default async function PublicLayout({ children }: { children: React.React
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-6 text-[13px] text-muted md:px-6">
           <span>{t("layout.arbiter")}</span>
+          <Link href="/pricing" className="hover:text-fg">
+            {t("layout.pricing")}
+          </Link>
           <Link href="/reviewers/apply" className="hover:text-fg">
             {t("layout.becomeAReviewer")}
           </Link>

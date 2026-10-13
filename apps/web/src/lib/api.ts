@@ -10,6 +10,18 @@
 
 import type {
   Account,
+  AdminOverride,
+  BillingInterval,
+  BillingOverview,
+  CheckoutResult,
+  CreditPack,
+  CreditWallet,
+  PayoutAccountView,
+  PayoutMethodsView,
+  Plan,
+  PlansResponse,
+  ProviderStatus,
+  RailMethod,
   AccountDetail,
   AccountInput,
   Activity,
@@ -367,6 +379,35 @@ export function createApi(item: Transport) {
     deleteWebhook: (id: string) => del(`/webhooks/${enc(id)}`),
     usage: (period?: string) => get<Usage>("/usage", { period }),
     invoices: (p?: ListParams) => get<ListResponse<Invoice>>("/invoices", page(p)),
+
+    // Billing (D-051..D-053). Plans are public (pricing page).
+    plans: () => get<PlansResponse>("/billing/plans"),
+    billing: () => get<BillingOverview>("/billing/subscription"),
+    checkout: (body: { plan: string; seats?: number; interval: BillingInterval; currency?: string }) =>
+      post<CheckoutResult>("/billing/checkout", body),
+    billingPortal: () => post<{ url: string; provider: string }>("/billing/portal"),
+    cancelSubscription: (immediately = false) => post<BillingOverview>("/billing/subscription/cancel", { immediately }),
+    credits: () => get<CreditWallet>("/billing/credits"),
+    creditCheckout: (pack: string) => post<CheckoutResult>("/billing/credits/checkout", { pack }),
+    /** Provider invoices answer {url}; our own invoices are a PDF download (use invoicePdfUrl). */
+    invoiceDocument: (id: string) => get<{ url: string; provider: string }>(`/billing/invoices/${enc(id)}/document`),
+    invoicePdfUrl: (id: string) => item.downloadUrl(`/billing/invoices/${enc(id)}/document`),
+
+    // Reviewer payout rails (D-052)
+    payoutMethods: () => get<PayoutMethodsView>("/reviewer/payout-methods"),
+    setupPayoutAccount: (method: RailMethod, details: Record<string, string>) =>
+      post<PayoutAccountView>("/reviewer/payout-accounts", { method, details }),
+    refreshPayoutAccount: (method: RailMethod) => post<PayoutAccountView>(`/reviewer/payout-accounts/${enc(method)}/refresh`),
+
+    // Admin billing
+    adminPlans: () => get<{ items: Plan[]; credit_packs: CreditPack[]; providers: ProviderStatus }>("/admin/plans"),
+    createPlan: (body: Partial<Plan> & { key: string; name: string }) => post<Plan>("/admin/plans", body),
+    updatePlan: (key: string, body: Partial<Plan>) => patch<Plan>(`/admin/plans/${enc(key)}`, body),
+    adminOrgBilling: (orgId: string) => get<BillingOverview>(`/admin/orgs/${enc(orgId)}/subscription`),
+    overrideOrgBilling: (orgId: string, body: AdminOverride) =>
+      post<BillingOverview>(`/admin/orgs/${enc(orgId)}/subscription`, body),
+    grantCredits: (orgId: string, body: { amount: string; valid_days?: number; note?: string; idempotency_key: string }) =>
+      post<CreditWallet>(`/admin/orgs/${enc(orgId)}/credits`, body),
   };
 }
 

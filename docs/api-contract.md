@@ -197,7 +197,7 @@ Reviewer statuses: `applied, active, suspended, banned`. Levels: `candidate, rev
 
 `Dispute`: `{id, task_id, reviewer_id, reason, status, decided_by, decision_note, due_at, created_at, decided_at}`.
 `Payout`: `{id, reviewer_id, amount, currency, state, method, provider_ref, failure_reason, created_at, sent_at}`.
-Payouts: in dev/test/staging a mock provider "sends" them. **In production no payout provider is integrated yet: `run` only accrues** (`provider: null`, `send: null`, `note` explains). Real payouts need a provider integration before launch.
+Payouts: in dev/test/staging without Payoneer/PayPal keys a mock provider "sends" them. In production (or with keys) `run` sends through the payout rails (`provider: "rails"`, D-052): Payoneer, PayPal or the bank-file rail by payout method. Rails answer pending; `POST /admin/payouts/refresh` polls, bank transfers are confirmed by the admin. Live provider credentials and a test payout are P03 items.
 
 ## Integrations and billing
 
@@ -206,10 +206,69 @@ Payouts: in dev/test/staging a mock provider "sends" them. **In production no pa
 | GET | /webhooks | pm | | list of `{id, url, events, active, disabled_reason, created_at}` |
 | POST | /webhooks | pm | `{url, events[]}` | 201 webhook + `secret` (shown once). https only outside dev/test; no localhost/private IPs |
 | DELETE | /webhooks/{id} | pm | | 204 |
-| GET | /usage | cust | `?period=YYYY-MM` | `{period, words, ai_units, review_decisions, storage_gb, amount, currency}` |
-| GET | /invoices | cust | | list of `{id, number, period, lines[], subtotal, tax, tax_rate, tax_note, total, currency, status, issued_at, created_at}` |
+| GET | /usage | cust | `?period=YYYY-MM` | `{period, words, ai_units, review_decisions, storage_gb, platform_fee, amount, currency}` |
+| GET | /invoices | cust | | list of `Invoice` |
 
 Webhook events: `job.delivered, job.failed, job.needs_attention, quote.expired`. Delivery is at-least-once; receivers dedupe on `event_id`. Signature header `Arbiter-Signature: t=<unix>,v1=<hex hmac sha256 of "t.body">`.
+
+`Invoice`: `{id, number, period, lines[], subtotal, tax, tax_rate, tax_note, total, currency, status: draft|issued|paid|void|refunded, issued_at, created_at, kind: usage|subscription|credit_pack|overage, provider: internal|paddle|stripe, provider_ref, provider_invoice_number, document_url, issued_by: us|paddle|stripe, due_at, paid_at}`. `provider != internal` means the payment provider (merchant of record) issued the tax invoice and this row is our record of it (D-053).
+
+## Subscription billing (D-051 to D-054)
+
+Writes need permission `billing.manage` (roles `pm`, `admin`; not `client`, not API keys). Our database is the source of truth; providers are adapters (`arbiter/billing/providers`).
+
+| Method | Path | Role | Body / query | Returns |
+|---|---|---|---|---|
+| GET | /billing/plans | public | | `{items: Plan[], credit_packs: CreditPack[], currencies[], platform_fee: {default_percent, max_percent}}` (active + public plans) |
+| GET | /billing/subscription | cust | | `BillingOverview` |
+| POST | /billing/checkout | billing.manage | `{plan, seats?, interval: month\|year, currency?}` | `{url, provider, provider_ref}`. 422 for a `custom` plan, a price missing in that interval/currency, seats out of range. 409 when that plan is already active at the provider |
+| POST | /billing/portal | billing.manage | | `{url, provider}` (Paddle customer portal; manual: the billing page) |
+| POST | /billing/subscription/cancel | billing.manage | `{immediately=false}` | `BillingOverview` (provider confirms by webhook) |
+| GET | /billing/credits | cust | | `{balance, currency, lots: [{id, kind, amount, remaining, currency, expires_at, ref, created_at}], entries[], packs: CreditPack[]}` |
+| POST | /billing/credits/checkout | billing.manage | `{pack}` | `{url, provider, provider_ref}` |
+| GET | /billing/invoices/{id}/document | cust | | our invoice: PDF; provider record: `{url, provider}` (fresh, short-lived provider link) |
+| POST | `/webhooks/paddle` (no /v1) | public, signed | raw Paddle event | 200 `{ok, duplicate, status: processed\|ignored}`; 400 `invalid_signature`; 500 `{ok: false, status: failed}` (stored, provider retries) |
+| POST | `/webhooks/stripe` (no /v1) | public, signed | raw Stripe event | same; Stripe is disabled unless configured |
+
+`Plan`: `{key, name, description, modules[], prices: {month|year: {CUR: "49.00"}}, seat_prices, included: {word, ai_unit}, overage: {CUR: {word, ai_unit}}, seats_included, max_seats, interval, custom, currencies[]}` (+ admin: `id, public, active, sort, provider_prices, updated_at`).
+`CreditPack`: `{key, name, credit_amount, price, currency, valid_days}`.
+`BillingOverview`: `{subscription: Sub|null, pending: Sub|null, plan: Plan|null, modules[], seats_used, period, meters: [{unit, used, included, overage}], platform_fee_percent, credits_balance, currency, provider}` (+ admin: `org_id, overrides: {add, remove}, payment_terms_days, po_number, provider_override, history: Sub[]`).
+`Sub`: `{id, plan, provider: paddle|stripe|manual|admin, provider_subscription_id, status: incomplete|trialing|active|past_due|paused|canceled, interval, currency, seats, current_period_start, current_period_end, cancel_at, canceled_at}`.
+
+Paddle webhook signature: `Paddle-Signature: ts=<unix>;h1=<hex HMAC-SHA256(secret, "<ts>:<raw body>")>` (several `h1` during secret rotation), 300 s tolerance. Each `(provider, event_id)` is stored once in `billing_events`; a replay answers `duplicate: true`. Events used: `subscription.*`, `transaction.completed`, `transaction.payment_failed`, `adjustment.created|updated` (approved refunds).
+
+Quotes: tiers `hybrid` and `full` carry `platform_fee: {percent, basis_estimate, estimate}` and `total_estimate` (D-052).
+
+### Admin billing
+
+| Method | Path | Body / query | Returns |
+|---|---|---|---|
+| GET | /admin/plans | | `{items: Plan[] (all, admin view), credit_packs, providers: {paddle: {configured, environment}, stripe: {configured, enabled}, manual, selected}}` |
+| POST | /admin/plans | `Plan` fields with `key`, `name` | 201 `Plan`; 409 duplicate key; 422 unknown module, float price |
+| PATCH | /admin/plans/{key} | any `Plan` field except `key` | `Plan` |
+| GET | /admin/orgs/{id}/subscription | | `BillingOverview` (admin) |
+| POST | /admin/orgs/{id}/subscription | `{plan?, status?, seats?, interval?, currency?, period_end?, modules_add?, modules_remove?, platform_fee_percent? (0..8), payment_terms_days?, po_number?, provider?: paddle\|stripe\|manual\|"", note?}` | `BillingOverview` (admin) |
+| POST | /admin/orgs/{id}/credits | `{amount, valid_days=365, note?, idempotency_key}` | 201 credit wallet |
+| POST | /admin/billing/close-period | `{period: YYYY-MM (finished), org_id?}` | `{period, expired_lots, orgs: [{org_id, status, covered_by_credit, due, invoice, unpriced}]}` (idempotent) |
+| GET | /admin/invoices | `?status=` | list of `Invoice` + `org_id` |
+| POST | /admin/invoices/{id}/mark-paid | | `Invoice` (our invoices only; activates a manual subscription or adds a credit lot) |
+| GET | /admin/billing/events | `?status=received\|processed\|ignored\|failed` | list of `{id, provider, event_id, event_type, status, error, received_at, processed_at}` |
+
+### Payout rails (D-052)
+
+| Method | Path | Role | Body | Returns |
+|---|---|---|---|---|
+| GET | /reviewer/payout-methods | rev | | `{selected, effective_threshold, items: [{method: payoneer\|paypal\|sepa\|wise, status: not_set_up\|pending\|active\|rejected, onboarding_required, onboarding_url, details (IBAN masked), fields[], minimum_payout, available, selected, updated_at}]}` |
+| POST | /reviewer/payout-accounts | rev | `{method, details: {email?, iban?, bic?, account_holder?}}` | account view; Payoneer answers `onboarding_url` (status pending) |
+| POST | /reviewer/payout-accounts/{method}/refresh | rev | | account view (Payoneer onboarding status) |
+| POST | /admin/payouts/refresh | admin | | `{checked, settled, failed, pending}` (polls Payoneer / PayPal) |
+| POST | /admin/payouts/bank-batch | admin | `{format: pain001\|csv\|wise_csv}` | 201 `{id, method, format, item_count, total, currency, payout_ids, download_path, created_at}`; 409 nothing to batch |
+| GET | /admin/payout-batches | admin | | list of batches |
+| GET | /admin/payout-batches/{id}/file | admin | | the file (XML or CSV) |
+| POST | /admin/payout-batches/{id}/settle | admin | | `{batch, settled}` |
+| POST | /admin/payouts/{id}/complete | admin | `{ok, reason?}` | `Payout` (bank transfer confirmed or rejected) |
+
+`PATCH /reviewer/me` accepts `payout_method: payoneer|paypal|sepa|wise`. Effective payout threshold = max(profile threshold, method minimum: payoneer 20, paypal 5, sepa 0, wise 5; `ARBITER_PAYOUT_MINIMUMS` overrides).
 
 ---
 

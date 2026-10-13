@@ -16,7 +16,7 @@ from arbiter.models import ReviewerPair, ReviewerProfile, User
 
 LEVELS = ("candidate", "reviewer", "senior", "domain_expert")
 STATUSES = ("applied", "active", "suspended", "banned")
-PAYOUT_METHODS = ("wise", "paypal", "sepa")
+PAYOUT_METHODS = ("payoneer", "paypal", "sepa", "wise")
 # Platform-operator reporting (EU DAC7 and equivalents) needs all of these before a payout.
 TAX_FIELDS = ("legal_name", "tax_id", "address", "date_of_birth", "country", "payout_method")
 

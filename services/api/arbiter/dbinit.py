@@ -20,7 +20,7 @@ from arbiter.models.provenance import APPEND_ONLY_TRIGGER_SQL
 
 EXTENSIONS_SQL = ("CREATE EXTENSION IF NOT EXISTS vector", "CREATE EXTENSION IF NOT EXISTS pg_trgm")
 
-# Objects added by later migrations (0002_agency_os, 0003_ui_i18n): not part of the 0001 schema.
+# Objects added by later migrations (0002_agency_os, 0003_ui_i18n, 0010_billing): not part of the 0001 schema.
 LATER_TABLES: frozenset[str] = frozenset(
     {
         "price_lists",
@@ -35,11 +35,24 @@ LATER_TABLES: frozenset[str] = frozenset(
         # 0003_ui_i18n
         "ui_locales",
         "ui_messages",
+        # 0010_billing
+        "plans",
+        "credit_packs",
+        "subscriptions",
+        "billing_customers",
+        "credit_ledger",
+        "billing_events",
+        "payout_accounts",
+        "payout_batches",
     }
 )
 LATER_COLUMNS: dict[str, frozenset[str]] = {
     "projects": frozenset({"account_id", "workflow_template_id"}),
     "jobs": frozenset({"account_id", "workflow", "client_approved_at", "senate_count"}),
+    # 0010_billing
+    "invoices": frozenset(
+        {"kind", "provider", "provider_ref", "provider_invoice_number", "provider_url", "due_at", "paid_at"}
+    ),
 }
 
 

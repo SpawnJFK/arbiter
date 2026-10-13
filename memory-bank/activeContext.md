@@ -28,9 +28,14 @@ Verified in the cloud session (Linux, Node 24.21 from npm, Python 3.13):
 
 DEFERRED to P00: everything Windows (paths, fnm, uv, Docker Desktop), tool installs, Cursor hook proof, Impeccable engine and its hook, Betterleaks flag check, Beads init and phase beads, Graphify index, Context7 key and convention re-check, journey records.
 
+## Session 2026-10-13 (billing and payout rails, parallel worktree, owner-directed ahead of P03)
+
+Built with tests (D-051..D-054), mocks only: plans catalog as data (seeded Starter/Team/Business/Enterprise), subscriptions, entitlements writer for `org.settings["modules"]`, prepaid credit wallet on the double-entry ledger, period-close overage job, Paddle adapter (merchant of record), Stripe adapter (off unless configured), manual bank-transfer provider with our PDF invoices, signed idempotent webhooks (`/webhooks/paddle`, `/webhooks/stripe`, outside /v1), Payoneer / PayPal / bank-file payout rails with onboarding and minimums, platform fee (default 5 %, 0..8) on quotes and on credited review pay. Web: billing page, public `/pricing`, `/checkout/paddle`, `/reviewer/payouts`, `/admin/billing` (plans editor, org override). Migration `0010` (down_revision `0003`). `docs/api-contract.md` changed (new billing, admin billing and payout rail sections; `/usage` gained `platform_fee`; `Invoice` gained provider fields; quotes gained `platform_fee` / `total_estimate` on human tiers). `contracts.py` unchanged.
+Not live: no provider keys used; live Paddle/PayPal/Payoneer setup, webhook destination, Paddle client token + approved domain, test payout stay P03 human steps.
+
 ## Open items carried forward
 1. Context7 was not used while building; P00 item 16 re-checks the conventions.
-2. Payouts in prod only accrue: no payout provider integration (P03).
+2. Payout rails exist (D-052) but are only proven against mocks; live credentials and one test payout are P03.
 3. `/healthz` has no `commit` yet; `npm run verify:deployed` needs it (P02 item 6).
 4. `apps/web/e2e/ensure_reviewer.py` writes to a local database; running e2e against staging needs a remote path (P02 item 11).
 5. Core `status` cannot see Playwright and Impeccable in a monorepo; they are listed under `tools.requiredOutsideRegistry` instead of being patched into the core.

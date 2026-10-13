@@ -8,9 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field, Input, Select } from "@/components/ui/input";
-import { Callout } from "@/components/ui/misc";
+import { Callout, Progress } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/toast";
 import { api, errorMessage } from "@/lib/api";
+import { uploadSourceFile, type UploadProgress } from "@/lib/upload";
 import { cn } from "@/lib/cn";
 import type { Translator } from "@/lib/i18n/core";
 import { CONTENT_TYPES, contentTypeLabel, LANGS } from "@/lib/langs";
@@ -45,6 +46,7 @@ export function NewProjectWizard({
   const [sourceLang, setSourceLang] = useState("en");
   const [name, setName] = useState("");
   const [uploaded, setUploaded] = useState<UploadedFile | null>(null);
+  const [progress, setProgress] = useState<UploadProgress | null>(null);
 
   const [targets, setTargets] = useState<string[]>([]);
   const [contentType, setContentType] = useState(regulated ? "regulatory" : "general");
@@ -80,7 +82,8 @@ export function NewProjectWizard({
   const doUpload = () =>
     run(async () => {
       if (!file) throw new Error(t("app.projects.new.wizard.chooseAFileFirst"));
-      const uploadedFile = await api.uploadFile(file, sourceLang);
+      setProgress({ loaded: 0, total: file.size, phase: "sending" });
+      const uploadedFile = await uploadSourceFile(t, file, sourceLang, setProgress).finally(() => setProgress(null));
       setUploaded(uploadedFile);
       if (!name) setName(file.name.replace(/\.[^.]+$/, ""));
       setTargets((prev) => prev.filter((x) => x !== sourceLang));
@@ -155,7 +158,8 @@ export function NewProjectWizard({
               </Field>
             </div>
           </div>
-          <div className="mt-5 flex justify-end">
+          <div className="mt-5 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-end">
+            {progress && <UploadBar progress={progress} />}
             <Button variant="primary" onClick={doUpload} loading={busy} disabled={!file}>
               {t("app.projects.new.wizard.uploadAndContinue")}
             </Button>
@@ -584,6 +588,22 @@ function QuoteStep({
           {t("app.projects.new.wizard.continue")}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function UploadBar({ progress }: { progress: UploadProgress }) {
+  const { t } = useI18n();
+  const mb = (n: number) => (n / (1024 * 1024)).toFixed(n >= 100 * 1024 * 1024 ? 0 : 1);
+  const ratio = progress.total > 0 ? Math.min(1, progress.loaded / progress.total) : 0;
+  const processing = progress.phase === "processing";
+  const label = processing
+    ? t("app.projects.new.wizard.uploadProcessing")
+    : t("app.projects.new.wizard.uploadSending", { percent: Math.round(ratio * 100), loaded: mb(progress.loaded), total: mb(progress.total) });
+  return (
+    <div className="min-w-0 flex-1 sm:max-w-sm" role="status" aria-live="polite" aria-label={t("app.projects.new.wizard.uploadProgress")}>
+      <div className="mb-1 truncate text-[13px] text-muted tabular-nums">{label}</div>
+      <Progress value={processing ? 1 : ratio} className={cn(processing && "animate-pulse")} />
     </div>
   );
 }

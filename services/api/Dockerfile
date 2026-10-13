@@ -19,7 +19,15 @@ COPY . .
 RUN VIRTUAL_ENV=/opt/venv uv pip install --no-deps .
 
 FROM python:3.13-slim AS runtime
-ENV PATH="/opt/venv/bin:$PATH" \
+# Build identity (CI passes the commit); GET /healthz reports it so a deploy can be verified.
+ARG ARBITER_GIT_SHA=unknown
+ARG ARBITER_VERSION=0.1.0
+LABEL org.opencontainers.image.source="https://github.com/SpawnJFK/arbiter" \
+      org.opencontainers.image.revision=$ARBITER_GIT_SHA \
+      org.opencontainers.image.version=$ARBITER_VERSION
+ENV ARBITER_GIT_SHA=$ARBITER_GIT_SHA \
+    ARBITER_VERSION=$ARBITER_VERSION \
+    PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     ARBITER_STORAGE_DIR=/var/lib/arbiter/storage

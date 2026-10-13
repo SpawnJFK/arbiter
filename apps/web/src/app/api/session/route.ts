@@ -7,11 +7,13 @@ import { mockApply, mockLogin, mockRegister } from "@/lib/mock/handler";
 import { safeNext } from "@/lib/roles";
 import type { User } from "@/lib/types";
 
-type Kind = "login" | "register" | "apply";
+type Kind = "login" | "register" | "apply" | "reset";
 const PATHS: Record<Kind, string> = {
   login: "/auth/login",
   register: "/auth/register",
   apply: "/reviewers/apply",
+  // Password reset or invitation link: sets the new password and signs the user in.
+  reset: "/auth/password/reset",
 };
 const MAX_AGE = 60 * 60 * 12; // 12 h; the backend's JWT expiry still wins (401 -> /logout)
 
@@ -20,7 +22,7 @@ function errorJson(status: number, code: string, message: string) {
 }
 
 /**
- * POST /api/session  { kind: "login"|"register"|"apply", next?, ...contract body }
+ * POST /api/session  { kind: "login"|"register"|"apply"|"reset", next?, ...contract body }
  * Proxies to the backend auth endpoint, stores the token in an httpOnly cookie and returns
  * only `{ user, redirect }` so the token never reaches browser JavaScript.
  */
@@ -32,12 +34,15 @@ export async function POST(req: NextRequest) {
     return errorJson(400, "invalid_json", "Body must be JSON.");
   }
   const kind = payload.kind as Kind;
-  if (!PATHS[kind]) return errorJson(400, "invalid_kind", "kind must be login, register or apply.");
+  if (!PATHS[kind]) return errorJson(400, "invalid_kind", "kind must be login, register, apply or reset.");
   const { kind: _k, next, ...body } = payload;
   void _k;
 
   let token: string;
   let user: User;
+  if (IS_MOCK && kind === "reset") {
+    return errorJson(501, "not_available", (await getI18n()).t("errors.notInDemo"));
+  }
   if (IS_MOCK) {
     const email = String(body.email ?? "");
     if (!email || !body.password) return errorJson(422, "validation_error", (await getI18n()).t("errors.emailPasswordRequired"));

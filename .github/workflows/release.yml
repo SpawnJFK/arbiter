@@ -1,0 +1,253 @@
+name: release
+
+# Build -> push to GHCR -> attest -> deploy.
+#   main: after the `ci` workflow succeeds on a push to main, deploy staging.
+#   v* tags: build the tagged commit and deploy production (the GitHub environment
+#   "production" holds the manual approval).
+# Deploy jobs print the missing secrets/variables and skip while an environment is not
+# configured yet, so this workflow is green from day one.
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      destination:
+        description: "Deploy target after the build"
+        type: choice
+        options: [staging, none]
+        default: staging
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event_name == 'push' && github.ref || 'main' }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/spawnjfk/arbiter
+
+jobs:
+  meta:
+    name: release metadata
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.m.outputs.sha }}
+      version: ${{ steps.m.outputs.version }}
+      is_tag: ${{ steps.m.outputs.is_tag }}
+    steps:
+      - id: m
+        env:
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          EVENT: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          sha="${RUN_SHA:-$GITHUB_SHA}"
+          if [ "$EVENT" = "push" ] && [ "$REF_TYPE" = "tag" ]; then
+            version="${REF_NAME#v}"; is_tag=true
+          else
+            version="0.0.0-${sha:0:12}"; is_tag=false
+          fi
+          {
+            echo "sha=$sha"
+            echo "version=$version"
+            echo "is_tag=$is_tag"
+          } >> "$GITHUB_OUTPUT"
+          echo "release: sha=$sha version=$version tag=$is_tag"
+
+  build:
+    name: build ${{ matrix.image }}
+    needs: meta
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - image: api
+            context: services/api
+          - image: web
+            context: apps/web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.meta.outputs.sha }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: tags
+        env:
+          SHA: ${{ needs.meta.outputs.sha }}
+          VERSION: ${{ needs.meta.outputs.version }}
+          IS_TAG: ${{ needs.meta.outputs.is_tag }}
+          IMAGE: ${{ env.IMAGE_PREFIX }}-${{ matrix.image }}
+        run: |
+          tags="$IMAGE:$SHA"
+          if [ "$IS_TAG" = "true" ]; then tags="$tags,$IMAGE:v$VERSION,$IMAGE:latest"; else tags="$tags,$IMAGE:main"; fi
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+      - id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.context }}/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            ARBITER_GIT_SHA=${{ needs.meta.outputs.sha }}
+            ARBITER_VERSION=${{ needs.meta.outputs.version }}
+            NEXT_PUBLIC_POSTHOG_KEY=${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.meta.outputs.sha }}
+            org.opencontainers.image.version=${{ needs.meta.outputs.version }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.IMAGE_PREFIX }}-${{ matrix.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+  deploy-staging:
+    name: deploy staging
+    needs: [meta, build]
+    if: needs.meta.outputs.is_tag != 'true' && (github.event_name != 'workflow_dispatch' || inputs.destination == 'staging')
+    runs-on: ubuntu-24.04
+    environment: staging
+    permissions:
+      contents: read
+      packages: read
+    env:
+      DESTINATION: staging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.meta.outputs.sha }}
+      - &preflight
+        id: preflight
+        name: check environment configuration
+        env:
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+          ARBITER_DATABASE_URL: ${{ secrets.ARBITER_DATABASE_URL }}
+          ARBITER_JWT_SECRET: ${{ secrets.ARBITER_JWT_SECRET }}
+          ARBITER_S3_BUCKET: ${{ secrets.ARBITER_S3_BUCKET }}
+          ARBITER_S3_ACCESS_KEY_ID: ${{ secrets.ARBITER_S3_ACCESS_KEY_ID }}
+          ARBITER_S3_SECRET_ACCESS_KEY: ${{ secrets.ARBITER_S3_SECRET_ACCESS_KEY }}
+          ARBITER_SMTP_HOST: ${{ secrets.ARBITER_SMTP_HOST }}
+          ARBITER_DOMAIN: ${{ vars.ARBITER_DOMAIN }}
+          API_URL: ${{ vars.API_URL }}
+        run: |
+          missing=""
+          for name in TS_OAUTH_CLIENT_ID TS_OAUTH_SECRET ARBITER_DATABASE_URL ARBITER_JWT_SECRET \
+                      ARBITER_S3_BUCKET ARBITER_S3_ACCESS_KEY_ID ARBITER_S3_SECRET_ACCESS_KEY \
+                      ARBITER_SMTP_HOST ARBITER_DOMAIN API_URL; do
+            if [ -z "${!name:-}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::notice title=deploy $DESTINATION skipped::environment '$DESTINATION' is not configured; missing:$missing"
+            echo "Deploy to $DESTINATION skipped. Missing secrets/variables:"
+            for m in $missing; do echo "  - $m"; done
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - &ruby
+        if: steps.preflight.outputs.ready == 'true'
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - &kamal
+        if: steps.preflight.outputs.ready == 'true'
+        name: install kamal
+        run: gem install kamal -v "~> 2.7" --no-document
+      - &tailscale
+        if: steps.preflight.outputs.ready == 'true'
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+      - &deploy
+        if: steps.preflight.outputs.ready == 'true'
+        name: kamal deploy (api + worker, then web)
+        working-directory: deploy/kamal
+        env:
+          VERSION: ${{ needs.meta.outputs.sha }}
+          ARBITER_DOMAIN: ${{ vars.ARBITER_DOMAIN }}
+          KAMAL_REGISTRY_PASSWORD: ${{ secrets.KAMAL_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
+          ARBITER_DATABASE_URL: ${{ secrets.ARBITER_DATABASE_URL }}
+          ARBITER_JWT_SECRET: ${{ secrets.ARBITER_JWT_SECRET }}
+          ARBITER_S3_ENDPOINT_URL: ${{ secrets.ARBITER_S3_ENDPOINT_URL }}
+          ARBITER_S3_REGION: ${{ secrets.ARBITER_S3_REGION }}
+          ARBITER_S3_BUCKET: ${{ secrets.ARBITER_S3_BUCKET }}
+          ARBITER_S3_ACCESS_KEY_ID: ${{ secrets.ARBITER_S3_ACCESS_KEY_ID }}
+          ARBITER_S3_SECRET_ACCESS_KEY: ${{ secrets.ARBITER_S3_SECRET_ACCESS_KEY }}
+          ARBITER_MAIL_FROM: ${{ secrets.ARBITER_MAIL_FROM }}
+          ARBITER_SMTP_HOST: ${{ secrets.ARBITER_SMTP_HOST }}
+          ARBITER_SMTP_USERNAME: ${{ secrets.ARBITER_SMTP_USERNAME }}
+          ARBITER_SMTP_PASSWORD: ${{ secrets.ARBITER_SMTP_PASSWORD }}
+          ARBITER_ANTHROPIC_API_KEY: ${{ secrets.ARBITER_ANTHROPIC_API_KEY }}
+          ARBITER_OPENAI_API_KEY: ${{ secrets.ARBITER_OPENAI_API_KEY }}
+          ARBITER_DEEPL_API_KEY: ${{ secrets.ARBITER_DEEPL_API_KEY }}
+          ARBITER_GOOGLE_API_KEY: ${{ secrets.ARBITER_GOOGLE_API_KEY }}
+          ARBITER_POSTHOG_KEY: ${{ secrets.ARBITER_POSTHOG_KEY }}
+          ARBITER_OTEL_ENDPOINT: ${{ secrets.ARBITER_OTEL_ENDPOINT }}
+          ARBITER_OTEL_HEADERS: ${{ secrets.ARBITER_OTEL_HEADERS }}
+          ARBITER_HEARTBEAT_URL: ${{ secrets.ARBITER_HEARTBEAT_URL }}
+          ARBITER_SELLER_COUNTRY: ${{ secrets.ARBITER_SELLER_COUNTRY }}
+          ARBITER_VAT_RATE: ${{ secrets.ARBITER_VAT_RATE }}
+        run: |
+          kamal deploy -d "$DESTINATION" --version "$VERSION" --skip-push
+          kamal deploy -c config/deploy.web.yml -d "$DESTINATION" --version "$VERSION" --skip-push
+      - &verify
+        if: steps.preflight.outputs.ready == 'true'
+        name: verify deployed commit
+        env:
+          DEPLOY_VERIFY_URL: ${{ vars.API_URL }}
+          EXPECTED_GIT_SHA: ${{ needs.meta.outputs.sha }}
+        run: |
+          for i in $(seq 1 10); do
+            if node scripts/verify-deployed-version.mjs; then exit 0; fi
+            echo "verify attempt $i/10 failed, retrying in 15s"
+            sleep 15
+          done
+          exit 1
+
+  deploy-production:
+    name: deploy production
+    needs: [meta, build]
+    if: needs.meta.outputs.is_tag == 'true'
+    runs-on: ubuntu-24.04
+    environment: production  # required reviewers on this environment = manual approval
+    permissions:
+      contents: read
+      packages: read
+    env:
+      DESTINATION: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.meta.outputs.sha }}
+      - *preflight
+      - *ruby
+      - *kamal
+      - *tailscale
+      - *deploy
+      - *verify

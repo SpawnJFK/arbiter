@@ -1,0 +1,21 @@
+# Staging destination for the API + worker service. Deployed by CI on every green main.
+# Host names are Tailscale MagicDNS names (no public SSH). Replace the domain placeholders
+# when the owner picks the domain (P02); CI refuses to deploy while they are unset.
+
+servers:
+  api:
+    hosts:
+      - arbiter-stg-1
+  worker:
+    hosts:
+      - arbiter-stg-1
+
+proxy:
+  host: api.staging.<%= ENV.fetch("ARBITER_DOMAIN") %>
+
+env:
+  clear:
+    ARBITER_ENV: staging
+    ARBITER_PUBLIC_BASE_URL: https://api.staging.<%= ENV.fetch("ARBITER_DOMAIN") %>
+    ARBITER_WEB_BASE_URL: https://app.staging.<%= ENV.fetch("ARBITER_DOMAIN") %>
+    ARBITER_CORS_ORIGINS: https://app.staging.<%= ENV.fetch("ARBITER_DOMAIN") %>

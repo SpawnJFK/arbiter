@@ -10,6 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from arbiter import observability
 from arbiter.config import get_settings
 from arbiter.domain.states import IllegalTransition
 from arbiter.errors import ServiceError
@@ -29,6 +30,8 @@ def create_app() -> FastAPI:
     if settings.env == "prod" and settings.jwt_secret.startswith("dev-only"):
         raise RuntimeError("ARBITER_JWT_SECRET must be set in production")
     app = FastAPI(title="Arbiter API", version="1.0.0", docs_url="/docs", openapi_url="/openapi.json")
+    if settings.env in ("staging", "prod") and settings.storage_backend == "local":
+        log.warning("ARBITER_STORAGE_BACKEND=local outside dev: files live on this host only")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
@@ -58,14 +61,26 @@ def create_app() -> FastAPI:
     async def _lookup(_: Request, e: LookupError) -> JSONResponse:
         return _err(404, "not_found", str(e) or "not found")
 
+    @app.exception_handler(Exception)
+    async def _unhandled(_: Request, e: Exception) -> JSONResponse:
+        # Reported without the request body; the client gets a generic message.
+        log.exception("unhandled error")
+        observability.capture_exception(e, "api")
+        return _err(500, "internal_error", "Something went wrong on our side. Please try again.")
+
     @app.get("/healthz", include_in_schema=False)
     def healthz() -> dict:
-        return {"ok": True}
+        # `commit` lets scripts/verify-deployed-version.mjs prove what is running.
+        return {"ok": True, "commit": settings.git_sha, "version": settings.version}
 
     from arbiter.api.routes import ROUTERS
 
     for router in ROUTERS:
         app.include_router(router, prefix="/v1")
+    if observability.setup_tracing("arbiter-api", app=app):
+        from arbiter import db
+
+        observability.setup_tracing("arbiter-api", engine=db.get_engine())
     return app
 
 

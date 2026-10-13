@@ -13,6 +13,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, Header, UploadFile
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 
 from arbiter import storage
 from arbiter.api.deps import DB, Customer
@@ -52,25 +53,21 @@ def _read_limited(upload: UploadFile) -> bytes:
     return bytes(buf)
 
 
-@router.post("/files", status_code=201)
-def upload_file(
-    p: Customer,
-    db: DB,
-    file: Annotated[UploadFile, File()],
-    source_lang: Annotated[str, Form(min_length=2, max_length=16)],
-    idempotency_key: Annotated[str | None, Header()] = None,
-) -> Any:
-    filename = posixpath.basename((file.filename or "").replace("\\", "/")).strip()
-    if not filename:
-        raise Invalid("the upload has no file name")
-    source_lang = source_lang.strip()
-    data = _read_limited(file)
-    sha = hashlib.sha256(data).hexdigest()
-    payload = {"filename": filename, "source_lang": source_lang, "sha256": sha}
-    replay = idempotent_replay(db, p, "files", idempotency_key, payload)
-    if replay is not None:
-        return replay
+def register_file(
+    db: Session,
+    org_id: str,
+    filename: str,
+    data: bytes,
+    source_lang: str,
+    *,
+    sha256: str | None = None,
+    stored_key: str | None = None,
+) -> tuple[FileAsset, list[str]]:
+    """Validate by extracting once (R-IN-*), count, store and register a source file.
 
+    Shared by POST /files (bytes in the request) and POST /uploads/{id}/complete (bytes
+    already in storage at `stored_key`, which is then kept instead of copying the object).
+    """
     result = detect_and_extract(filename, data, source_lang)  # FormatError -> 422 unsupported_file
     segments = 0
     words = 0
@@ -82,14 +79,17 @@ def upload_file(
                 words += count_words(text)
 
     file_id = new_id("fil")
-    key = storage.make_key(p.org_id, "source", file_id, filename)
-    storage.put(key, data)
+    if stored_key is None:
+        key = storage.make_key(org_id, "source", file_id, filename)
+        storage.put(key, data)
+    else:
+        key = stored_key
     fa = FileAsset(
         id=file_id,
-        org_id=p.org_id,
+        org_id=org_id,
         filename=filename,
         format=result.format,
-        sha256=sha,
+        sha256=sha256 or hashlib.sha256(data).hexdigest(),
         size=len(data),
         storage_key=key,
         source_lang=source_lang,
@@ -98,6 +98,34 @@ def upload_file(
     )
     db.add(fa)
     db.flush()
-    body = file_view(fa, result.warnings)
+    return fa, list(result.warnings)
+
+
+def clean_filename(raw: str | None) -> str:
+    filename = posixpath.basename((raw or "").replace("\\", "/")).strip()
+    if not filename:
+        raise Invalid("the upload has no file name")
+    return filename
+
+
+@router.post("/files", status_code=201)
+def upload_file(
+    p: Customer,
+    db: DB,
+    file: Annotated[UploadFile, File()],
+    source_lang: Annotated[str, Form(min_length=2, max_length=16)],
+    idempotency_key: Annotated[str | None, Header()] = None,
+) -> Any:
+    filename = clean_filename(file.filename)
+    source_lang = source_lang.strip()
+    data = _read_limited(file)
+    sha = hashlib.sha256(data).hexdigest()
+    payload = {"filename": filename, "source_lang": source_lang, "sha256": sha}
+    replay = idempotent_replay(db, p, "files", idempotency_key, payload)
+    if replay is not None:
+        return replay
+
+    fa, warnings = register_file(db, p.org_id, filename, data, source_lang, sha256=sha)
+    body = file_view(fa, warnings)
     idempotent_store(db, p, "files", idempotency_key, payload, 201, body)
     return JSONResponse(body, status_code=201)

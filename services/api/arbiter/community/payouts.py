@@ -320,6 +320,9 @@ def send_payouts(session: Session, provider: PayoutProvider) -> dict[str, int]:
         p.sent_at = utcnow()
         p.provider_ref = res.provider_ref
         summary["sent"] += 1
+        from arbiter import notify
+
+        notify.payout_sent(session, p)
         if res.status == "settled":
             complete_payout(session, p, ok=True)
             summary["settled"] += 1

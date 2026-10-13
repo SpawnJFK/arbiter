@@ -19,7 +19,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from arbiter import db
+from arbiter import db, observability
 from arbiter.pipeline import orchestrator
 from arbiter.pipeline.queue import claim, complete, fail
 
@@ -32,13 +32,32 @@ def _webhook(session: Session, payload: dict[str, Any]) -> None:
     webhooks.deliver(session, payload["delivery_id"])
 
 
+def _email(session: Session, payload: dict[str, Any]) -> None:
+    from arbiter import notify
+
+    notify.deliver(session, payload["message_id"])
+
+
 def _handler(kind: str) -> Callable[[Session, dict[str, Any]], None] | None:
     if kind in orchestrator.HANDLERS:
         fn = orchestrator.HANDLERS[kind]
         return lambda s, p: fn(s, p["job_id"])
     if kind == "webhook.deliver":
         return _webhook
+    if kind == "email.send":
+        return _email
     return None
+
+
+def _org_of(session: Session, payload: dict[str, Any]) -> str | None:
+    """Org of a job step, for telemetry grouping (hashed before it leaves the process)."""
+    job_id = payload.get("job_id")
+    if not job_id:
+        return None
+    from arbiter.models import Job
+
+    job = session.get(Job, job_id)
+    return job.org_id if job else None
 
 
 def run_one(factory: sessionmaker[Session], worker_id: str) -> bool:
@@ -54,6 +73,7 @@ def run_one(factory: sessionmaker[Session], worker_id: str) -> bool:
     handler = _handler(kind)
     error: str | None = None
     with factory() as s:
+        org_token = observability.current_org.set(_org_of(s, payload))
         try:
             if handler is None:
                 raise RuntimeError(f"no handler for {kind}")
@@ -69,6 +89,9 @@ def run_one(factory: sessionmaker[Session], worker_id: str) -> bool:
             s.rollback()
             error = f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=5)}"
             log.warning("work item %s (%s) failed: %s", item_id, kind, e)
+            observability.capture_exception(e, "worker", {"work_kind": kind})
+        finally:
+            observability.current_org.reset(org_token)
 
     if error is not None:
         with factory() as s:
@@ -79,6 +102,10 @@ def run_one(factory: sessionmaker[Session], worker_id: str) -> bool:
             dead = fail(it, error)
             if dead and kind.startswith("job.") and "job_id" in payload:
                 orchestrator.fail_job(s, payload["job_id"], error.splitlines()[0])
+            if dead and kind == "email.send" and "message_id" in payload:
+                from arbiter import notify
+
+                notify.mark_failed(s, payload["message_id"], error.splitlines()[0])
             s.commit()
     return True
 
@@ -115,17 +142,23 @@ def main() -> None:
 
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
+    observability.setup_tracing("arbiter-worker", engine=db.get_engine())
+    heartbeat = observability.Heartbeat.from_settings()
     last_hk = 0.0
     log.info("worker %s started", worker_id)
     while not stop:
+        if heartbeat is not None:
+            heartbeat.maybe_beat()  # the uptime monitor alerts when the loop stops beating
         if time.monotonic() - last_hk > 60:
             try:
                 housekeeping(factory)
-            except Exception:
+            except Exception as e:
                 log.exception("housekeeping failed")
+                observability.capture_exception(e, "worker", {"work_kind": "housekeeping"})
             last_hk = time.monotonic()
         if not run_one(factory, worker_id):
             time.sleep(1.0)
+    observability.shutdown()
     log.info("worker %s stopped", worker_id)
 
 

@@ -54,8 +54,11 @@ def test_registry_outside_test_env_requires_keys():
         env="dev", anthropic_api_key="a", openai_api_key="", deepl_api_key="d", google_api_key=""
     )
     assert set(registry.available_mt(keyed)) == {"mock-mt", "deepl", "llm-mt:mock-llm", "llm-mt:anthropic"}
-    assert isinstance(registry.get_mt("deepl", keyed), DeepLEngine)
-    assert isinstance(registry.get_llm("anthropic", keyed), AnthropicClient)
+    # Real engines come wrapped for usage telemetry (arbiter.observability); the wrapper is transparent.
+    mt = registry.get_mt("deepl", keyed)
+    llm = registry.get_llm("anthropic", keyed)
+    assert isinstance(mt.inner, DeepLEngine) and mt.name == "deepl"
+    assert isinstance(llm.inner, AnthropicClient) and llm.name == "anthropic"
 
 
 def test_available_false_without_key():

@@ -17,6 +17,7 @@ from arbiter.models.content import FileAsset, Job, Project, Segment
 from arbiter.models.i18n import UiLocale, UiMessage
 from arbiter.models.integrations import IdempotencyRecord, Webhook, WebhookDelivery, WorkItem
 from arbiter.models.money import Invoice, LedgerEntry, Payout, Quote, UsageRecord
+from arbiter.models.ops import AccountToken, EmailMessage, UploadSession
 from arbiter.models.provenance import ProvenanceEvent
 from arbiter.models.quality import (
     ControlSample,
@@ -38,6 +39,7 @@ from arbiter.models.reviewers import (
 from arbiter.models.tenancy import ApiKey, Organization, User
 
 __all__ = [
+    "AccountToken",
     "ApiKey",
     "AssistantMessage",
     "AssistantThread",
@@ -50,6 +52,7 @@ __all__ = [
     "WorkflowTemplate",
     "ControlSample",
     "Dispute",
+    "EmailMessage",
     "EngineScore",
     "EscapedError",
     "FileAsset",
@@ -78,6 +81,7 @@ __all__ = [
     "Threshold",
     "TmEntry",
     "UiLocale",
+    "UploadSession",
     "UiMessage",
     "UsageRecord",
     "User",

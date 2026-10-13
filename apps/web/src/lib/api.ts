@@ -65,6 +65,7 @@ import type {
   Tier,
   TmHit,
   UploadedFile,
+  UploadTicket,
   Usage,
   Webhook,
   WebhookEvent,
@@ -194,6 +195,10 @@ export function createApi(item: Transport) {
       form.set("source_lang", sourceLang);
       return item.request<UploadedFile>("POST", "/files", { form, idempotencyKey: newIdempotencyKey() });
     },
+    // Direct upload (bytes go straight to storage); see src/lib/upload.ts for the full flow.
+    createUpload: (body: { filename: string; size: number; content_type: string; source_lang: string }) =>
+      post<UploadTicket>("/uploads", body, true),
+    completeUpload: (uploadId: string) => post<UploadedFile>(`/uploads/${enc(uploadId)}/complete`, undefined, true),
     createQuote: (body: { file_id: string; target_langs: string[]; content_type: string; account_id?: string }) =>
       post<Quote>("/quotes", body, true),
     quote: (id: string) => get<Quote>(`/quotes/${enc(id)}`),

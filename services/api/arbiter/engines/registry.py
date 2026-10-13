@@ -44,7 +44,9 @@ def get_llm(name: str, settings: Settings | None = None) -> LlmClient:
         raise EngineError(f"unknown llm {name!r}")
     if not client.available():
         raise EngineError(f"llm {name!r} is not configured (missing API key)")
-    return client
+    from arbiter.observability import ObservedLlm
+
+    return ObservedLlm(client)  # usage events (no text) when PostHog is configured
 
 
 def get_mt(name: str, settings: Settings | None = None) -> MtEngine:
@@ -64,7 +66,9 @@ def get_mt(name: str, settings: Settings | None = None) -> MtEngine:
         raise EngineError(f"unknown engine {name!r}")
     if not engine.available():
         raise EngineError(f"engine {name!r} is not configured (missing API key)")
-    return engine
+    from arbiter.observability import ObservedMt
+
+    return ObservedMt(engine)
 
 
 def available_llm(settings: Settings | None = None) -> list[str]:

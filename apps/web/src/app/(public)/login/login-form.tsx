@@ -2,6 +2,7 @@
 
 import { k } from "@/lib/i18n/core";
 import { useI18n } from "@/lib/i18n/client";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -66,6 +67,11 @@ export function LoginForm() {
           />
         )}
       </Field>
+      <div className="-mt-1 text-right">
+        <Link href="/forgot-password" className="text-[13px] font-medium text-accent hover:underline">
+          {t("login.loginForm.forgotPassword")}
+        </Link>
+      </div>
       <Button type="submit" variant="primary" className="w-full" loading={busy}>
         {t("login.loginForm.signIn")}
       </Button>

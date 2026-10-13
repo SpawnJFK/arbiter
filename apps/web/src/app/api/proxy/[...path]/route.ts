@@ -9,7 +9,8 @@ type Ctx = { params: Promise<{ path: string[] }> };
 // Request headers worth forwarding to the backend; everything else (cookies!) stays here.
 const FORWARD_REQ = ["accept", "content-type", "idempotency-key", "if-none-match"];
 // Response headers worth passing back to the browser.
-const FORWARD_RES = ["content-type", "content-disposition", "content-length", "etag", "cache-control", "retry-after"];
+// `location`: downloads from object storage answer 302 to a short-lived presigned URL.
+const FORWARD_RES = ["content-type", "content-disposition", "content-length", "etag", "cache-control", "retry-after", "location"];
 
 /**
  * Thin authenticated proxy: /api/proxy/<path> -> <API>/v1/<path>, adding the Bearer token from

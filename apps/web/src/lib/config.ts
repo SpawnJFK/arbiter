@@ -14,3 +14,9 @@ export function apiOrigin(): string {
 
 export const TOKEN_COOKIE = "arbiter_token";
 export const ROLE_COOKIE = "arbiter_role";
+
+/** PostHog project key (public by design). Absent = analytics disabled. */
+export const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY ?? "";
+export const POSTHOG_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com";
+/** Cookie a consent banner writes ("analytics", "all", or anything else = declined). */
+export const CONSENT_COOKIE = "arbiter_consent";

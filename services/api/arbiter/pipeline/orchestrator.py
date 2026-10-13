@@ -771,6 +771,15 @@ def _advance(session: Session, job: Job) -> None:
         webhooks.emit(
             session, job.org_id, "job.needs_attention", {"job_id": job.id, "reason": "human_review"}
         )
+        _notify(session, job, "job.needs_attention", "human_review")
+
+
+def _notify(session: Session, job: Job, event: str, reason: str | None = None) -> None:
+    """Email next to the webhook emit. notify.job_event queues in a savepoint and never raises,
+    so an email problem cannot fail or roll back the pipeline step (or its provenance)."""
+    from arbiter import notify
+
+    notify.job_event(session, job, event, reason)
 
 
 def awaiting_client(job: Job) -> bool:
@@ -791,6 +800,7 @@ def _request_client_review(session: Session, job: Job) -> None:
     job.workflow = wf
     events.record(session, job, "client_review_requested")
     webhooks.emit(session, job.org_id, "job.needs_attention", {"job_id": job.id, "reason": "client_review"})
+    _notify(session, job, "job.needs_attention", "client_review")
 
 
 def client_approve(session: Session, job: Job, actor: str) -> None:
@@ -996,6 +1006,7 @@ def deadline(session: Session, job_id: str) -> None:
 
         events.record(session, job, "deadline_waiting", open_segments=len(open_segs), policy=policy)
         webhooks.emit(session, job.org_id, "job.needs_attention", {"job_id": job.id, "reason": "deadline"})
+        _notify(session, job, "job.needs_attention", "deadline")
         return
     job.no_reviewer_fallback_used = True
     judge = _judge()
@@ -1100,6 +1111,7 @@ def merge(session: Session, job_id: str) -> None:
         {"tier": job.tier, "pair": f"{job.source_lang}-{job.target_lang}"},
     )
     webhooks.emit(session, job.org_id, "job.delivered", {"job_id": job.id, "project_id": job.project_id})
+    _notify(session, job, "job.delivered")
 
 
 def fail_job(session: Session, job_id: str, reason: str) -> None:

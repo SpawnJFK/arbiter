@@ -71,6 +71,9 @@ def apply(body: ApplyIn, db: DB) -> dict[str, Any]:
         pairs=[p.model_dump() for p in body.pairs],
         domains=body.domains,
     )
+    from arbiter import notify
+
+    notify.reviewer_welcome(db, user)
     return {
         "token": security.issue_token(user.id, user.role, None),
         "user": user_view(user),

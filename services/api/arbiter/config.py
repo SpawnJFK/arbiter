@@ -64,6 +64,48 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 6000
     page_size_max: int = 200
 
+    # Web app origin, used to build links in emails (password reset, invites, job pages).
+    web_base_url: str = "http://localhost:3000"
+
+    # Blob storage (D-0xx storage backends). local = files under storage_dir (dev, test,
+    # single box); s3 = any S3-compatible object store (Hetzner Object Storage in production).
+    storage_backend: Literal["local", "s3"] = "local"
+    s3_endpoint_url: str = ""  # e.g. https://fsn1.your-objectstorage.com; empty = AWS default
+    s3_region: str = "eu-central"
+    s3_bucket: str = ""
+    s3_access_key_id: str = ""
+    s3_secret_access_key: str = ""
+    s3_path_style: bool = True  # path-style addressing works on every S3-compatible store
+    upload_url_ttl_seconds: int = 3600  # presigned PUT lifetime for direct uploads
+    download_url_ttl_seconds: int = 300  # presigned GET lifetime for downloads and evidence
+
+    # Email. log = written to the email_messages table and the log only (dev, test);
+    # smtp = any transactional provider through SMTP with TLS.
+    mail_backend: Literal["log", "smtp"] = "log"
+    mail_from: str = "Arbiter <no-reply@localhost>"
+    mail_reply_to: str = ""
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_security: Literal["starttls", "ssl", "none"] = "starttls"
+    smtp_timeout_seconds: float = 20.0
+    password_reset_ttl_minutes: int = 60
+    invite_ttl_hours: int = 72
+
+    # Observability. Everything is off when its setting is empty.
+    posthog_key: str = ""  # project API key (write-only, public by design)
+    posthog_host: str = "https://eu.i.posthog.com"
+    otel_endpoint: str = ""  # OTLP/HTTP base, e.g. https://otel.example.com (no /v1/traces)
+    otel_headers: str = ""  # comma separated key=value pairs sent with every OTLP export
+    otel_service_name: str = ""  # default arbiter-api / arbiter-worker
+    heartbeat_url: str = ""  # worker pings it (GET) every heartbeat_interval_seconds
+    heartbeat_interval_seconds: int = 60
+
+    # Build identity, baked into the image by CI (GET /healthz reports them).
+    git_sha: str = "unknown"
+    version: str = "0.1.0"
+
     @property
     def is_test(self) -> bool:
         return self.env == "test"

@@ -36,10 +36,13 @@ from arbiter.models.reviewers import (
     TestAttempt,
 )
 from arbiter.models.tenancy import ApiKey, Organization, User
+from arbiter.models.workbench import Audit, AuditSegment, SegmentComment, TmAlignment
 
 __all__ = [
     "ApiKey",
     "AssistantMessage",
+    "Audit",
+    "AuditSegment",
     "AssistantThread",
     "CrmAccount",
     "CrmActivity",
@@ -70,12 +73,14 @@ __all__ = [
     "ReviewerScoreEvent",
     "ReviewerTest",
     "Segment",
+    "SegmentComment",
     "SenateRun",
     "StyleCard",
     "Term",
     "TermQuestion",
     "TestAttempt",
     "Threshold",
+    "TmAlignment",
     "TmEntry",
     "UiLocale",
     "UiMessage",

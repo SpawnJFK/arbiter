@@ -50,6 +50,13 @@ class TaskState(StrEnum):
     payable = "payable"
 
 
+class AuditState(StrEnum):
+    queued = "queued"
+    running = "running"
+    done = "done"
+    failed = "failed"
+
+
 class PayoutState(StrEnum):
     payable = "payable"
     accrued = "accrued"
@@ -105,11 +112,19 @@ PAYOUT_TRANSITIONS: dict[PayoutState, set[PayoutState]] = {
     P.settled: set(),
 }
 
+AUDIT_TRANSITIONS: dict[AuditState, set[AuditState]] = {
+    AuditState.queued: {AuditState.running, AuditState.failed},
+    AuditState.running: {AuditState.done, AuditState.failed},
+    AuditState.failed: {AuditState.queued},  # a human retries after fixing the cause
+    AuditState.done: set(),
+}
+
 _MACHINES = {
     "segment": SEGMENT_TRANSITIONS,
     "job": JOB_TRANSITIONS,
     "task": TASK_TRANSITIONS,
     "payout": PAYOUT_TRANSITIONS,
+    "audit": AUDIT_TRANSITIONS,
 }
 
 

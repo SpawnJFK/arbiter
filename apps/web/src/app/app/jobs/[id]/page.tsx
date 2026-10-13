@@ -4,7 +4,7 @@ import Link from "next/link";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { Icons } from "@/components/icons";
 import { Badge, JobStateBadge } from "@/components/ui/badge";
-import { AnchorButton, Button } from "@/components/ui/button";
+import { AnchorButton, Button, ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Callout, PageHeader, Progress } from "@/components/ui/misc";
 import { Stat } from "@/components/ui/card";
@@ -89,6 +89,12 @@ export default async function JobPage({
         }
         actions={
           <>
+            <ButtonLink href={`/app/jobs/${job.id}/editor`}>
+              <Icons.edit className="size-4" /> {t("app.jobs.detail.openEditor")}
+            </ButtonLink>
+            <ButtonLink href={`/app/jobs/${job.id}/lqa`}>
+              <Icons.chart className="size-4" /> {t("app.jobs.detail.lqaScorecard")}
+            </ButtonLink>
             {delivered ? (
               <AnchorButton href={dl("/download")} variant="primary" download>
                 <Icons.download className="size-4" /> {t("app.jobs.detail.download")}

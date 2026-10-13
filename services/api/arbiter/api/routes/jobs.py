@@ -29,7 +29,7 @@ from arbiter.fileproc.base import Content, FormatError, from_tagged, validate_ta
 from arbiter.fileproc.registry import detect_and_extract
 from arbiter.fileproc.xliff import export_xliff21
 from arbiter.models import FileAsset, Job, Segment, TermQuestion, utcnow
-from arbiter.pipeline import events, evidence, orchestrator
+from arbiter.pipeline import events, evidence, orchestrator, units
 
 router = APIRouter(tags=["jobs"])
 
@@ -171,6 +171,7 @@ def segment_view(seg: Segment) -> dict[str, Any]:
         "is_control_sample": seg.is_control_sample,
         "context": seg.context,
         "max_length": seg.max_length,
+        "locked": bool(seg.locked_by),
         "updated_at": _iso(seg.updated_at),
     }
 
@@ -181,6 +182,16 @@ def _source_content(seg: Segment) -> Content:
 
 class TagError(Invalid):
     code = "tag_error"
+
+
+class SegmentLocked(Conflict):
+    code = "segment_locked"
+
+
+def _check_lock(seg: Segment, p: Principal) -> None:
+    """A segment a PM locked in the workbench is read-only for everyone but a PM."""
+    if seg.locked_by and p.role not in ("pm", "api"):
+        raise SegmentLocked("this segment is locked by the project manager")
 
 
 def _check_tags(seg: Segment, target: str) -> None:
@@ -279,6 +290,7 @@ def edit_segment(job_id: str, seg_id: str, body: SegmentPatch, p: Customer, db: 
     if job.state in ("cancelled", "failed", "merging"):
         raise Conflict(f"segments of a {job.state} job cannot be edited")
     seg = _get_segment(db, job, seg_id)
+    _check_lock(seg, p)
     if seg.state in ("pending", "translated"):
         raise Conflict("this segment is still being translated")
     if seg.state == "in_review":
@@ -307,6 +319,7 @@ def approve_segment(job_id: str, seg_id: str, p: Customer, db: DB) -> dict[str, 
     seg = _get_segment(db, job, seg_id)
     if seg.state in ("auto_approved", "reviewed", "delivered"):
         return segment_view(seg)
+    _check_lock(seg, p)
     if seg.state != "needs_review":
         raise Conflict(f"a segment in state {seg.state} cannot be approved")
     if not seg.target_tagged:
@@ -376,20 +389,11 @@ def xliff(job_id: str, p: Customer, db: DB) -> Response:
     except FileNotFoundError:
         raise NotFound("the source file is no longer stored (retention)") from None
     segs = db.execute(select(Segment).where(Segment.job_id == job.id).order_by(Segment.seq)).scalars()
-    by_unit: dict[str, dict[int, Content | None]] = {}
-    for seg in segs:
-        content: Content | None = None
-        if seg.target_tagged:
-            try:
-                content = from_tagged(seg.target_tagged, orchestrator._codes(seg))
-            except ValueError:
-                content = None
-        by_unit.setdefault(seg.unit_id, {})[seg.seg_index] = content
+    by_unit = units.regroup(segs, lambda s: units.content_of(s, use_source_when_empty=False))
     targets: dict[str, list[Content]] = {}
     for unit in result.units:
-        got = by_unit.get(unit.unit_id, {})
-        row = [got.get(i) for i in range(len(unit.segments))]
-        if row and all(c is not None for c in row):
+        row = by_unit.get(unit.unit_id, [])
+        if len(row) == len(unit.segments) and row and all(c is not None for c in row):
             targets[unit.unit_id] = [c for c in row if c is not None]
     try:
         data = export_xliff21(result, targets, job.source_lang, job.target_lang, fa.filename)

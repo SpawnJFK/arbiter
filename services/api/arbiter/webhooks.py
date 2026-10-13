@@ -23,7 +23,7 @@ from arbiter.errors import Invalid
 from arbiter.models import Webhook, WebhookDelivery, new_id, utcnow
 from arbiter.pipeline.queue import enqueue
 
-EVENTS = ("job.delivered", "job.failed", "job.needs_attention", "quote.expired")
+EVENTS = ("job.delivered", "job.failed", "job.needs_attention", "job.query.opened", "quote.expired")
 
 # Tests swap this for an httpx.MockTransport.
 transport: httpx.BaseTransport | None = None

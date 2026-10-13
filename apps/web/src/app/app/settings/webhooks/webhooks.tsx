@@ -19,6 +19,7 @@ const EVENT_HELP: Record<WebhookEvent, string> = {
   "job.delivered": k("app.settings.webhooks.event.job_delivered"),
   "job.failed": k("app.settings.webhooks.event.job_failed"),
   "job.needs_attention": k("app.settings.webhooks.event.job_needs_attention"),
+  "job.query.opened": k("app.settings.webhooks.event.job_query_opened"),
   "quote.expired": k("app.settings.webhooks.event.quote_expired"),
 };
 

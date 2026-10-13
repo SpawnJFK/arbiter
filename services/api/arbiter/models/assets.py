@@ -31,6 +31,13 @@ class TmEntry(Base):
             postgresql_using="gin",
             postgresql_ops={"source_plain": "gin_trgm_ops"},
         ),
+        # Concordance searches the target side too (migration 0008).
+        Index(
+            "ix_tm_trgm_target",
+            "target_plain",
+            postgresql_using="gin",
+            postgresql_ops={"target_plain": "gin_trgm_ops"},
+        ),
     )
 
     id: Mapped[str] = id_column("tmu")

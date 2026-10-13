@@ -20,6 +20,8 @@ export default async function CustomerLayout({ children }: { children: React.Rea
             { href: "/app/projects", label: t("app.layout.projects"), icon: "folder" },
             { href: "/app/projects/new", label: t("app.layout.newProject"), icon: "plus" },
             { href: "/app/exceptions", label: t("app.layout.exceptions"), icon: "alert" },
+            { href: "/app/queries", label: t("app.layout.queries"), icon: "question" },
+            { href: "/app/auditor", label: t("app.layout.auditor"), icon: "checklist" },
           ],
         },
         {
@@ -54,6 +56,7 @@ export default async function CustomerLayout({ children }: { children: React.Rea
             { href: "/app", label: t("app.layout.dashboard"), icon: "grid", exact: true },
             { href: "/app/projects", label: t("app.layout.projects"), icon: "folder" },
             { href: "/app/projects/new", label: t("app.layout.newProject"), icon: "plus" },
+            { href: "/app/queries", label: t("app.layout.queries"), icon: "question" },
           ],
         },
         {

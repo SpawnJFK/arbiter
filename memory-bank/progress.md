@@ -19,6 +19,8 @@ Last updated: 2026-10-09. Phase: P00 next (`phases/README.md`).
 - **Infra/docs**: Dockerfiles (web on Node 24), compose, Caddy, backups, CI (lint, tests, builds, compose config), Makefile, deploy guide, runbook, decisions D-001..D-050.
 - **HYPERPOWER v2** (installed 2026-10-09, proven on Linux only): control plane `.hyperpower/` (core 1.0.0, hash-locked), `hyperpower.json` schema 2, `phases/` P00..P08, `ACCEPTANCE.md` journeys with verifiers, evidence ledger (baseline record EV-c769e975 VERIFIED), root npm ship check (`npm run verify`, `verify:e2e`, `verify:deployed`), git hooks, Cursor rules/commands/agents/skills/hooks, Beads skeleton, bootstrap runbook.
 
+- **Workbench, TM tools, LQA, auditor** (2026-10-13, parallel builder, migration 0008 on 0003): segment editor API and page `/app/jobs/{id}/editor` (live QA, TM diff, glossary, MT on demand, concordance, comments and client queries, split/merge, find/replace, PM locks, live preview), TM editor/alignment/term extraction/TM QA, job LQA scorecards with PDF/XLSX and org LQA settings, standalone auditor (`/v1/audits`, `/app/auditor`) on the work queue. Decisions D-051..D-054. Browser e2e for these screens not written yet.
+
 ## Not yet
 - P00: the HYPERPOWER layer proven on Windows (tools, hooks through Cursor, Beads graph, Graphify index, Context7, journey records).
 - Any measurement on a real pair with real keys (P01).

@@ -11,7 +11,7 @@ import { Callout } from "@/components/ui/misc";
 import { useToast } from "@/components/ui/toast";
 import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { TIERS, type NoReviewerPolicy, type Org, type OrgPatch } from "@/lib/types";
+import { TIERS, type NoReviewerPolicy, type Org, type OrgPatch, type ProcessingRegion } from "@/lib/types";
 
 const POLICIES: { value: NoReviewerPolicy; title: string; body: string }[] = [
   {
@@ -31,6 +31,19 @@ const POLICIES: { value: NoReviewerPolicy; title: string; body: string }[] = [
   },
 ];
 
+const REGIONS: { value: ProcessingRegion; title: string; body: string }[] = [
+  {
+    value: "global",
+    title: k("app.settings.policyForm.regionGlobal"),
+    body: k("app.settings.policyForm.regionGlobalBody"),
+  },
+  {
+    value: "eu",
+    title: k("app.settings.policyForm.regionEu"),
+    body: k("app.settings.policyForm.regionEuBody"),
+  },
+];
+
 const VERTICALS = ["", "medical_devices", "pharma", "legal", "financial", "public_sector", "other"];
 
 export function PolicyForm({ org, canEdit }: { org: Org; canEdit: boolean }) {
@@ -45,6 +58,8 @@ export function PolicyForm({ org, canEdit }: { org: Org; canEdit: boolean }) {
     regulated: org.regulated,
     vertical: org.vertical ?? "",
     data_retention_days: org.data_retention_days,
+    processing_region: org.processing_region ?? "global",
+    training_consent: Boolean(org.training_consent),
   });
   const [busy, setBusy] = useState(false);
   const regulatedBlocks = (item: string) => Boolean(v.regulated) && (item === "auto" || item === "ai_review");
@@ -198,6 +213,41 @@ export function PolicyForm({ org, canEdit }: { org: Org; canEdit: boolean }) {
                 )}
               </Field>
             </div>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader title={t("app.settings.policyForm.processingTitle")} description={t("app.settings.policyForm.processingDescription")} />
+          <CardBody className="space-y-4">
+            <div className="grid gap-2 lg:grid-cols-2">
+              {REGIONS.map((r) => (
+                <label
+                  key={r.value}
+                  className={cn(
+                    "flex cursor-pointer gap-2.5 rounded-md border p-3 text-[13px]",
+                    v.processing_region === r.value ? "border-accent bg-accent-subtle/50" : "border-border hover:bg-hover",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="processing_region"
+                    className="mt-0.5 accent-[var(--accent)]"
+                    checked={v.processing_region === r.value}
+                    onChange={() => setV({ ...v, processing_region: r.value })}
+                  />
+                  <span>
+                    <span className="font-medium">{t(r.title)}</span>
+                    <span className="mt-1 block leading-relaxed text-muted">{t(r.body)}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {v.processing_region === "eu" && <Callout tone="info">{t("app.settings.policyForm.euFailsVisibly")}</Callout>}
+            <Checkbox
+              checked={Boolean(v.training_consent)}
+              onChange={(e) => setV({ ...v, training_consent: e.target.checked })}
+              label={t("app.settings.policyForm.trainingConsent")}
+              hint={t("app.settings.policyForm.trainingConsentHint")}
+            />
           </CardBody>
         </Card>
       </fieldset>

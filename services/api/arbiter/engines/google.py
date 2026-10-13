@@ -82,6 +82,7 @@ def from_html(text: str) -> str:
 
 class GoogleEngine:
     name = "google"
+    region = "global"  # Basic v2 has no regional endpoint
     supports_glossary = False
 
     def __init__(

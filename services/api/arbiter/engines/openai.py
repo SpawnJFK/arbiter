@@ -23,6 +23,7 @@ _NO_TEMPERATURE_PREFIXES = ("gpt-5", "o1", "o3", "o4")
 
 class OpenAiClient:
     name = "openai"
+    region = "global"
 
     def __init__(
         self,

@@ -38,6 +38,10 @@ def _handler(kind: str) -> Callable[[Session, dict[str, Any]], None] | None:
         return lambda s, p: fn(s, p["job_id"])
     if kind == "webhook.deliver":
         return _webhook
+    if kind.startswith("training."):
+        from arbiter.training.service import HANDLERS as TRAINING
+
+        return TRAINING.get(kind)
     return None
 
 
@@ -79,6 +83,10 @@ def run_one(factory: sessionmaker[Session], worker_id: str) -> bool:
             dead = fail(it, error)
             if dead and kind.startswith("job.") and "job_id" in payload:
                 orchestrator.fail_job(s, payload["job_id"], error.splitlines()[0])
+            if dead and kind.startswith("training.") and "training_job_id" in payload:
+                from arbiter.training.service import fail as fail_training
+
+                fail_training(s, payload["training_job_id"], error.splitlines()[0])
             s.commit()
     return True
 

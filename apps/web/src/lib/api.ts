@@ -68,6 +68,18 @@ import type {
   Usage,
   Webhook,
   WebhookEvent,
+  CustomModel,
+  CustomModelInput,
+  DatasetPreview,
+  EngineBudget,
+  EngineCatalog,
+  EngineCredential,
+  EngineCredentialInput,
+  EnginePreview,
+  EngineRoute,
+  EngineRouteInput,
+  EngineTestResult,
+  TrainingJob,
 } from "./types";
 import type { LocaleInfo } from "./i18n/locales";
 
@@ -167,6 +179,9 @@ export const proxyTransport: Transport = {
 };
 
 const enc = encodeURIComponent;
+
+export type EngineScope = "org" | "platform";
+const enginesBase = (scope: EngineScope) => (scope === "platform" ? "/admin/engines" : "/engines");
 
 export function createApi(item: Transport) {
   const get = <T>(path: string, query?: Query) => item.request<T>("GET", path, { query });
@@ -367,6 +382,44 @@ export function createApi(item: Transport) {
     deleteWebhook: (id: string) => del(`/webhooks/${enc(id)}`),
     usage: (period?: string) => get<Usage>("/usage", { period }),
     invoices: (p?: ListParams) => get<ListResponse<Invoice>>("/invoices", page(p)),
+
+    // Engines (module "engine"). `scope` "platform" talks to the platform admin endpoints.
+    engineCatalog: (scope: EngineScope = "org") => get<EngineCatalog>(`${enginesBase(scope)}/catalog`),
+    enginePreview: (q: { source_lang: string; target_lang: string; content_type?: string }) =>
+      get<EnginePreview>("/engines/preview", { ...q }),
+    engineCredentials: (scope: EngineScope = "org") => get<ListResponse<EngineCredential>>(enginesBase(scope)),
+    createEngineCredential: (body: EngineCredentialInput, scope: EngineScope = "org") =>
+      post<EngineCredential>(enginesBase(scope), body),
+    updateEngineCredential: (
+      id: string,
+      body: Partial<Omit<EngineCredentialInput, "provider">>,
+      scope: EngineScope = "org",
+    ) => patch<EngineCredential>(`${enginesBase(scope)}/${enc(id)}`, body),
+    deleteEngineCredential: (id: string, scope: EngineScope = "org") => del(`${enginesBase(scope)}/${enc(id)}`),
+    testEngineCredential: (id: string, scope: EngineScope = "org") =>
+      post<EngineTestResult>(`${enginesBase(scope)}/${enc(id)}/test`),
+    engineRoutes: (scope: EngineScope = "org") => get<ListResponse<EngineRoute>>(`${enginesBase(scope)}/routes`),
+    createEngineRoute: (body: EngineRouteInput, scope: EngineScope = "org") =>
+      post<EngineRoute>(`${enginesBase(scope)}/routes`, body),
+    updateEngineRoute: (id: string, body: Partial<EngineRouteInput>, scope: EngineScope = "org") =>
+      patch<EngineRoute>(`${enginesBase(scope)}/routes/${enc(id)}`, body),
+    deleteEngineRoute: (id: string, scope: EngineScope = "org") => del(`${enginesBase(scope)}/routes/${enc(id)}`),
+    engineBudgets: () => get<ListResponse<EngineBudget>>("/engines/budgets"),
+    putEngineBudget: (provider: string, body: { monthly_cap: string; enabled?: boolean }) =>
+      item.request<EngineBudget>("PUT", `/engines/budgets/${enc(provider)}`, { body }),
+    deleteEngineBudget: (provider: string) => del(`/engines/budgets/${enc(provider)}`),
+
+    // Own models (training)
+    trainingPreview: (body: { source_lang: string; target_lang: string; domain?: string }) =>
+      post<DatasetPreview>("/training/datasets/preview", body),
+    trainingJobs: () => get<ListResponse<TrainingJob>>("/training/jobs"),
+    startTraining: (body: { source_lang: string; target_lang: string; domain?: string; provider: string; base_model: string }) =>
+      post<TrainingJob>("/training/jobs", body),
+    refreshTraining: (id: string) => post<TrainingJob>(`/training/jobs/${enc(id)}/refresh`),
+    customModels: () => get<ListResponse<CustomModel>>("/custom-models"),
+    registerCustomModel: (body: CustomModelInput) => post<CustomModel>("/custom-models", body),
+    activateCustomModel: (id: string) => post<CustomModel>(`/custom-models/${enc(id)}/activate`),
+    deactivateCustomModel: (id: string) => post<CustomModel>(`/custom-models/${enc(id)}/deactivate`),
   };
 }
 

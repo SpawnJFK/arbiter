@@ -743,3 +743,67 @@ Date: 2026-10-09. Status: accepted.
 - *Read the key from an environment variable in the file.* Cursor's support for env interpolation in MCP headers differs across versions; a gitignored file is predictable.
 
 **Consequences.** Pulling the commit that untracks the file deletes the owner's local copy; Context7 in Cursor is off until P00 item 16 writes the new file.
+
+---
+
+## D-051 Engine keys in the database, encrypted, resolved org BYOK > platform > environment
+Date: 2026-10-13. Status: accepted.
+
+**Context.** Engine keys lived only in `ARBITER_*` environment variables: one key per provider for the whole platform, changed by a redeploy. The engine module is sold to enterprises that bring their own provider contracts, and the platform admin needs to rotate keys without a deploy.
+
+**Decision.** Table `engine_credentials` (scope `platform` or `org`, provider, label, encrypted secret, `secret_hint` with the last 4 characters, non-secret `config` JSON for model, region, endpoint, project, prices, enabled, last test result). Secrets are encrypted with Fernet from `cryptography` using `ARBITER_SECRETS_KEY` (comma separated, first key encrypts, all decrypt, so keys rotate without a data migration); prod refuses to store a secret without it. The API never returns a secret after save. Per call, `arbiter.engines.credentials.resolve` picks the org's enabled BYOK key, else the newest enabled platform key, else the environment (the behaviour before this decision). `registry.get_llm/get_mt/available_*` take an optional `EngineContext(session, org_id)`; without it they behave exactly as before. OpenAI-compatible endpoints are one engine per credential (`compat:<id>`). The test-environment fence (mocks only) is unchanged: database keys are never used in tests.
+
+**Rejected.**
+- *A cloud secret manager (AWS Secrets Manager, Vault).* Another service and account to run before launch; Fernet at rest with the key outside the database gives the same property (a database dump alone reveals nothing) at no cost. Can be added behind `arbiter.crypto` later.
+- *pgcrypto in SQL.* The key would travel in SQL statements and end up in query logs.
+- *Storing secrets in `org.settings`.* No encryption boundary, returned by every org read.
+
+**Consequences.** Losing `ARBITER_SECRETS_KEY` makes stored keys unreadable (they must be entered again). `POST /engines/{id}/test` makes one tiny real call in dev and prod; tests stub `arbiter.engines.probe.run_probe`.
+
+---
+
+## D-052 EU processing: Bedrock EU inference profiles, Vertex "eu", DeepL; no silent fallback
+Date: 2026-10-13. Status: accepted.
+
+**Context.** Claude goes through Anthropic's own API by default (global processing). EU customers, regulated ones first, need every AI and MT call processed in the EU. This is sold as an add-on.
+
+**Decision.** `org.settings["processing_region"]` is `global` (default) or `eu`, set through `PATCH /org` (needs the `eu_processing` add-on; regulated orgs may use it). Every engine declares `region` (`eu`, `us`, `global`, or `local` for in-process mocks); `MtEngine` and `LlmClient` in `contracts.py` gain the attribute. New LLM clients: `engines/bedrock.py` (Converse API through boto3; region derived from the model id, so `eu.anthropic.claude-*` geographic inference profiles count as EU), `engines/vertex.py` (rawPredict on Vertex with a service-account JWT exchanged for an OAuth token through pyjwt + httpx; default location `eu`, host `aiplatform.eu.rep.googleapis.com`, overridable per credential), `engines/openai_compatible.py` (region declared by the admin, default `global`). DeepL is EU. For an EU org the router keeps only `eu`/`local` engines; when nothing is left the job fails with "no EU engine configured" (provenance `routing_blocked`), never a fallback outside the EU. Processing region, engine and model are written to provenance (`engine_route`, `target_set`, `qe_scored`) and to a `processing` block of the evidence pack.
+
+**Rejected.**
+- *Regional Anthropic API endpoints.* Not offered for this use; Bedrock and Vertex EU are the documented ways to keep Claude traffic in the EU.
+- *Falling back to a global engine when no EU engine is configured.* A silent breach of what the customer bought.
+- *Google SDKs (google-auth) for Vertex.* Two HTTP calls do the job; pyjwt and cryptography are already dependencies.
+
+**Consequences.** The Vertex multi-region host and the exact Bedrock profile ids must be checked against the provider consoles before the first EU customer (no Context7 in the build session). Training providers that serve from the US cannot be used by EU orgs (D-054).
+
+---
+
+## D-053 Engine routing rules and monthly budgets
+Date: 2026-10-13. Status: accepted.
+
+**Context.** R-MT-02 ordered engines by the scoreboard, then the settings default. Agencies want explicit rules per pair and content type (e.g. DeepL for EN to DE legal), per purpose (MT, judge, senate, editor), and a cost ceiling per provider.
+
+**Decision.** Table `engine_routes` (org_id null = platform default; source_lang, target_lang, content_type nullable = any; purpose; ordered `engines`; `fallback`; enabled). Precedence in `arbiter.engines.routing.choose`: org rule before platform rule, then the rule with more matching fields, then the scoreboard (MT only), the settings default and anything available; `fallback=false` stops after the rule's own list; senate and editor fall back to the judge rule. Then the region filter (D-052) and the budget filter. Table `engine_budgets` (org, provider, monthly cap, currency, period, spent) is checked before calls (capped providers are dropped by the router, and wrappers check again before each call) and charged after each call with one atomic UPDATE. When every engine is capped the job stays `running`, provenance records `engine_budget_exceeded`, a `job.needs_attention` webhook (`budget_exceeded`) goes out at most once a day, and the step is retried every hour, so raising the cap or a new month resumes the job without anyone touching it.
+
+**Rejected.**
+- *Failing the job when the cap is reached.* The owner would have to find and resume every job by hand after raising the cap.
+- *A rule priority number set by hand.* Specificity is what people mean; numbers drift and collide.
+- *Counting spend from `usage_records`.* Those hold billable units for the customer, not provider cost per provider.
+
+**Consequences.** Spend is an estimate from pricing.py. The orchestrator now resolves judge, senate and editor clients separately (`_judge(session, job, purpose)`); `_judge()` without arguments keeps the old behaviour.
+
+---
+
+## D-054 Own models: per-client LoRA fine-tunes with consent, measured on the scoreboard
+Date: 2026-10-13. Status: accepted.
+
+**Context.** A model trained on one client's approved translations can beat general engines for that client. It must never be trained without consent, never trained on another client's data, and only used when it measures better.
+
+**Decision.** `arbiter/training/`: dataset export (only segments a human approved, one org, one pair, one domain, only while `org.settings["training_consent"]` is true; dedupe by source; tags converted to `<gN>..</gN>`/`<xN/>`; deterministic train/validation split by a hash of the source; chat-format JSONL), a `TrainingProvider` protocol with Together and Fireworks adapters (fine-tune REST APIs through httpx) and a manual provider that only exports the dataset. Tables `training_jobs` (state machine `training` in `domain/states.py`) and `custom_models` (an OpenAI-compatible endpoint registered as engine `custom:<id>`, region declared). After training the worker (`training.poll`, `training.evaluate` work items) translates the held-out set with the new model, scores it with the org's judge route and writes `engine_scores`; an admin activates the model, and the scoreboard (minimum `ARBITER_CUSTOM_MODEL_MIN_EVAL_SEGMENTS`) decides whether it is used. EU orgs may only train with the manual provider and only EU-declared models are evaluated for them.
+
+**Rejected.**
+- *Training on all customers' data for one shared model.* No consent model allows it and it leaks one client's terminology to another.
+- *Hosting GPUs ourselves now.* Capital and operations before demand is proven; the manual provider keeps that door open.
+- *Activating a model automatically after training.* A human decides; the scoreboard numbers inform the decision.
+
+**Consequences.** Together and Fireworks request shapes were written from public docs without Context7 and are covered only by stubbed tests; one small real job per provider is needed before the first customer job.

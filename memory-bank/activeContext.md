@@ -28,6 +28,11 @@ Verified in the cloud session (Linux, Node 24.21 from npm, Python 3.13):
 
 DEFERRED to P00: everything Windows (paths, fnm, uv, Docker Desktop), tool installs, Cursor hook proof, Impeccable engine and its hook, Betterleaks flag check, Beads init and phase beads, Graphify index, Context7 key and convention re-check, journey records.
 
+## Session 2026-10-13 (engine module: keys, EU route, routing, budgets, own models; parallel worktree build)
+
+What changed: migration 0006 (`engine_credentials`, `engine_routes`, `engine_budgets`, `training_jobs`, `custom_models`, down_revision 0003), `arbiter/crypto.py`, `arbiter/engines/{bedrock,vertex,openai_compatible,credentials,catalog,routing,budgets,errors,probe,manage}.py`, registry with `EngineContext`, `arbiter/training/`, routes `engines.py`, `admin_engines.py`, `training.py`, org settings `processing_region` and `training_consent`, worker step kinds `training.poll` / `training.evaluate`, evidence pack `processing` block. **contracts.py changed**: `MtEngine` and `LlmClient` gain `region` (D-052). **api-contract.md changed**: Engines, Platform engines, Own models sections; `Org` and `PATCH /org` fields. The web app matches (types, api client, pages). Decisions D-051..D-054 (renumber if parallel builds took these numbers). Not a phase item: built ahead of the phase plan on the owner's request; tick nothing in `phases/`.
+Verified: `npm run verify:api` and `npm run verify:web` exit 0 (Node 22 session; check:runtime and e2e skipped).
+
 ## Open items carried forward
 1. Context7 was not used while building; P00 item 16 re-checks the conventions.
 2. Payouts in prod only accrue: no payout provider integration (P03).

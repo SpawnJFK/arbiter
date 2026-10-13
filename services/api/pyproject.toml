@@ -23,6 +23,8 @@ dependencies = [
   "reportlab>=4.2",
   "orjson>=3.10",
   "tenacity>=9.0",
+  "cryptography>=44.0",
+  "boto3>=1.40",
 ]
 
 [project.optional-dependencies]

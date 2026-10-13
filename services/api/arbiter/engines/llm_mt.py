@@ -42,6 +42,7 @@ class LlmMt:
     def __init__(self, llm: LlmClient, *, max_tokens: int = 4000) -> None:
         self.llm = llm
         self.name = f"llm-mt:{llm.name}"
+        self.region = getattr(llm, "region", "global")
         self.max_tokens = max_tokens
 
     def available(self) -> bool:

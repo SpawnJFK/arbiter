@@ -14,6 +14,7 @@ from arbiter.models.agency import (
 from arbiter.models.assets import Glossary, StyleCard, Term, TermQuestion, TmEntry
 from arbiter.models.common import new_id, utcnow
 from arbiter.models.content import FileAsset, Job, Project, Segment
+from arbiter.models.engines import CustomModel, EngineBudget, EngineCredential, EngineRoute, TrainingJob
 from arbiter.models.i18n import UiLocale, UiMessage
 from arbiter.models.integrations import IdempotencyRecord, Webhook, WebhookDelivery, WorkItem
 from arbiter.models.money import Invoice, LedgerEntry, Payout, Quote, UsageRecord
@@ -49,6 +50,11 @@ __all__ = [
     "PriceList",
     "WorkflowTemplate",
     "ControlSample",
+    "CustomModel",
+    "EngineBudget",
+    "EngineCredential",
+    "EngineRoute",
+    "TrainingJob",
     "Dispute",
     "EngineScore",
     "EscapedError",

@@ -57,3 +57,24 @@ def org_has_module(org: Any, module: str) -> bool:
         return True
     enabled = org_modules(org)
     return module in enabled and all(dep in enabled for dep in MODULES[module]["depends_on"])
+
+
+# Paid add-ons on top of modules. Same storage pattern: org.settings["addons"]; None means
+# every add-on (current behaviour until billing sells them separately).
+ADDONS: dict[str, dict[str, Any]] = {
+    "eu_processing": {"name": "EU processing route", "module": "engine"},
+    "byok": {"name": "Bring your own engine keys", "module": "engine"},
+    "custom_models": {"name": "Own models (fine-tuned per client)", "module": "engine"},
+}
+
+
+def org_has_addon(org: Any, addon: str) -> bool:
+    if addon not in ADDONS:
+        raise ValueError(f"unknown add-on {addon!r}")
+    if org is None:
+        return True
+    settings = getattr(org, "settings", None) or {}
+    enabled = settings.get("addons")
+    if enabled is not None and addon not in enabled:
+        return False
+    return org_has_module(org, ADDONS[addon]["module"])

@@ -68,8 +68,8 @@ class MarkerLlm(MockLlm):
 
 @pytest.fixture(autouse=True)
 def _faulty_engine(monkeypatch):
-    monkeypatch.setattr(orchestrator, "get_mt", lambda name: FaultyMt())
-    monkeypatch.setattr(orchestrator, "_judge", lambda: MarkerLlm())
+    monkeypatch.setattr(orchestrator, "get_mt", lambda name, **kw: FaultyMt())
+    monkeypatch.setattr(orchestrator, "_judge", lambda *a, **kw: MarkerLlm())
 
 
 def _run(db, job):

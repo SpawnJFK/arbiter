@@ -744,7 +744,7 @@ Date: 2026-10-09. Status: accepted.
 
 **Consequences.** Pulling the commit that untracks the file deletes the owner's local copy; Context7 in Cursor is off until P00 item 16 writes the new file.
 
-## D-071 Own vendors are a separate model from the reviewer marketplace (module pm)
+## D-067 Own vendors are a separate model from the reviewer marketplace (module pm)
 Date: 2026-10-13. Status: accepted. (Numbered in a parallel build; renumber on merge if the range is taken.)
 
 **Context.** Agencies run their own pool of freelance translators, reviewers and partner agencies (rates per pair and service, NDAs, availability, payment details) next to, or instead of, the platform's reviewer community.
@@ -758,7 +758,7 @@ Date: 2026-10-13. Status: accepted. (Numbered in a parallel build; renumber on m
 
 **Consequences.** Vendor money is the agency's accounts payable (purchase orders, vendor invoices), never `ledger_entries`.
 
-## D-072 Human step routing: a live assignment holds the step; the marketplace stays the default
+## D-068 Human step routing: a live assignment holds the step; the marketplace stays the default
 Date: 2026-10-13. Status: accepted.
 
 **Context.** Per job and step (human_review, second_review) the PM must choose the marketplace, an own vendor or an internal user, without breaking the existing pipeline.
@@ -772,7 +772,7 @@ Date: 2026-10-13. Status: accepted.
 
 **Consequences.** The deadline policy still applies to vendor-routed segments (it works on open segments, with or without tasks). `report_error` only touches the reviewer score when the reviewer id is a marketplace profile.
 
-## D-073 Purchase orders on acceptance; vendor invoices uploaded or generated; job cost includes vendor fees
+## D-069 Purchase orders on acceptance; vendor invoices uploaded or generated; job cost includes vendor fees
 Date: 2026-10-13. Status: accepted.
 
 **Context.** The agency needs a PO per accepted job, a way to receive or produce vendor invoices, a monthly payables view and an accounting export, and the job margin must include what the vendor costs.
@@ -785,7 +785,7 @@ Date: 2026-10-13. Status: accepted.
 
 **Consequences.** Tax treatment of vendor invoices needs legal and tax review before public launch.
 
-## D-074 Capacity planning and deadline risk are derived on read
+## D-070 Capacity planning and deadline risk are derived on read
 Date: 2026-10-13. Status: accepted.
 
 **Context.** PMs ask who is free for a pair and volume by a date, and which jobs will miss their deadline.
@@ -798,7 +798,7 @@ Date: 2026-10-13. Status: accepted.
 
 **Consequences.** Numbers are estimates and the UI says so. Timezones are UTC dates.
 
-## D-075 PM copilot: facts first, plan-then-apply kept
+## D-071 PM copilot: facts first, plan-then-apply kept
 Date: 2026-10-13. Status: accepted.
 
 **Context.** The assistant should answer "who is free...", "which jobs are at risk", "propose assignments for job X" and "draft a quote for client Y" without letting a model invent capacity or prices.

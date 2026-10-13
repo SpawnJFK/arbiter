@@ -321,7 +321,7 @@ Revenue is recognised at delivery. Rates are null without data. Money is null fo
 
 The assistant never changes anything by itself: posting a message only proposes a plan; a human applies all or selected actions. Each action runs in its own savepoint (one failure does not undo the others); already applied indices are skipped; workflows, price lists and dashboards with an existing name are reused (`note` says so). Apply on a message without a plan is 409. The assistant also answers questions about the org's data from a context summary.
 
-PM copilot (module pm, D-075): four project-management questions are answered from the database before the model is asked, and the result is sent to the model as `context.pm.query` (the built-in planner answers from it directly). English and Serbian input:
+PM copilot (module pm, D-071): four project-management questions are answered from the database before the model is asked, and the result is sent to the model as `context.pm.query` (the built-in planner answers from it directly). English and Serbian input:
 - capacity: "who is free for EN->DE 20k words by Friday" -> planner rows (no plan)
 - risk: "which jobs are at risk" -> deadline risk rows (no plan)
 - propose assignments: "propose assignments for job job_..." (or the project name) -> plan `create_assignment {job_id, step, mode: vendor, vendor_ids (best three, ranked), strategy: sequential}`; applying it sends the offer like `POST /jobs/{id}/assignments`

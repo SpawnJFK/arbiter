@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import pytest
 from fileproc_fixtures import HTML, make_docx
+from roundtrip import identity, translation
 
-from arbiter.fileproc import registry
+from arbiter.fileproc import ocr, registry
 from arbiter.fileproc.base import FormatError
 from arbiter.fileproc.docx import DocxHandler
 from arbiter.fileproc.registry import SUPPORTED_EXTENSIONS, detect_and_extract, get_handler
@@ -66,3 +67,99 @@ def test_detect_and_extract() -> None:
         detect_and_extract("fake.docx", b"this is not a zip file", "en")
     with pytest.raises(FormatError):
         detect_and_extract("fake.xlsx", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1rest", "en")
+
+
+# --------------------------------------------------------------------------- added formats, scans and options
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("Brochure.idml", "idml"),
+        ("movie.srt", "srt"),
+        ("movie.vtt", "vtt"),
+        ("movie.ass", "ass"),
+        ("movie.ssa", "ass"),
+        ("data.xml", "xml"),
+        ("topic.dita", "dita"),
+        ("guide.ditamap", "dita"),
+        ("app_en.arb", "arb"),
+        ("Localizable.strings", "strings"),
+        ("Localizable.stringsdict", "stringsdict"),
+        ("messages.properties", "properties"),
+        ("Resources.resx", "resx"),
+        ("en.yml", "yaml"),
+        ("en.yaml", "yaml"),
+        ("table.tsv", "tsv"),
+        ("guide.adoc", "asciidoc"),
+    ],
+)
+def test_new_extensions(name: str, expected: str) -> None:
+    assert get_handler(name).name == expected
+    assert name.rsplit(".", 1)[1].lower() in SUPPORTED_EXTENSIONS
+
+
+def test_tsv_does_not_sniff_commas() -> None:
+    data = b"key\ttext\nhello\tHello, world; again\nbye\tGoodbye\n"
+    result = detect_and_extract("strings.tsv", data, "en")
+    assert ["Hello, world; again"] in [s.content for u in result.units for s in u.segments]
+    assert identity(get_handler("strings.tsv"), data)[0] == data
+    out, _, _ = translation(get_handler("strings.tsv"), data)
+    assert b"[[HELLO, WORLD; AGAIN]]" in out and out.count(b"\t") == data.count(b"\t")
+
+
+@pytest.mark.parametrize("name", ["scan.png", "photo.JPG", "page.tiff", "shot.webp"])
+def test_images_refused_with_ocr_message(name: str) -> None:
+    with pytest.raises(FormatError) as e:
+        detect_and_extract(name, b"\x89PNG\r\n\x1a\nbinary", "en")
+    assert str(e.value) == ocr.IMAGE_MESSAGE
+    assert "upload the original source file" in str(e.value)
+    assert name.rsplit(".", 1)[1].lower() not in SUPPORTED_EXTENSIONS
+
+
+def test_scanned_pdf_has_its_own_message() -> None:
+    scanned = b"%PDF-1.4\n1 0 obj << /Type /XObject /Subtype /Image /Width 10 >> endobj\n%%EOF"
+    with pytest.raises(FormatError) as e:
+        detect_and_extract("scan.pdf", scanned, "en")
+    assert str(e.value) == ocr.SCANNED_PDF_MESSAGE
+    text_pdf = b"%PDF-1.4\n1 0 obj << /Type /Font /Subtype /Type1 >> endobj\nBT (Hello) Tj ET\n%%EOF"
+    with pytest.raises(FormatError) as e:
+        detect_and_extract("contract.pdf", text_pdf, "en")
+    assert str(e.value) == registry.PDF_MESSAGE
+
+
+def test_ocr_stub_interface() -> None:
+    with pytest.raises(FormatError, match="OCR"):
+        ocr.ocr_to_docx(b"\x89PNG", "scan.png", "en")
+    with pytest.raises(FormatError, match="This PDF is a scan"):
+        ocr.ocr_to_docx(b"%PDF-1.4", "scan.pdf", "en")
+
+    class FakeEngine:
+        def __init__(self, out: bytes) -> None:
+            self.out = out
+
+        def to_docx(self, data: bytes, filename: str, lang: str) -> bytes:
+            return self.out
+
+    try:
+        ocr.register_engine(FakeEngine(make_docx()))
+        docx = ocr.ocr_to_docx(b"\x89PNG", "scan.png", "en")
+        assert detect_and_extract("scan.docx", docx, "en").segment_count > 0
+        ocr.register_engine(FakeEngine(b"not a document"))
+        with pytest.raises(FormatError, match="did not produce a usable document"):
+            ocr.ocr_to_docx(b"\x89PNG", "scan.png", "en")
+    finally:
+        ocr.register_engine(None)
+    assert ocr.engine() is None
+
+
+def test_handler_options() -> None:
+    xml = b"<doc><p>Keep this</p><secret>Hide this</secret></doc>"
+    assert len(detect_and_extract("a.xml", xml, "en").units) == 2
+    ruled = detect_and_extract("a.xml", xml, "en", {"rules": {"exclude": ["secret"]}})
+    assert [u.unit_id for u in ruled.units] == ["/doc/p#0"]
+    assert detect_and_extract("a.xml", xml, "en", {}).segment_count == 2  # empty options change nothing
+    with pytest.raises(FormatError, match="do not take processing options"):
+        get_handler("a.docx", {"rules": {}})
+    with pytest.raises(FormatError, match="must be a JSON object"):
+        get_handler("a.xml", ["rules"])  # type: ignore[arg-type]

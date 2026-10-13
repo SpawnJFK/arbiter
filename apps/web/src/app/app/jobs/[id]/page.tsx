@@ -12,6 +12,7 @@ import { Time } from "@/components/ui/time";
 import { contentTypeLabel } from "@/lib/langs";
 import { getMe, withAuth } from "@/lib/server-api";
 import { DECISIONS, OUTPUT_STATES, SEGMENT_STATES, TERMINAL_JOB_STATES } from "@/lib/types";
+import { AssignmentPicker } from "./assignment-picker";
 import { CancelJobButton } from "./cancel-button";
 import { ClientApproval } from "./client-approval";
 import { WorkflowPipeline } from "@/components/workflow-pipeline";
@@ -113,6 +114,9 @@ export default async function JobPage({
       />
 
       {job.awaiting_client_approval && <ClientApproval jobId={job.id} />}
+      {user.role === "pm" && !["cancelled", "failed"].includes(job.state) && (
+        <AssignmentPicker jobId={job.id} userId={user.id} locked={TERMINAL_JOB_STATES.includes(job.state)} />
+      )}
       {wfSteps.length > 0 && (
         <Card className="mb-4 px-4 py-3">
           <div className="mb-2 flex flex-wrap items-center gap-2 text-[13px]">

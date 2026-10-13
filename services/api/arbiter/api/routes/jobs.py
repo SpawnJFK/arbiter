@@ -89,7 +89,11 @@ def _done_counts(db: Session, job_ids: Sequence[str]) -> dict[str, int]:
 
 
 def _job_dict(job: Job, filename: str | None, done: int, hide_money: bool) -> dict[str, Any]:
-    cost = (job.cost_engines or Decimal("0")) + (job.cost_reviewers or Decimal("0"))
+    cost = (
+        (job.cost_engines or Decimal("0"))
+        + (job.cost_reviewers or Decimal("0"))
+        + (job.cost_vendors or Decimal("0"))
+    )
     revenue = job.revenue or Decimal("0")
     progress = 1.0 if job.state in OUTPUT_STATES else (done / job.segment_count if job.segment_count else 0.0)
     return {
@@ -530,5 +534,31 @@ def exceptions(p: PM, db: DB, pg: Paging) -> dict[str, Any]:
                 "created_at": _iso(job.due_at),
             }
         )
+    out.extend(_deadline_risks(db, p))
     out.sort(key=lambda e: e["created_at"] or "", reverse=True)
     return listing(out[pg.offset : pg.offset + pg.limit + 1], pg)
+
+
+def _deadline_risks(db: Session, p: Principal) -> list[dict[str, Any]]:
+    """Module pm: jobs whose estimated finish (remaining human words / capacity of the route)
+    is after the due date (arbiter.agency.capacity). Absent without the pm module."""
+    from arbiter.platform.modules import org_has_module
+
+    if not org_has_module(p.org, "pm"):
+        return []
+    try:
+        from arbiter.agency import capacity
+    except ImportError:  # pragma: no cover - module removed
+        return []
+    return [
+        {
+            "kind": "deadline_risk",
+            "job_id": r["job_id"],
+            "segment_id": None,
+            "reason": "; ".join(r["reasons"])
+            + f" ({r['remaining_words']} words left, estimated finish {r['estimated_finish']})",
+            "estimated_finish": r["estimated_finish"],
+            "created_at": r["due_at"],
+        }
+        for r in capacity.deadline_risk(db, p.org_id, only_at_risk=True)
+    ]

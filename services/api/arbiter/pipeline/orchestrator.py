@@ -25,6 +25,17 @@ arbiter.agency.workflows). Jobs without one behave exactly as before. With one:
                                    POST /jobs/{id}/client-approve (webhook job.needs_attention,
                                    reason client_review), then goes ready -> merge
 senate, ai_review and human_review follow the tier, which workflow validation keeps consistent.
+
+Human step routing (module pm, arbiter.agency.assignments): per job and step (human_review,
+second_review) the PM picks who does the human work. The default, and the route whenever
+the org has no pm module or no live assignment, is the reviewer marketplace (a review task
+per segment). With a live own-vendor or internal assignment, _queue_review creates no
+marketplace task: the segment stays needs_review with signals["route"] = the assignment id
+and a `routed` provenance event, and the assignee finishes it from the vendor workbench
+through the same hooks.segment_reviewed a reviewer uses. reroute_open_segments() moves open
+segments between the two routes when the PM changes the assignment (held marketplace tasks
+stay with their reviewer; a late duplicate decision is a no-op). Control samples and
+escalations always go to the marketplace.
 """
 
 from __future__ import annotations
@@ -562,7 +573,7 @@ def score(session: Session, job_id: str) -> None:
             # TM-only workflow, no TM match: nothing to score, a human translates it.
             seg.decision, seg.reasons = "review", ["no_mt_step"]
             transition(seg, "segment", "needs_review")
-            review_queue.create_task(session, seg, job, min_level=_level_for(org, "review", job))
+            _queue_review(session, seg, job, "human_review", min_level=_level_for(org, "review", job))
             job.review_count += 1
             continue
         hits = _hits(seg, terms, job.source_lang)
@@ -644,7 +655,7 @@ def score(session: Session, job_id: str) -> None:
                 _queue_control_sample(session, job, seg)
         else:  # review | blocked
             transition(seg, "segment", "needs_review")
-            review_queue.create_task(session, seg, job, min_level=_level_for(org, decision, job))
+            _queue_review(session, seg, job, "human_review", min_level=_level_for(org, decision, job))
             job.review_count += 1
 
     if segs:
@@ -679,6 +690,126 @@ def _level_for(org: Organization, decision: str, job: Job | None = None) -> str:
     if wanted in LEVEL_RANK and LEVEL_RANK[wanted] > LEVEL_RANK[level]:
         level = wanted
     return level
+
+
+# --------------------------------------------------------------------------- human step routing
+
+
+def _vendor_route(session: Session, job: Job, step: str) -> Any:
+    """The live own-vendor/internal assignment of (job, step), or None for the marketplace.
+    Module pm only; the import is lazy so the pipeline works without the agency package."""
+    from arbiter.platform.modules import org_has_module
+
+    if not org_has_module(_org(session, job), "pm"):
+        return None
+    try:
+        from arbiter.agency import assignments
+    except ImportError:  # pragma: no cover - module removed
+        return None
+    return assignments.route_for(session, job, step)
+
+
+def segment_step(job: Job, seg: Segment) -> str:
+    """Which human step an open segment waits for: second_review after one review when the
+    workflow has it, else human_review."""
+    reviews = (seg.signals or {}).get("reviews") or []
+    return "second_review" if reviews and wfl.has(job.workflow, "second_review") else "human_review"
+
+
+def _queue_review(
+    session: Session,
+    seg: Segment,
+    job: Job,
+    step: str,
+    *,
+    min_level: str,
+    expected: dict[str, Any] | None = None,
+) -> None:
+    """Hand a needs_review segment to whoever does `step`: an assignment or the marketplace."""
+    asg = _vendor_route(session, job, step)
+    if asg is None:
+        signals = dict(seg.signals or {})
+        if signals.pop("route", None) is not None:
+            seg.signals = signals
+        review_queue.create_task(session, seg, job, min_level=min_level, expected=expected)
+        return
+    seg.signals = {**(seg.signals or {}), "route": asg.id}
+    events.record(
+        session,
+        job,
+        "routed",
+        segment=seg,
+        step=step,
+        assignment_id=asg.id,
+        assignee_kind=asg.assignee_kind,
+        assignee_id=asg.vendor_id or asg.user_id,
+    )
+    from arbiter.agency import assignments
+
+    assignments.on_segment_routed(session, asg)
+
+
+def open_step_segments(session: Session, job: Job, step: str) -> list[Segment]:
+    """Segments of the job waiting for a human in `step` (control samples excluded)."""
+    return [
+        s
+        for s in _segments(session, job, ["needs_review", "in_review"])
+        if not s.is_control_sample and segment_step(job, s) == step
+    ]
+
+
+def reroute_open_segments(session: Session, job: Job, step: str) -> int:
+    """Apply the current route of (job, step) to its open segments. Returns how many moved."""
+    from arbiter.models import ReviewTask
+
+    asg = _vendor_route(session, job, step)
+    org = _org(session, job)
+    moved = 0
+    for seg in open_step_segments(session, job, step):
+        if seg.state != "needs_review":
+            continue
+        live = list(
+            session.execute(
+                select(ReviewTask).where(
+                    ReviewTask.segment_id == seg.id,
+                    ReviewTask.is_control.is_(False),
+                    ReviewTask.state.in_(("queued", "offered", "held")),
+                )
+            ).scalars()
+        )
+        if asg is not None:
+            if (seg.signals or {}).get("route") == asg.id:
+                continue
+            for t in live:
+                if t.state in ("queued", "offered"):
+                    session.delete(t)
+            seg.signals = {**(seg.signals or {}), "route": asg.id}
+            events.record(session, job, "routed", segment=seg, step=step, assignment_id=asg.id)
+            moved += 1
+        else:
+            if live and not (seg.signals or {}).get("route"):
+                continue
+            signals = dict(seg.signals or {})
+            signals.pop("route", None)
+            seg.signals = signals
+            if not live:
+                if step == "second_review":
+                    first = [r.get("reviewer_id") for r in signals.get("reviews") or []]
+                    sr = wfl.step(job.workflow, "second_review") or {}
+                    level = (sr.get("params") or {}).get("min_level") or "senior"
+                    if LEVEL_RANK.get(level, 0) < LEVEL_RANK["senior"]:
+                        level = "senior"
+                    review_queue.create_task(
+                        session, seg, job, min_level=level, expected={"skipped_by": [r for r in first if r]}
+                    )
+                else:
+                    review_queue.create_task(
+                        session, seg, job, min_level=_level_for(org, seg.decision or "review", job)
+                    )
+            events.record(session, job, "routed", segment=seg, step=step, assignment_id=None)
+            moved += 1
+    session.flush()
+    return moved
 
 
 def _ai_edit(
@@ -846,7 +977,9 @@ def on_segment_reviewed(
         level = (sr.get("params") or {}).get("min_level") or "senior"
         if LEVEL_RANK.get(level, 0) < LEVEL_RANK["senior"]:
             level = "senior"
-        review_queue.create_task(session, seg, job, min_level=level, expected={"skipped_by": [reviewer_id]})
+        _queue_review(
+            session, seg, job, "second_review", min_level=level, expected={"skipped_by": [reviewer_id]}
+        )
         job.review_count += 1
         return
     seg.decision = "reviewed"
@@ -942,7 +1075,10 @@ def report_error(session: Session, job: Job, segment_id: str, note: str) -> Esca
     )
     session.add(err)
     session.flush()
-    if seg.reviewer_id:
+    from arbiter.models import ReviewerProfile
+
+    # Own vendors and internal users are not marketplace reviewers: no reviewer score to touch.
+    if seg.reviewer_id and session.get(ReviewerProfile, seg.reviewer_id) is not None:
         from arbiter.community import scoring
         from arbiter.models import ReviewTask
 

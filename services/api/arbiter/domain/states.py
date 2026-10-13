@@ -59,7 +59,37 @@ class PayoutState(StrEnum):
     blocked = "blocked"
 
 
+class AssignmentState(StrEnum):
+    """Own-vendor / internal assignment of a human step (module pm, arbiter.agency.assignments)."""
+
+    pending = "pending"  # later in a sequential offer list, not offered yet
+    offered = "offered"
+    accepted = "accepted"
+    declined = "declined"
+    expired = "expired"  # offer timeout
+    withdrawn = "withdrawn"  # another vendor won, or the PM changed the route before acceptance
+    in_progress = "in_progress"
+    delivered = "delivered"
+    approved = "approved"
+    invoiced = "invoiced"
+    cancelled = "cancelled"
+
+
+class PurchaseOrderState(StrEnum):
+    issued = "issued"
+    invoiced = "invoiced"
+    cancelled = "cancelled"
+
+
+class VendorInvoiceState(StrEnum):
+    received = "received"
+    approved = "approved"
+    rejected = "rejected"
+    paid = "paid"
+
+
 S, J, T, P = SegmentState, JobState, TaskState, PayoutState
+A, PO, VI = AssignmentState, PurchaseOrderState, VendorInvoiceState
 
 SEGMENT_TRANSITIONS: dict[SegmentState, set[SegmentState]] = {
     S.pending: {S.translated, S.auto_approved},
@@ -105,11 +135,41 @@ PAYOUT_TRANSITIONS: dict[PayoutState, set[PayoutState]] = {
     P.settled: set(),
 }
 
+ASSIGNMENT_TRANSITIONS: dict[AssignmentState, set[AssignmentState]] = {
+    A.pending: {A.offered, A.withdrawn, A.cancelled},
+    A.offered: {A.accepted, A.declined, A.expired, A.withdrawn, A.cancelled},
+    A.accepted: {A.in_progress, A.delivered, A.cancelled},
+    A.in_progress: {A.delivered, A.cancelled},
+    A.delivered: {A.approved, A.in_progress},  # the PM sends the work back
+    A.approved: {A.invoiced},
+    A.invoiced: {A.approved},  # the vendor invoice was rejected: invoice the work again
+    A.declined: set(),
+    A.expired: set(),
+    A.withdrawn: set(),
+    A.cancelled: set(),
+}
+
+PO_TRANSITIONS: dict[PurchaseOrderState, set[PurchaseOrderState]] = {
+    PO.issued: {PO.invoiced, PO.cancelled},
+    PO.invoiced: {PO.issued},  # the vendor invoice was rejected
+    PO.cancelled: set(),
+}
+
+VENDOR_INVOICE_TRANSITIONS: dict[VendorInvoiceState, set[VendorInvoiceState]] = {
+    VI.received: {VI.approved, VI.rejected},
+    VI.approved: {VI.paid},
+    VI.rejected: set(),
+    VI.paid: set(),
+}
+
 _MACHINES = {
     "segment": SEGMENT_TRANSITIONS,
     "job": JOB_TRANSITIONS,
     "task": TASK_TRANSITIONS,
     "payout": PAYOUT_TRANSITIONS,
+    "assignment": ASSIGNMENT_TRANSITIONS,
+    "purchase_order": PO_TRANSITIONS,
+    "vendor_invoice": VENDOR_INVOICE_TRANSITIONS,
 }
 
 
@@ -130,3 +190,13 @@ def transition(obj: object, machine: str, dst: str) -> None:
         return
     assert_transition(machine, src, str(dst))
     obj.state = str(dst)  # type: ignore[attr-defined]
+
+
+def transition_status(obj: object, machine: str, dst: str) -> None:
+    """Same as transition() for models whose state column is called `status` (vendor
+    assignments, purchase orders, vendor invoices)."""
+    src = str(obj.status)  # type: ignore[attr-defined]
+    if src == str(dst):
+        return
+    assert_transition(machine, src, str(dst))
+    obj.status = str(dst)  # type: ignore[attr-defined]

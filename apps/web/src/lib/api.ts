@@ -69,6 +69,23 @@ import type {
   Webhook,
   WebhookEvent,
 } from "./types";
+import type {
+  AssignmentInput,
+  CapacityRow,
+  JobAssignments,
+  Payables,
+  PurchaseOrder,
+  RiskRow,
+  Suggestions,
+  Timeline,
+  TimelineDay,
+  Vendor,
+  VendorAbsence,
+  VendorAssignment,
+  VendorDocument,
+  VendorInput,
+  VendorInvoice,
+} from "./vendor-types";
 import type { LocaleInfo } from "./i18n/locales";
 
 export class ApiError extends Error {
@@ -360,6 +377,58 @@ export function createApi(item: Transport) {
       post<{ results: ApplyResult[]; message?: AssistantMessage }>(`/assistant/messages/${enc(messageId)}/apply`, {
         actions,
       }),
+
+    // Vendor management (module pm)
+    vendors: (q: { q?: string; status?: string; source_lang?: string; target_lang?: string } & ListParams = {}) =>
+      get<ListResponse<Vendor>>("/vendors", { ...q }),
+    vendor: (id: string) => get<Vendor>(`/vendors/${enc(id)}`),
+    createVendor: (body: VendorInput) => post<Vendor>("/vendors", body, true),
+    updateVendor: (id: string, body: Partial<VendorInput>) => patch<Vendor>(`/vendors/${enc(id)}`, body),
+    deactivateVendor: (id: string) => item.request<Vendor>("DELETE", `/vendors/${enc(id)}`),
+    importVendors: (file: File) => {
+      const form = new FormData();
+      form.set("file", file);
+      return item.request<{ created: number; updated: number; errors: { row: number; error: string }[] }>(
+        "POST",
+        "/vendors/import",
+        { form },
+      );
+    },
+    addAbsence: (vendorId: string, body: { start_date: string; end_date: string; note?: string }) =>
+      post<VendorAbsence>(`/vendors/${enc(vendorId)}/absences`, body),
+    deleteAbsence: (vendorId: string, id: string) => del(`/vendors/${enc(vendorId)}/absences/${enc(id)}`),
+    addVendorDocument: (vendorId: string, body: { kind: string; title: string; signed: boolean; signed_at?: string }) =>
+      post<VendorDocument>(`/vendors/${enc(vendorId)}/documents`, body),
+    deleteVendorDocument: (vendorId: string, id: string) => del(`/vendors/${enc(vendorId)}/documents/${enc(id)}`),
+    vendorCalendar: (vendorId: string, q: { start?: string; days?: number } = {}) =>
+      get<{ vendor_id: string; start: string; days: TimelineDay[] }>(`/vendors/${enc(vendorId)}/calendar`, { ...q }),
+    jobAssignments: (jobId: string) => get<JobAssignments>(`/jobs/${enc(jobId)}/assignments`),
+    assignmentSuggestions: (jobId: string, step: string) =>
+      get<Suggestions>(`/jobs/${enc(jobId)}/assignment-suggestions`, { step }),
+    createAssignment: (jobId: string, body: AssignmentInput) =>
+      post<{ items: VendorAssignment[] }>(`/jobs/${enc(jobId)}/assignments`, body, true),
+    assignments: (q: { status?: string; vendor_id?: string } & ListParams = {}) =>
+      get<ListResponse<VendorAssignment>>("/assignments", { ...q }),
+    approveAssignment: (id: string) => post<VendorAssignment>(`/assignments/${enc(id)}/approve`),
+    reopenAssignment: (id: string, note?: string) =>
+      post<VendorAssignment>(`/assignments/${enc(id)}/reopen`, { note: note ?? "" }),
+    cancelAssignment: (id: string) => post<VendorAssignment>(`/assignments/${enc(id)}/cancel`),
+    purchaseOrders: (q: { vendor_id?: string; status?: string } & ListParams = {}) =>
+      get<ListResponse<PurchaseOrder>>("/purchase-orders", { ...q }),
+    poPdfUrl: (id: string) => item.downloadUrl(`/purchase-orders/${enc(id)}/pdf`),
+    vendorInvoices: (q: { vendor_id?: string; status?: string; period?: string } & ListParams = {}) =>
+      get<ListResponse<VendorInvoice>>("/vendor-invoices", { ...q }),
+    autoInvoices: (body: { vendor_id?: string; period?: string } = {}) =>
+      post<{ items: VendorInvoice[] }>("/vendor-invoices/auto", body),
+    setVendorInvoiceStatus: (id: string, action: "approve" | "reject" | "pay") =>
+      post<VendorInvoice>(`/vendor-invoices/${enc(id)}/${action}`),
+    vendorInvoiceFileUrl: (id: string) => item.downloadUrl(`/vendor-invoices/${enc(id)}/file`),
+    vendorInvoicesCsvUrl: (period?: string) => item.downloadUrl("/vendor-invoices/export.csv", { period }),
+    payables: (period?: string) => get<Payables>("/payables", { period }),
+    capacity: (q: { source_lang: string; target_lang: string; words: number; by?: string; service?: string }) =>
+      get<{ items: CapacityRow[] }>("/capacity", { ...q }),
+    deadlineRisk: (onlyAtRisk = false) => get<{ items: RiskRow[] }>("/pm/deadline-risk", { only_at_risk: onlyAtRisk }),
+    timeline: (q: { start?: string; days?: number } = {}) => get<Timeline>("/pm/timeline", { ...q }),
 
     // Integrations and billing
     webhooks: () => get<ListResponse<Webhook>>("/webhooks"),

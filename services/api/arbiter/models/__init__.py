@@ -36,6 +36,15 @@ from arbiter.models.reviewers import (
     TestAttempt,
 )
 from arbiter.models.tenancy import ApiKey, Organization, User
+from arbiter.models.vendors import (
+    NumberSeries,
+    PurchaseOrder,
+    Vendor,
+    VendorAbsence,
+    VendorAssignment,
+    VendorDocument,
+    VendorInvoice,
+)
 
 __all__ = [
     "ApiKey",
@@ -84,6 +93,13 @@ __all__ = [
     "Webhook",
     "WebhookDelivery",
     "WorkItem",
+    "NumberSeries",
+    "PurchaseOrder",
+    "Vendor",
+    "VendorAbsence",
+    "VendorAssignment",
+    "VendorDocument",
+    "VendorInvoice",
     "new_id",
     "utcnow",
 ]

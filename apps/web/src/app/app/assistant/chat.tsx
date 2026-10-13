@@ -26,6 +26,9 @@ const EXAMPLES = [
     text: k("app.assistant.chat.weAreNorthwindLocalizationOur"),
   },
   { label: k("app.assistant.chat.askAboutTheBusiness"), text: k("app.assistant.chat.whichJobsAreOverdueRight") },
+  { label: k("app.assistant.chat.pmWhoIsFree"), text: k("app.assistant.chat.pmWhoIsFreeText") },
+  { label: k("app.assistant.chat.pmAtRisk"), text: k("app.assistant.chat.pmAtRiskText") },
+  { label: k("app.assistant.chat.pmDraftQuote"), text: k("app.assistant.chat.pmDraftQuoteText") },
 ];
 
 const ACTION_ICON: Record<string, keyof typeof Icons> = {
@@ -40,6 +43,8 @@ const ACTION_ICON: Record<string, keyof typeof Icons> = {
   create_glossary: "book",
   add_terms: "book",
   create_webhook: "hook",
+  create_assignment: "users",
+  draft_quote: "receipt",
 };
 
 function linkFor(type: string, id?: string | null): string | null {
@@ -65,6 +70,10 @@ function linkFor(type: string, id?: string | null): string | null {
       return id ? `/app/glossaries/${id}` : "/app/glossaries";
     case "create_webhook":
       return "/app/settings/webhooks";
+    case "create_assignment":
+      return "/app/capacity";
+    case "draft_quote":
+      return "/app/crm/deals";
     default:
       return null;
   }

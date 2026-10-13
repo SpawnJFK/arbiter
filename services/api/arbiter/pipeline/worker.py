@@ -38,6 +38,13 @@ def _handler(kind: str) -> Callable[[Session, dict[str, Any]], None] | None:
         return lambda s, p: fn(s, p["job_id"])
     if kind == "webhook.deliver":
         return _webhook
+    if kind.startswith("vendor."):
+        # module pm (own-vendor offers); imported lazily so the worker runs without it
+        try:
+            from arbiter.agency.assignments import HANDLERS as VENDOR_HANDLERS
+        except ImportError:  # pragma: no cover - module removed
+            return None
+        return VENDOR_HANDLERS.get(kind)
     return None
 
 

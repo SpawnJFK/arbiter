@@ -1,9 +1,9 @@
 # Progress
 
-Last updated: 2026-10-09. Phase: P00 next (`phases/README.md`).
+Last updated: 2026-10-13 (eight module builds merged and integrated). Phase: P00 next (`phases/README.md`).
 
 ## Exists (built and tested locally)
-- **File processing**: 10 formats behind `FormatHandler` (docx, xlsx, pptx, html, md, json, po, txt, csv, xliff), segmenter, tagged text model, round-trip tests, XLIFF 2.1 export.
+- **File processing**: formats behind `FormatHandler`: docx, xlsx, pptx, html, md, json, po, txt, csv, tsv, xliff, IDML, SRT/VTT/ASS, XML with ITS rules, DITA, Android/iOS strings and stringsdict, ARB, properties, resx, YAML, AsciiDoc; OCR seam (no engine). Handler options stored per file and used by quote, extract and merge (D-076). Segmenter, tagged text model, round-trip tests, XLIFF 2.1 export.
 - **Linguistic**: TM (context 101 / exact / fuzzy via pg_trgm / semantic via pgvector), TMX import with rights confirmation, glossaries with org-wide temporal versions (D-016), four term kinds, Snowball term matching, CSV/TBX import and export, term questions.
 - **Engines**: mock, Anthropic, OpenAI, DeepL, Google Basic v2 (D-021), LLM MT, tag protection, cost estimates, registry and scoreboard routing. Engine module (2026-10-13): encrypted engine keys in the DB with org BYOK > platform > env resolution (D-056), Claude on AWS Bedrock and Google Vertex plus generic OpenAI-compatible endpoints, per-org EU processing route with no silent fallback (D-057), routing rules and monthly budgets (D-058), own models: consented dataset export, Together / Fireworks / manual training, held-out evaluation onto the scoreboard, activation (D-059). Web: /app/engines, /app/training, settings region + consent, /admin/engines.
 - **Quality**: hard QA (tags D-009, numbers, glossary), QE judge (MQM-Core D-010), review senate with arbitration (D-019, D-020), translation senate (D-023), AI editor, calibration with control samples, PROMPT_VERSION tracking (D-022).
@@ -17,18 +17,20 @@ Last updated: 2026-10-09. Phase: P00 next (`phases/README.md`).
 - **UI localization**: locales and translated UI strings in Postgres, public read endpoints, admin import with merge/replace and placeholder checks (D-046); the web app sends the UI locale and loads translations with English fallback (J-09).
 - **Web**: Next.js 16 app for customers (/app), reviewers (/reviewer, keyboard cockpit) and operators (/admin); httpOnly cookie + server proxy (D-036); mock mode for demos; E2E browser test (apps/web/e2e/real-flow.mjs) against a real backend.
 - **CLI** (`python -m arbiter.cli`): `seed-demo` (fictional demo org and users), `create-admin`, `calibrate`, `run-worker`.
-- **Tests**: 441 backend tests (pytest, mock providers only), including the automated `alembic upgrade head` equals `create_all` check (tests/db). Web: lint with i18n:check, typecheck, build, E2E (J-01..J-09).
-- **Infra/docs**: Dockerfiles (web on Node 24), compose, Caddy, backups, CI (lint, tests, builds, compose config), Makefile, deploy guide, runbook, decisions D-001..D-050.
+- **Platform and ops (2026-10-13)**: module entitlements and gating, custom roles, team and invites, append-only audit log, OIDC SSO, Fernet secrets (D-052..D-055); S3 or local storage with presigned uploads, queued email (password reset, invites, job and payout notices, vendor offers), PostHog and OpenTelemetry, `/healthz` commit, Kamal configs, release and backup workflows (D-051). Add-ons per plan written by billing (D-077).
+- **Software strings (module strings)**: keys, branches, releases, OTA bundles, push/pull, CLI (D-060..D-062).
+- **Tests**: 789 backend tests (2026-10-13; was 441) (pytest, mock providers only), including the automated `alembic upgrade head` equals `create_all` check (tests/db). Web: lint with i18n:check, typecheck, build, E2E (J-01..J-09 plus one step per merged section, 30 steps).
+- **Infra/docs**: Dockerfiles (web on Node 24), compose, Caddy, backups, CI (lint, tests, builds, compose config), Makefile, deploy guide, runbook, decisions D-001..D-078.
 - **HYPERPOWER v2** (installed 2026-10-09, proven on Linux only): control plane `.hyperpower/` (core 1.0.0, hash-locked), `hyperpower.json` schema 2, `phases/` P00..P08, `ACCEPTANCE.md` journeys with verifiers, evidence ledger (baseline record EV-c769e975 VERIFIED), root npm ship check (`npm run verify`, `verify:e2e`, `verify:deployed`), git hooks, Cursor rules/commands/agents/skills/hooks, Beads skeleton, bootstrap runbook.
 
-- **Workbench, TM tools, LQA, auditor** (2026-10-13, parallel builder, migration 0008 on 0003): segment editor API and page `/app/jobs/{id}/editor` (live QA, TM diff, glossary, MT on demand, concordance, comments and client queries, split/merge, find/replace, PM locks, live preview), TM editor/alignment/term extraction/TM QA, job LQA scorecards with PDF/XLSX and org LQA settings, standalone auditor (`/v1/audits`, `/app/auditor`) on the work queue. Decisions D-063..D-066. Browser e2e for these screens not written yet.
+- **Workbench, TM tools, LQA, auditor** (2026-10-13, parallel builder, migration 0008): segment editor API and page `/app/jobs/{id}/editor` (live QA, TM diff, glossary, MT on demand, concordance, comments and client queries, split/merge, find/replace, PM locks, live preview), TM editor/alignment/term extraction/TM QA, job LQA scorecards with PDF/XLSX and org LQA settings, standalone auditor (`/v1/audits`, `/app/auditor`) on the work queue. Decisions D-063..D-066. The e2e opens the editor (edit and confirm) and runs one audit.
 
 ## Not yet
 - P00: the HYPERPOWER layer proven on Windows (tools, hooks through Cursor, Beads graph, Graphify index, Context7, journey records).
 - Any measurement on a real pair with real keys (P01).
 - Deployment, backups in cron, restore drill (P02).
 - Live payment and payout provider accounts, webhook destination, Paddle client token and approved domain, one test payout; legal and tax review; security pass (P03). Seat limits are reported, not enforced.
-- Okapi sidecar (P06), COMET plugin (D-005), SSO (P07).
+- Okapi sidecar (P06), COMET plugin (D-005). SSO exists (D-055) but no real IdP has been tried.
 - Engine module: no real call made yet against Bedrock, Vertex (EU host), Together or Fireworks; one small real call per provider before the first customer (D-057, D-059). No resume endpoint for failed jobs (EU route failures need one once the owner adds an EU engine).
 
 ## Known limitations
@@ -37,7 +39,8 @@ Last updated: 2026-10-09. Phase: P00 next (`phases/README.md`).
 - Number check has edge cases (locale formats, ranges, spelled-out numbers).
 - Embeddings are mock unless `ARBITER_EMBEDDING_PROVIDER=openai`; semantic TM matches are not meaningful in dev.
 - Context7 was not used during the build; library usage was not verified against current docs (P00 item 16).
-- `/healthz` does not report the deployed commit yet (P02).
+- Vendor invoices marked paid are not paid out through the platform rails (D-078).
+- Strings and auditor import engines/quality/community internals (module isolation known debt).
 
 ## Next
 See activeContext.md "Next steps".

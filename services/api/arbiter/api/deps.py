@@ -123,3 +123,30 @@ def listing(items: list, pg: Page, total_fetched: int | None = None) -> dict:
     """Callers fetch limit+1 rows; an extra row means there is a next page."""
     has_more = len(items) > pg.limit
     return {"items": items[: pg.limit], "next_offset": pg.offset + pg.limit if has_more else None}
+
+
+def require_module(module: str):  # noqa: ANN201
+    """Route dependency: 404 `module_disabled` when the org has not enabled the module."""
+    from arbiter.platform.modules import org_has_module
+
+    class ModuleDisabled(ServiceError):
+        code = "module_disabled"
+        status = 404
+
+    def dep(p: Auth) -> Principal:
+        if p.org is not None and not org_has_module(p.org, module):
+            raise ModuleDisabled(f"the {module} module is not enabled for this organization")
+        return p
+
+    return Depends(dep)
+
+
+def require_permission(perm: str):  # noqa: ANN201
+    from arbiter.platform.permissions import has_permission
+
+    def dep(p: Auth) -> Principal:
+        if not has_permission(p, perm):
+            raise Forbidden(f"missing permission {perm}")
+        return p
+
+    return Depends(dep)

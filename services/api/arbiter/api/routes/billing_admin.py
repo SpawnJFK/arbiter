@@ -48,6 +48,7 @@ class PlanIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=500)
     modules: list[str] = Field(default_factory=list, max_length=20)
+    addons: list[str] = Field(default_factory=list, max_length=20)
     prices: dict[str, dict[str, str]] = Field(default_factory=dict)
     seat_prices: dict[str, dict[str, str]] = Field(default_factory=dict)
     included: dict[str, str] = Field(default_factory=dict)
@@ -66,6 +67,7 @@ class PlanPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     description: str | None = Field(default=None, max_length=500)
     modules: list[str] | None = Field(default=None, max_length=20)
+    addons: list[str] | None = Field(default=None, max_length=20)
     prices: dict[str, dict[str, str]] | None = None
     seat_prices: dict[str, dict[str, str]] | None = None
     included: dict[str, str] | None = None
@@ -108,6 +110,8 @@ class OverrideIn(BaseModel):
     period_end: datetime | None = None
     modules_add: list[str] | None = Field(default=None, max_length=20)
     modules_remove: list[str] | None = Field(default=None, max_length=20)
+    addons_add: list[str] | None = Field(default=None, max_length=20)
+    addons_remove: list[str] | None = Field(default=None, max_length=20)
     platform_fee_percent: str | None = Field(default=None, max_length=10)
     payment_terms_days: int | None = Field(default=None, ge=0, le=120)
     po_number: str | None = Field(default=None, max_length=60)

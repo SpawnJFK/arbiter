@@ -428,3 +428,61 @@ def test_period_close_manual_subscription_issues_our_invoice(db):
     )
     assert again.json()["orgs"][0]["status"] == "already_closed"
     assert c.post(f"/v1/admin/invoices/{inv['id']}/mark-paid", headers=admin).json()["status"] == "paid"
+
+
+def test_addons_follow_plan_and_overrides_and_platform_module_editor_keeps_them(db):
+    """D-077: billing writes org.settings["addons"]; the platform module editor writes modules
+    through billing.entitlements (overrides), so a later plan change keeps the admin's choice."""
+    from arbiter.platform.modules import org_has_addon
+
+    catalog.seed_starter_catalog(db)
+    db.commit()
+    c = client()
+    h = register(c)
+    org_id = _org_id(c, h)
+    admin = _admin(c, db)
+    # legacy org (never subscribed): every add-on, nothing stored
+    mods = c.get("/v1/org/modules", headers=h).json()
+    assert {a["key"]: a["enabled"] for a in mods["addons"]} == {
+        "eu_processing": True,
+        "byok": True,
+        "custom_models": True,
+    }
+    plan = c.get("/v1/admin/plans", headers=admin).json()["items"]
+    assert {p["key"]: p["addons"] for p in plan}["business"] == ["byok"]
+
+    r = c.post(f"/v1/admin/orgs/{org_id}/subscription", headers=admin, json={"plan": "business"})
+    assert r.status_code == 200, r.text
+    assert r.json()["addons"] == ["byok"]
+    org = db.get(Organization, org_id)
+    db.refresh(org)
+    assert org.settings["addons"] == ["byok"] and not org_has_addon(org, "eu_processing")
+
+    r = c.post(
+        f"/v1/admin/orgs/{org_id}/subscription",
+        headers=admin,
+        json={"addons_add": ["eu_processing"], "addons_remove": ["byok"]},
+    )
+    assert r.json()["addons"] == ["eu_processing"]
+    assert r.json()["addon_overrides"] == {"add": ["eu_processing"], "remove": ["byok"]}
+    assert (
+        c.post(f"/v1/admin/orgs/{org_id}/subscription", headers=admin, json={"addons_add": ["x"]}).status_code
+        == 422
+    )
+
+    # platform admin module editor: stored as overrides against the plan
+    r = c.put(f"/v1/admin/orgs/{org_id}/modules", headers=admin, json={"modules": ["tms", "ai", "auditor"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["enabled"] == ["tms", "ai", "auditor"]
+    view = c.get(f"/v1/admin/orgs/{org_id}/subscription", headers=admin).json()
+    assert "pm" in view["overrides"]["remove"]
+    # a plan change keeps the admin's removals
+    c.post(f"/v1/admin/orgs/{org_id}/subscription", headers=admin, json={"plan": "enterprise"})
+    enabled = c.get("/v1/org/modules", headers=h).json()["enabled"]
+    assert "pm" not in enabled and "tms" in enabled
+    # plan add-ons: the enterprise plan includes every add-on, minus the byok override; they
+    # only work while their module (engine) is enabled, and the admin removed engine above
+    db.refresh(org)
+    assert org.settings["addons"] == ["eu_processing", "custom_models"]
+    addons = {a["key"]: a["enabled"] for a in c.get("/v1/org/modules", headers=h).json()["addons"]}
+    assert addons == {"eu_processing": False, "byok": False, "custom_models": False}

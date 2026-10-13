@@ -6,7 +6,7 @@ the tables are listed in dbinit.LATER_TABLES and the column in dbinit.LATER_COLU
 migration 0001 leaves them out.
 
 Revision ID: 0009
-Revises: 0003
+Revises: 0008
 """
 
 import sqlalchemy as sa

@@ -93,7 +93,8 @@ def set_org_modules(org: Any, modules: list[str]) -> list[str]:
 
 
 # Paid add-ons on top of modules. Same storage pattern: org.settings["addons"]; None means
-# every add-on (current behaviour until billing sells them separately).
+# every add-on (orgs that never had a subscription). billing.entitlements writes the list from
+# the plan's `addons` plus admin overrides (D-077).
 ADDONS: dict[str, dict[str, Any]] = {
     "eu_processing": {"name": "EU processing route", "module": "engine"},
     "byok": {"name": "Bring your own engine keys", "module": "engine"},
@@ -111,3 +112,11 @@ def org_has_addon(org: Any, addon: str) -> bool:
     if enabled is not None and addon not in enabled:
         return False
     return org_has_module(org, ADDONS[addon]["module"])
+
+
+def addon_catalog(org: Any) -> list[dict[str, Any]]:
+    """Add-ons with their state for the org (read-only in the org UI; billing writes them)."""
+    return [
+        {"key": k, "name": v["name"], "module": v["module"], "enabled": org_has_addon(org, k)}
+        for k, v in ADDONS.items()
+    ]

@@ -47,6 +47,9 @@ export function NewProjectWizard({
   const [name, setName] = useState("");
   const [uploaded, setUploaded] = useState<UploadedFile | null>(null);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
+  // Subtitle files take a line length limit (format handler option, D-076).
+  const [maxLine, setMaxLine] = useState("");
+  const isSubtitle = /\.(srt|vtt|ass)$/i.test(file?.name ?? "");
 
   const [targets, setTargets] = useState<string[]>([]);
   const [contentType, setContentType] = useState(regulated ? "regulatory" : "general");
@@ -83,7 +86,11 @@ export function NewProjectWizard({
     run(async () => {
       if (!file) throw new Error(t("app.projects.new.wizard.chooseAFileFirst"));
       setProgress({ loaded: 0, total: file.size, phase: "sending" });
-      const uploadedFile = await uploadSourceFile(t, file, sourceLang, setProgress).finally(() => setProgress(null));
+      const n = Number.parseInt(maxLine, 10);
+      const options = isSubtitle && Number.isFinite(n) && n > 0 ? { max_chars_per_line: n } : undefined;
+      const uploadedFile = await uploadSourceFile(t, file, sourceLang, setProgress, undefined, options).finally(() =>
+        setProgress(null),
+      );
       setUploaded(uploadedFile);
       if (!name) setName(file.name.replace(/\.[^.]+$/, ""));
       setTargets((prev) => prev.filter((x) => x !== sourceLang));
@@ -156,6 +163,23 @@ export function NewProjectWizard({
                   </Select>
                 )}
               </Field>
+              {isSubtitle && (
+                <Field label={t("app.projects.new.wizard.maxCharsPerLine")} hint={t("app.projects.new.wizard.maxCharsPerLineHint")}>
+                  {(id, d) => (
+                    <Input
+                      id={id}
+                      aria-describedby={d}
+                      type="number"
+                      min={1}
+                      max={500}
+                      inputMode="numeric"
+                      value={maxLine}
+                      onChange={(e) => setMaxLine(e.target.value)}
+                      placeholder="42"
+                    />
+                  )}
+                </Field>
+              )}
             </div>
           </div>
           <div className="mt-5 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-end">

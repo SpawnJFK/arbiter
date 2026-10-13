@@ -372,7 +372,7 @@ def prepare(session: Session, job_id: str) -> None:
     settings = get_settings()
     fa = session.get(FileAsset, job.file_id)
     assert fa is not None
-    result = detect_and_extract(fa.filename, storage.get(fa.storage_key), job.source_lang)
+    result = detect_and_extract(fa.filename, storage.get(fa.storage_key), job.source_lang, fa.options)
 
     # R-GL-11: freeze the glossary version and the threshold the job runs with.
     job.glossary_version = gl.current_version(session, job.org_id, job.content_type)
@@ -1308,7 +1308,7 @@ def merge(session: Session, job_id: str) -> None:
     segs = _segments(session, job)
     # Editor splits and merges change the segment count of a unit; units.target_map maps
     # the segments back onto the extraction slots the handler expects.
-    out = get_handler(fa.filename).merge(original, units.target_map(segs), job.target_lang)
+    out = get_handler(fa.filename, fa.options).merge(original, units.target_map(segs), job.target_lang)
     base, _, ext = fa.filename.rpartition(".")
     out_name = (
         f"{base or fa.filename}.{job.target_lang}.{ext}" if base else f"{fa.filename}.{job.target_lang}"

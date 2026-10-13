@@ -78,6 +78,7 @@ import type {
   TmHit,
   UploadedFile,
   UploadTicket,
+  FileOptions,
   Usage,
   Webhook,
   WebhookEvent,
@@ -243,7 +244,7 @@ export function createApi(item: Transport) {
       return item.request<UploadedFile>("POST", "/files", { form, idempotencyKey: newIdempotencyKey() });
     },
     // Direct upload (bytes go straight to storage); see src/lib/upload.ts for the full flow.
-    createUpload: (body: { filename: string; size: number; content_type: string; source_lang: string }) =>
+    createUpload: (body: { filename: string; size: number; content_type: string; source_lang: string; options?: FileOptions }) =>
       post<UploadTicket>("/uploads", body, true),
     completeUpload: (uploadId: string) => post<UploadedFile>(`/uploads/${enc(uploadId)}/complete`, undefined, true),
     createQuote: (body: { file_id: string; target_langs: string[]; content_type: string; account_id?: string }) =>

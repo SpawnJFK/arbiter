@@ -8,6 +8,7 @@ cannot read back. Counts use the same word rule as quotes (billing.quotes.count_
 from __future__ import annotations
 
 import hashlib
+import json
 import posixpath
 from typing import Annotated, Any
 
@@ -39,8 +40,26 @@ def file_view(fa: FileAsset, warnings: list[str] | None = None) -> dict[str, Any
         "segment_count": fa.segment_count,
         "word_count": fa.word_count,
         "warnings": list(warnings or []),
+        "options": fa.options or None,
         "created_at": fa.created_at.isoformat() if fa.created_at else None,
     }
+
+
+def parse_options(raw: Any) -> dict[str, Any] | None:
+    """Format handler options (D-076): a JSON object, given as an object or a JSON string
+    (multipart form field). Empty means none. The handler validates the content itself."""
+    if raw is None or raw == "" or raw == {}:
+        return None
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            raise Invalid("options must be a JSON object") from None
+    if not isinstance(raw, dict):
+        raise Invalid("options must be a JSON object")
+    if len(json.dumps(raw)) > 20_000:
+        raise Invalid("options are too large (20 kB at most)")
+    return raw or None
 
 
 def _read_limited(upload: UploadFile) -> bytes:
@@ -62,13 +81,17 @@ def register_file(
     *,
     sha256: str | None = None,
     stored_key: str | None = None,
+    options: dict[str, Any] | None = None,
 ) -> tuple[FileAsset, list[str]]:
     """Validate by extracting once (R-IN-*), count, store and register a source file.
 
     Shared by POST /files (bytes in the request) and POST /uploads/{id}/complete (bytes
     already in storage at `stored_key`, which is then kept instead of copying the object).
+    `options` are the format handler options; they are stored with the file so quote,
+    extract and merge read the file the same way.
     """
-    result = detect_and_extract(filename, data, source_lang)  # FormatError -> 422 unsupported_file
+    # FormatError -> 422 unsupported_file (also for options the handler does not accept)
+    result = detect_and_extract(filename, data, source_lang, options)
     segments = 0
     words = 0
     for unit in result.units:
@@ -95,6 +118,7 @@ def register_file(
         source_lang=source_lang,
         segment_count=segments,
         word_count=words,
+        options=options,
     )
     db.add(fa)
     db.flush()
@@ -114,18 +138,20 @@ def upload_file(
     db: DB,
     file: Annotated[UploadFile, File()],
     source_lang: Annotated[str, Form(min_length=2, max_length=16)],
+    options: Annotated[str | None, Form(max_length=20_000)] = None,
     idempotency_key: Annotated[str | None, Header()] = None,
 ) -> Any:
     filename = clean_filename(file.filename)
     source_lang = source_lang.strip()
+    opts = parse_options(options)
     data = _read_limited(file)
     sha = hashlib.sha256(data).hexdigest()
-    payload = {"filename": filename, "source_lang": source_lang, "sha256": sha}
+    payload = {"filename": filename, "source_lang": source_lang, "sha256": sha, "options": opts}
     replay = idempotent_replay(db, p, "files", idempotency_key, payload)
     if replay is not None:
         return replay
 
-    fa, warnings = register_file(db, p.org_id, filename, data, source_lang, sha256=sha)
+    fa, warnings = register_file(db, p.org_id, filename, data, source_lang, sha256=sha, options=opts)
     body = file_view(fa, warnings)
     idempotent_store(db, p, "files", idempotency_key, payload, 201, body)
     return JSONResponse(body, status_code=201)

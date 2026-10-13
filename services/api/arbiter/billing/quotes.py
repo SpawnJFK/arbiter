@@ -78,7 +78,9 @@ def _segments(file_asset: FileAsset) -> list[tuple[str, int]]:
     except (FileNotFoundError, ValueError):
         raise Invalid("the file is no longer available") from None
     try:
-        result = registry.detect_and_extract(file_asset.filename, data, file_asset.source_lang)
+        result = registry.detect_and_extract(
+            file_asset.filename, data, file_asset.source_lang, file_asset.options
+        )
     except FormatError as e:
         raise Invalid(str(e)) from None
     out: list[tuple[str, int]] = []

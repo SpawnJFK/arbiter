@@ -37,6 +37,9 @@ class Plan(Base):
     name: Mapped[str] = mapped_column(String(120))
     description: Mapped[str] = mapped_column(String(500), default="")
     modules: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # Paid add-ons the plan includes (platform.modules.ADDONS keys), written to
+    # org.settings["addons"] by billing.entitlements (migration 0011).
+    addons: Mapped[list[str]] = mapped_column(JSON, default=list)
     prices: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     seat_prices: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     included: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)

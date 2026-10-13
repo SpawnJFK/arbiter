@@ -1108,3 +1108,42 @@ Date: 2026-10-13. Status: accepted.
 - *Compute entitlements on every request.* `modules.py` stays a cheap reader of org settings.
 
 **Consequences.** past_due keeps access while the provider retries. Seat limits are reported (`seats_used`) but not yet enforced at user creation.
+
+## D-076 Format handler options are stored on the file and used by every read of it
+Date: 2026-10-13. Status: accepted.
+
+**Context.** The fileproc handlers gained an options seam (XML rules and dialect, subtitle `max_chars_per_line`). Extraction happens several times for one file: at upload (validation and counts), in the quote, in the job's extract step, in the XLIFF export, in the preview and in the merge. If any of those reads the file without the options, segment counts and merge slots disagree and the output breaks.
+
+**Decision.** `POST /v1/uploads` takes `options` (JSON object), `POST /v1/files` takes an `options` form field (JSON string). The handler validates them before any bytes move (422 `unsupported_file` when the format takes no options or a value is wrong). They are stored on `upload_sessions.options` and then on `files.options` (migration 0011), and every caller passes `fa.options` to `detect_and_extract` / `get_handler`: quote, orchestrator extract and merge, XLIFF export, workbench preview. The new-project wizard offers the subtitle line limit for `.srt`, `.vtt` and `.ass`.
+
+**Rejected.**
+- *Options per job or per project.* Two jobs of one file could then disagree on segmentation, and the quote (made before the project) would not know them.
+- *Options inferred from the org's settings.* Hidden state that changes how an already uploaded file is read.
+
+**Consequences.** Changing options means uploading the file again. XML rule editing has no UI yet; API clients send the rules.
+
+## D-077 Add-ons per plan; billing is the only writer of modules and add-ons
+Date: 2026-10-13. Status: accepted.
+
+**Context.** The engine module defined paid add-ons (`eu_processing`, `byok`, `custom_models`) read from `org.settings["addons"]`, the billing module wrote `org.settings["modules"]` from the subscription (D-075), and the platform module had its own admin editor that wrote the module list directly. Two writers would overwrite each other on the next subscription change.
+
+**Decision.** Plans carry `addons` (migration 0011; business includes `byok`, enterprise all three). `billing.entitlements.refresh` writes both `modules` and `addons`: plan values plus admin overrides (`module_overrides`, `addon_overrides`, set through `POST /v1/admin/orgs/{id}/subscription` with `modules_add/remove` and `addons_add/remove`); an org that never subscribed keeps everything and nothing is stored. The platform editor (`PUT /v1/admin/orgs/{id}/modules`) calls `entitlements.set_exact_modules`, which turns the requested list into overrides against the plan. The org and admin module pages show add-ons read-only (`GET /v1/org/modules` returns `addons`). An add-on works only while its module is enabled.
+
+**Rejected.**
+- *Keeping the direct write in the platform editor.* The next webhook or period close would silently undo the admin's choice.
+- *Add-ons as modules.* They are options of the engine module, not separable products; a module key for each would break the module isolation rule and the dependency model.
+
+**Consequences.** The migration 0010 starter-catalog seed moved to 0011, because the seed uses the ORM model, which now has `plans.addons`.
+
+## D-078 One invite flow, one secrets helper, all outbound email through notify
+Date: 2026-10-13. Status: accepted.
+
+**Context.** Eight modules were built in parallel. The infra builder added account tokens with an invite purpose and a set-password page, the platform builder added `user_invites` with `/v1/auth/invite/accept`; the engine builder added its own Fernet helper next to `platform/secrets.py`; the vendor module logged offer emails because no mailer existed yet.
+
+**Decision.** Team invites use the platform flow (`POST /v1/users/invite`, `user_invites`, `/accept-invite`, `/v1/auth/invite/accept`); the email is queued through `notify.send_invite` with that link. `account_tokens` are only for password reset, and the reset endpoint accepts only reset tokens. Engine credentials are encrypted with `arbiter/platform/secrets.py` under the one `ARBITER_SECRETS_KEY` (`arbiter/crypto.py` removed). Vendor offers and assignment messages are queued through `notify.vendor_message` (template `vendor_message`); the assignment still keeps a record of each message. Templates may declare `optional` placeholders (a message without a link has no button).
+
+**Rejected.**
+- *Keeping both invite mechanisms.* Two links with different lifetimes and pages for the same action, and two places to revoke.
+- *A second encryption key for engine keys.* Two keys to rotate and back up for the same class of secret.
+
+**Consequences.** Vendor invoices marked paid do not trigger the platform payout rails: an agency pays its own vendors, while the rails pay marketplace reviewers from platform funds. Connecting the two needs a decision about who holds the money.

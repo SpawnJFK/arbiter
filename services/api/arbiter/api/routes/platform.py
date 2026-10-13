@@ -45,7 +45,11 @@ OrgManage = _perm("org.manage")
 @router.get("/org/modules")
 def org_modules(p: Customer) -> dict[str, Any]:
     assert p.org is not None
-    return {"enabled": mods.effective_modules(p.org), "catalog": mods.catalog(p.org)}
+    return {
+        "enabled": mods.effective_modules(p.org),
+        "catalog": mods.catalog(p.org),
+        "addons": mods.addon_catalog(p.org),
+    }
 
 
 def _org(db: DB, org_id: str) -> Organization:
@@ -58,7 +62,12 @@ def _org(db: DB, org_id: str) -> Organization:
 @router.get("/admin/orgs/{org_id}")
 def admin_org(org_id: str, _: Admin, db: DB) -> dict[str, Any]:
     org = _org(db, org_id)
-    return {**org_view(org), "kind": org.kind, "catalog": mods.catalog(org)}
+    return {
+        **org_view(org),
+        "kind": org.kind,
+        "catalog": mods.catalog(org),
+        "addons": mods.addon_catalog(org),
+    }
 
 
 class ModulesIn(BaseModel):
@@ -72,12 +81,19 @@ def set_modules(org_id: str, body: ModulesIn, p: Admin, db: DB) -> dict[str, Any
     if problems:
         raise Invalid("module list is not valid", {"problems": problems})
     before = mods.effective_modules(org)
-    stored = mods.set_org_modules(org, body.modules)
-    db.flush()
+    # billing.entitlements is the only writer of org.settings["modules"] (D-075, D-077): the
+    # admin's list is stored as overrides against the plan, so it survives plan changes.
+    from arbiter.billing import entitlements
+
+    stored = entitlements.set_exact_modules(db, org, body.modules)
     audit_log.audit(
         db, p, "module.changed", "organization", org.id, {"from": before, "to": stored}, org_id=org.id
     )
-    return {"enabled": mods.effective_modules(org), "catalog": mods.catalog(org)}
+    return {
+        "enabled": mods.effective_modules(org),
+        "catalog": mods.catalog(org),
+        "addons": mods.addon_catalog(org),
+    }
 
 
 # ------------------------------------------------------------------ roles

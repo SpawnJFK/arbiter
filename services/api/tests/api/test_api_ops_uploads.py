@@ -158,3 +158,57 @@ def test_s3_direct_upload_and_presigned_download(db, s3_backend):
     assert ev.status_code == 302 and "evidence.pdf" in ev.headers["location"]
     blob = c.put(f"/v1/uploads/{up['upload_id']}/blob?expires=1&token={'0' * 32}", content=b"x")
     assert blob.status_code == 404  # the signed local endpoint does not exist with s3
+
+
+SRT = b"1\n00:00:01,000 --> 00:00:03,000\nHello there, this is a subtitle line.\n\n2\n00:00:04,000 --> 00:00:06,000\nA second cue.\n"
+
+
+def test_handler_options_travel_from_upload_to_extract_and_merge(db):
+    """D-076: options given at upload are validated early, stored on the file and used again
+    by quote, extraction and merge."""
+    c = client()
+    h = register(c)
+    bad = _create(c, h, name="clip.srt", size=len(SRT), options={"max_chars_per_line": "x"})
+    assert bad.status_code == 422 and bad.json()["error"]["code"] == "unsupported_file"
+    wrong = _create(c, h, options={"max_chars_per_line": 80})  # markdown takes no options
+    assert wrong.status_code == 422
+    r = _create(c, h, name="clip.srt", size=len(SRT), options={"max_chars_per_line": 80})
+    assert r.status_code == 201, r.text
+    up = r.json()
+    assert _put(c, up["url"], SRT, ct="text/markdown").status_code == 204
+    done = c.post(f"/v1/uploads/{up['upload_id']}/complete", headers=h)
+    assert done.status_code == 201, done.text
+    f = done.json()
+    assert f["options"] == {"max_chars_per_line": 80} and f["format"] == "srt"
+    from arbiter.models import FileAsset, Segment
+
+    assert db.get(FileAsset, f["id"]).options == {"max_chars_per_line": 80}
+    q = quote(c, h, f["id"])
+    prj = project(c, h, q["id"], "auto")
+    drain()
+    job = c.get(f"/v1/jobs/{prj['jobs'][0]['id']}", headers=h).json()
+    assert job["state"] == "delivered"
+    from sqlalchemy import select
+
+    segs = db.execute(select(Segment).where(Segment.job_id == job["id"])).scalars().all()
+    assert segs and all(s.max_length == 80 for s in segs if s.max_length is not None)
+    assert any(s.max_length == 80 for s in segs)
+    dl = c.get(f"/v1/jobs/{job['id']}/download", headers=h)
+    assert dl.status_code == 200 and b"-->" in dl.content
+
+    # multipart POST /files takes the same options as a JSON form field
+    m = c.post(
+        "/v1/files",
+        headers=h,
+        files={"file": ("clip2.srt", SRT, "application/x-subrip")},
+        data={"source_lang": "en", "options": '{"max_chars_per_line": 40}'},
+    )
+    assert m.status_code == 201, m.text
+    assert m.json()["options"] == {"max_chars_per_line": 40}
+    bad_json = c.post(
+        "/v1/files",
+        headers=h,
+        files={"file": ("clip3.srt", SRT, "application/x-subrip")},
+        data={"source_lang": "en", "options": "[1, 2]"},
+    )
+    assert bad_json.status_code == 422

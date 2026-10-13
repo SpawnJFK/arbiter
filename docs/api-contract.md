@@ -51,7 +51,7 @@ The `client` role sees money fields (`revenue`, `cost`, `margin`, dashboard mone
 | 422 | `size_mismatch` | stored object size differs from the declared size (object deleted) |
 | 413 | `too_large` | local signed PUT body larger than the declared size |
 | 403 | `invalid_signature` | local signed upload URL forged or expired |
-| 422 | `invalid_token` | password reset or invitation link unknown, used or expired |
+| 422 | `invalid_token` | password reset link unknown, used or expired |
 | 500 | `internal_error` | unhandled error (reported to error tracking without the request body) |
 
 ### Idempotency
@@ -77,7 +77,7 @@ One key space per organization, kept 24 h. Same key + same body on the same endp
 | POST | /auth/register | public | `{org_name, name?, email, password(>=8)}` | 201 `{token, user, org}` (creates org + pm user); 409 if email exists |
 | POST | /auth/login | public | `{email, password}` | `{token, user}`. `email` is any string (demo accounts use reserved domains) |
 | POST | /auth/password/forgot | public | `{email}` | 202 `{ok: true}` always (never reveals whether the address exists). Queues the `password_reset` email; at most 5 links per user per hour |
-| POST | /auth/password/reset | public | `{token, password(>=8)}` | `{token, user}` (signed in). Accepts reset and invitation links; single use, expiring; every other open link of the user is revoked. 422 `invalid_token` |
+| POST | /auth/password/reset | public | `{token, password(>=8)}` | `{token, user}` (signed in). Accepts password reset links only (team invites: `POST /auth/invite/accept`); single use, expiring; every other open link of the user is revoked. 422 `invalid_token` |
 | GET | /me | any | | `{user\|null, org\|null}` (org null for reviewers/admin; user null for API keys) |
 | GET | /org | cust | | `Org` |
 | PATCH | /org | pm | `{name?, default_tier?, no_reviewer_policy?, ai_subprocessors_opt_in?, regulated?, vertical?, data_retention_days?(1..3650), processing_region?: global\|eu, training_consent?}` | `Org`. `processing_region: eu` needs the `eu_processing` add-on (422 otherwise); regulated orgs may set it |
@@ -92,8 +92,8 @@ One key space per organization, kept 24 h. Same key + same body on the same endp
 
 | Method | Path | Role | Body / query | Returns |
 |---|---|---|---|---|
-| POST | /files | cust | multipart `file`, `source_lang` | 201 `File`. Extracted once to validate; 422 `unsupported_file` otherwise. Limit 1 GB. Small files and fallback only: browsers use `/uploads` |
-| POST | /uploads | cust, module `tms` | `{filename, size(1..1 GB), content_type, source_lang}` | 201 `{upload_id, url, method: PUT, headers, expires_at, max_bytes, size, backend: local\|s3}`. Extension checked first (422 `unsupported_file`). PUT the raw bytes to `url` with `headers` |
+| POST | /files | cust | multipart `file`, `source_lang`, `options?` (JSON object as a string) | 201 `File`. Extracted once to validate; 422 `unsupported_file` otherwise. Limit 1 GB. Small files and fallback only: browsers use `/uploads` |
+| POST | /uploads | cust, module `tms` | `{filename, size(1..1 GB), content_type, source_lang, options?}` | 201 `{upload_id, url, method: PUT, headers, expires_at, max_bytes, size, backend: local\|s3}`. Extension and options checked first (422 `unsupported_file`); the options are kept for complete. PUT the raw bytes to `url` with `headers` |
 | GET | /uploads/{id} | cust, module `tms` | | `{upload_id, filename, size, status: pending\|completed\|rejected, file_id, expires_at}` |
 | POST | /uploads/{id}/complete | cust, module `tms` | | 201 `File` (same as POST /files; completing twice returns the same file). 409 `upload_missing` / `upload_expired`, 422 `size_mismatch` / `unsupported_file` |
 | PUT | /uploads/{id}/blob | signed URL | `?expires=&token=` raw body | 204. Only with the local storage backend: the HMAC in the query is the authorization (no bearer). 404 with s3 |
@@ -124,7 +124,7 @@ Exception kinds: `job_failed`, `segment_blocked`, `term_question`, `client_revie
 3. No template: `tier`, else the account's `default_tier`, else the org's `default_tier`.
 The tier must be available in the quote and allowed for the org now (regulated: never `auto`/`ai_review`), else 422 `tier_not_allowed`. `account_id` defaults to the quote's account. Quote revenue is split across jobs to the cent. Each job freezes its workflow snapshot (`job.workflow`).
 
-`File`: `{id, filename, format, source_lang, size, segment_count, word_count, warnings[], created_at}`.
+`File`: `{id, filename, format, source_lang, size, segment_count, word_count, warnings[], options|null, created_at}`. `options` are the format handler options given at upload (D-076): subtitles `{max_chars_per_line: 1..500}`, XML `{rules, dialect}`; other formats take none (422 `unsupported_file`). Quote, extraction, XLIFF export, preview and merge all read the file with them.
 
 `Quote`: `{id, file_id, source_lang, target_langs, content_type, word_count, currency, status: open|accepted|expired, valid_until, created_at, account_id, price_list_id, analysis, tiers}`.
 - `analysis`: `{tm_context, tm_exact, tm_fuzzy, new, repetitions, bands{}, weighted_words, by_lang: {<lang>: {bands, weighted_words, est_auto_rate, auto_rate_source: prior|history}}, note}` (word counts summed across target languages).
@@ -214,7 +214,9 @@ Reviewer statuses: `applied, active, suspended, banned`. Levels: `candidate, rev
 `Payout`: `{id, reviewer_id, amount, currency, state, method, provider_ref, failure_reason, created_at, sent_at}`.
 Payouts: in dev/test/staging without Payoneer/PayPal keys a mock provider "sends" them. In production (or with keys) `run` sends through the payout rails (`provider: "rails"`, D-073): Payoneer, PayPal or the bank-file rail by payout method. Rails answer pending; `POST /admin/payouts/refresh` polls, bank transfers are confirmed by the admin. Live provider credentials and a test payout are P03 items.
 
-## Integrations and billing
+## Integrations, usage and invoices
+
+Subscription billing, credits and payout rails: see "Subscription billing" below.
 
 | Method | Path | Role | Body / query | Returns |
 |---|---|---|---|---|
@@ -224,7 +226,7 @@ Payouts: in dev/test/staging without Payoneer/PayPal keys a mock provider "sends
 | GET | /usage | cust | `?period=YYYY-MM` | `{period, words, ai_units, review_decisions, storage_gb, platform_fee, amount, currency}` |
 | GET | /invoices | cust | | list of `Invoice` |
 
-Webhook events: `job.delivered, job.failed, job.needs_attention, quote.expired`. `job.needs_attention` reasons: `human_review`, `client_review`, `deadline`, `budget_exceeded` (with `providers`). Delivery is at-least-once; receivers dedupe on `event_id`. Signature header `Arbiter-Signature: t=<unix>,v1=<hex hmac sha256 of "t.body">`.
+Webhook events: `job.delivered, job.failed, job.needs_attention, job.query.opened, quote.expired, strings.release.published` (`arbiter/webhooks.py` EVENTS). `job.needs_attention` reasons: `human_review`, `client_review`, `deadline`, `budget_exceeded` (with `providers`). Delivery is at-least-once; receivers dedupe on `event_id`. Signature header `Arbiter-Signature: t=<unix>,v1=<hex hmac sha256 of "t.body">`.
 
 ## Engines (module `engine`)
 
@@ -305,9 +307,9 @@ Writes need permission `billing.manage` (roles `pm`, `admin`; not `client`, not 
 | POST | `/webhooks/paddle` (no /v1) | public, signed | raw Paddle event | 200 `{ok, duplicate, status: processed\|ignored}`; 400 `invalid_signature`; 500 `{ok: false, status: failed}` (stored, provider retries) |
 | POST | `/webhooks/stripe` (no /v1) | public, signed | raw Stripe event | same; Stripe is disabled unless configured |
 
-`Plan`: `{key, name, description, modules[], prices: {month|year: {CUR: "49.00"}}, seat_prices, included: {word, ai_unit}, overage: {CUR: {word, ai_unit}}, seats_included, max_seats, interval, custom, currencies[]}` (+ admin: `id, public, active, sort, provider_prices, updated_at`).
+`Plan`: `{key, name, description, modules[], addons[] (eu_processing, byok, custom_models; D-077), prices: {month|year: {CUR: "49.00"}}, seat_prices, included: {word, ai_unit}, overage: {CUR: {word, ai_unit}}, seats_included, max_seats, interval, custom, currencies[]}` (+ admin: `id, public, active, sort, provider_prices, updated_at`).
 `CreditPack`: `{key, name, credit_amount, price, currency, valid_days}`.
-`BillingOverview`: `{subscription: Sub|null, pending: Sub|null, plan: Plan|null, modules[], seats_used, period, meters: [{unit, used, included, overage}], platform_fee_percent, credits_balance, currency, provider}` (+ admin: `org_id, overrides: {add, remove}, payment_terms_days, po_number, provider_override, history: Sub[]`).
+`BillingOverview`: `{subscription: Sub|null, pending: Sub|null, plan: Plan|null, modules[], addons[], seats_used, period, meters: [{unit, used, included, overage}], platform_fee_percent, credits_balance, currency, provider}` (+ admin: `org_id, overrides: {add, remove}, addon_overrides: {add, remove}, payment_terms_days, po_number, provider_override, history: Sub[]`).
 `Sub`: `{id, plan, provider: paddle|stripe|manual|admin, provider_subscription_id, status: incomplete|trialing|active|past_due|paused|canceled, interval, currency, seats, current_period_start, current_period_end, cancel_at, canceled_at}`.
 
 Paddle webhook signature: `Paddle-Signature: ts=<unix>;h1=<hex HMAC-SHA256(secret, "<ts>:<raw body>")>` (several `h1` during secret rotation), 300 s tolerance. Each `(provider, event_id)` is stored once in `billing_events`; a replay answers `duplicate: true`. Events used: `subscription.*`, `transaction.completed`, `transaction.payment_failed`, `adjustment.created|updated` (approved refunds).
@@ -322,7 +324,7 @@ Quotes: tiers `hybrid` and `full` carry `platform_fee: {percent, basis_estimate,
 | POST | /admin/plans | `Plan` fields with `key`, `name` | 201 `Plan`; 409 duplicate key; 422 unknown module, float price |
 | PATCH | /admin/plans/{key} | any `Plan` field except `key` | `Plan` |
 | GET | /admin/orgs/{id}/subscription | | `BillingOverview` (admin) |
-| POST | /admin/orgs/{id}/subscription | `{plan?, status?, seats?, interval?, currency?, period_end?, modules_add?, modules_remove?, platform_fee_percent? (0..8), payment_terms_days?, po_number?, provider?: paddle\|stripe\|manual\|"", note?}` | `BillingOverview` (admin) |
+| POST | /admin/orgs/{id}/subscription | `{plan?, status?, seats?, interval?, currency?, period_end?, modules_add?, modules_remove?, addons_add?, addons_remove?, platform_fee_percent? (0..8), payment_terms_days?, po_number?, provider?: paddle\|stripe\|manual\|"", note?}` | `BillingOverview` (admin) |
 | POST | /admin/orgs/{id}/credits | `{amount, valid_days=365, note?, idempotency_key}` | 201 credit wallet |
 | POST | /admin/billing/close-period | `{period: YYYY-MM (finished), org_id?}` | `{period, expired_lots, orgs: [{org_id, status, covered_by_credit, due, invoice, unpriced}]}` (idempotent) |
 | GET | /admin/invoices | `?status=` | list of `Invoice` + `org_id` |
@@ -547,14 +549,13 @@ Messages import rules:
 - `en` cannot be written (422): it is the source catalog.
 - Placeholder safety: when `source` is given, every key present in both must use the same set of top-level ICU arguments (`{name}`, and the argument of `{count, plural, ...}` / `{x, select, ...}`; text inside plural branches is not an argument; `'{...}'` is quoted literal text). Otherwise 422 with `details.placeholders: {key: {expected: [...], got: [...]}}` and nothing is written.
 
-
 # Platform: modules, roles, team, audit log, SSO
 
 None of these routes are module-gated. Permission checks use `require_permission("<area>.<action>")` (built-in role mapping in `arbiter/platform/permissions.py`, or the user's custom role). `user` = a signed-in person; API keys get 403 on these writes.
 
 ### Module gating
 
-Every route of a product module carries `require_module("<module>")`; when the org has not enabled it the route answers 404 `module_disabled` (other modules keep working). Current mapping: files, quotes, projects, jobs, glossaries, terms, TM, term questions, exceptions -> `tms`; quality -> `ai`; CRM, price lists, workflows, dashboards, assistant -> `pm`. Auth, org settings, API keys, webhooks, usage, invoices, i18n and everything below are platform routes. `Org.modules` (in `/me`, `/org`, `/admin/orgs`) lists the modules that work for the org (enabled and every dependency enabled).
+Every route of a product module carries `require_module("<module>")`; when the org has not enabled it the route answers 404 `module_disabled` (other modules keep working). Current mapping: files, uploads, quotes, projects, jobs, glossaries, terms, TM, term questions, exceptions, segment editor, comments and queries, TM tools -> `tms`; quality, LQA -> `ai`; CRM, price lists, workflows, dashboards, assistant, vendors, assignments, purchase orders, vendor invoices, capacity -> `pm`; engines, routing, budgets, training, custom models -> `engine`; audits -> `auditor`; `/strings` -> `strings`. Auth, org settings, API keys, webhooks, usage, invoices, billing, i18n and everything below are platform routes. `Org.modules` (in `/me`, `/org`, `/admin/orgs`) lists the modules that work for the org (enabled and every dependency enabled).
 
 | Status | Code | When |
 |---|---|---|
@@ -564,9 +565,9 @@ Every route of a product module carries `require_module("<module>")`; when the o
 
 | Method | Path | Auth | Body / query | Returns |
 |---|---|---|---|---|
-| GET | /org/modules | cust | | `{enabled: [key], catalog: [{key, name, depends_on, enabled}]}` |
+| GET | /org/modules | cust | | `{enabled: [key], catalog: [{key, name, depends_on, enabled}], addons: [{key, name, module, enabled}]}`. Add-ons are read-only here (D-077) |
 | GET | /admin/orgs/{id} | admin | | `Org` + `kind`, `catalog` |
-| PUT | /admin/orgs/{id}/modules | admin | `{modules: [key]}` | as GET /org/modules; 422 `details.problems` for unknown keys or missing dependencies |
+| PUT | /admin/orgs/{id}/modules | admin | `{modules: [key]}` | as GET /org/modules; 422 `details.problems` for unknown keys or missing dependencies. Stored as billing module overrides against the org's plan (D-077), so a plan change keeps them |
 | GET | /roles | `users.read` | | `{items: [Role], builtin: [{key}], catalog: [{key, description}]}` |
 | POST | /roles | `roles.write`, user | `{name, description?, base_role: pm\|client, permissions: [pattern]}` | 201 `Role`; 409 name taken; 422 invalid pattern; 403 granting a permission you do not hold, or a pm-based role when you are not pm |
 | PATCH | /roles/{id} | `roles.write`, user | any field of POST | `Role` (base role change moves its members) |
@@ -594,7 +595,6 @@ Every route of a product module carries `require_module("<module>")`; when the o
 `/me` also returns `permissions` (granted patterns) and `user.role_id`.
 
 Audited actions so far: `org.created`, `org.updated`, `auth.login`, `auth.sso_login`, `api_key.created|revoked`, `webhook.created|deleted`, `module.changed`, `role.created|updated|deleted`, `user.invited|invite_accepted|updated|deactivated|reactivated|provisioned`, `sso.created|updated|deleted|domain_verified`, `audit.exported`, `glossary.imported`, `tm.imported`, `project.created`, `job.cancelled`, `segment.edited|approved`.
-
 
 # Software strings (module `strings`)
 
@@ -650,7 +650,6 @@ Formats (`format` names): `json` (flat), `json_nested` (next-intl, vue-i18n), `i
 String QA codes (blocking unless noted): `empty_value`, `placeholder_changed` (a missing placeholder in a plural form is a warning), `icu_syntax`, `icu_structure`, `plural_forms_missing`, `length_exceeded`, `array_length` (warning). Machine output also gets the document hard checks (`tag_missing` etc.; placeholders travel as standalone codes). Blocked translations never ship in pulls (unless `include_blocked`) or releases.
 
 CLI for CI: `cli/arbiter-strings.mjs` (`push`, `pull`, `release`, `status`; zero dependencies), documented in `cli/README.md`.
-
 
 # Workbench, TM tools, LQA, auditor (modules `tms`, `ai`, `auditor`)
 

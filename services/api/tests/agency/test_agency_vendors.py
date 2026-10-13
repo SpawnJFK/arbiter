@@ -162,7 +162,8 @@ def test_sequential_offer_decline_accept_work_approve_invoice(db):
     offer_mail = (
         db.execute(select(EmailMessage).where(EmailMessage.template == "vendor_message")).scalars().first()
     )
-    assert offer_mail is not None and offer_mail.status == "logged" and first["link"] in offer_mail.body_text
+    assert offer_mail is not None and offer_mail.status == "logged" and "/vendor/" in offer_mail.body_text
+    assert offer_mail.body_text.startswith("Hi Ana Lekic,")
     job = c.get(f"/v1/jobs/{job_id}", headers=h).json()
     assert job["state"] == "review"
     # nothing reached the marketplace: every open segment waits for the assignment

@@ -5,7 +5,7 @@ the new tables, columns and indexes are listed in dbinit (LATER_TABLES, LATER_CO
 LATER_INDEXES) so migration 0001 leaves them out.
 
 Revision ID: 0008
-Revises: 0003
+Revises: 0007
 """
 
 import sqlalchemy as sa

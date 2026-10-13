@@ -418,7 +418,7 @@ def xliff(job_id: str, p: Customer, db: DB) -> Response:
     if fa is None:
         raise NotFound("file not found")
     try:
-        result = detect_and_extract(fa.filename, storage.get(fa.storage_key), job.source_lang)
+        result = detect_and_extract(fa.filename, storage.get(fa.storage_key), job.source_lang, fa.options)
     except FileNotFoundError:
         raise NotFound("the source file is no longer stored (retention)") from None
     segs = db.execute(select(Segment).where(Segment.job_id == job.id).order_by(Segment.seq)).scalars()

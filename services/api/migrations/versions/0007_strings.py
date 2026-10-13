@@ -5,7 +5,7 @@ Hand-written. `alembic upgrade head` on an empty database must equal metadata.cr
 the tables are listed in dbinit.LATER_TABLES so migration 0001 leaves them out.
 
 Revision ID: 0007
-Revises: 0003
+Revises: 0006
 """
 
 import sqlalchemy as sa

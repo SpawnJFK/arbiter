@@ -55,26 +55,42 @@ services/api/arbiter/
   config.py          Settings, env prefix ARBITER_ (every field = ARBITER_<FIELD>)
   contracts.py       THE seam between modules: dataclasses + Protocols (TermHit, TermViolation, ...)
   errors.py          ServiceError family (NotFound 404, Forbidden 403, Conflict 409, Invalid 422)
-  domain/states.py   state machines (Segment, Job, Task, Payout); only legal path to change state
+  domain/states.py   state machines (Segment, Job, Task, Payout, Training, Audit, Assignment, PurchaseOrder,
+                     VendorInvoice); only legal path to change state
   models/            SQLAlchemy 2 models: tenancy, content, assets, quality, reviewers, money,
-                     integrations (work_items queue, webhooks, idempotency), provenance, agency, i18n
-  dbinit.py          extensions + tables + append-only trigger; metadata_0001 for migration 0001 (D-037)
+                     integrations (work_items queue, webhooks, idempotency), provenance, agency, i18n,
+                     ops (uploads, emails, account tokens), platform, engines, strings, workbench,
+                     vendors, billing
+  dbinit.py          extensions + tables + append-only triggers; metadata_0001 for migration 0001 (D-037);
+                     LATER_TABLES / LATER_COLUMNS / LATER_INDEXES list what migrations 0002+ add
   fileproc/          FormatHandler per format, registry, segmenter; tagged text ⟦n⟧ model in base.py
   linguistic/        tm.py, glossary.py (org-wide versions D-016), lemma.py (Snowball), embeddings.py
-  engines/           anthropic, openai, deepl, google (Basic v2), mock, llm_mt, tags, pricing, registry
+  engines/           anthropic, openai, deepl, google (Basic v2), bedrock, vertex, openai_compatible, mock,
+                     llm_mt, tags, pricing, registry, credentials (BYOK), routing, budgets (D-056..D-058)
+  training/          own models: datasets, Together/Fireworks/manual fine-tunes (D-059)
   quality/           checks (hard QA), qe (decide), judge, senate, editor, mqm, calibration, prompts
   pipeline/          orchestrator (steps), queue (work_items), worker, events, evidence, hooks
   community/         profiles, testing, queue, review, pay, scoring, disputes, payouts, payout_accounts,
                      payout_batches, payout_rails/ (payoneer, paypal, bank: D-073)
   billing/           quotes, pricing, usage, invoices, ledger, catalog (plans), credits, fees, entitlements,
                      subscriptions, period_close, providers/ (paddle, stripe, manual: D-072)
-  agency/            Agency OS: crm, pricelists, workflows, dashboards, assistant (+ heuristic), schemas
+  agency/            Agency OS: crm, pricelists, workflows, dashboards, assistant (+ heuristic), schemas,
+                     vendors, assignments, procurement (POs, vendor invoices), capacity, copilot (D-067..D-071)
+  tms/               workbench (editor, split/merge, find/replace), comments and queries, preview, TM tools
+  auditor/           standalone QA / LQA of bilingual files (D-064)
+  strings/           software strings: keys, branches, releases, OTA, formats (D-060..D-062)
+  platform/          modules (entitlement reader, add-ons), permissions, roles and team, audit, SSO, secrets
+  notify/            queued transactional email (templates, log/SMTP mailers), account tokens (D-051)
   api/               app.py (arbiter.api.app:app, /healthz), deps.py (auth, roles, paging), security.py
   api/routes/        auth, files, quotes, projects (+ idempotency helpers), jobs, assets, quality,
-                     integrations, reviewers, admin, crm, pricelists, workflows, dashboards, assistant, i18n
+                     integrations, reviewers, admin, crm, pricelists, workflows, dashboards, assistant, i18n,
+                     uploads, password, platform, engines, training, strings (+ public OTA), workbench,
+                     tmtools, lqa, audits, vendors, vendor_portal, billing (+ provider webhooks), payout_methods
   cli.py             seed-demo, create-admin, calibrate, run-worker
-  storage.py, webhooks.py
-services/api/migrations/versions/   0001_initial, 0002_agency_os, 0003_ui_i18n, 0010_billing (hand-written)
+  storage.py         local or S3 blob storage, presigned uploads (D-051)
+  observability.py   PostHog events, OpenTelemetry tracing (all off when unset)
+  webhooks.py
+services/api/migrations/versions/   0001_initial .. 0011_file_options_addons, one linear chain (hand-written)
 services/api/tests/  pytest, mock providers only; tests/db checks alembic head == create_all
 apps/web/            Next.js 16 App Router: /app (customers), /reviewer, /admin; src/lib (api client, types,
                      i18n), src/app/api/proxy (server proxy, token in httpOnly cookie, D-036), src/proxy.ts

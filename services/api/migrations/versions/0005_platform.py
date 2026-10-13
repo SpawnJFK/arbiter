@@ -5,7 +5,7 @@ the tables and users.role_id are listed in dbinit.LATER_TABLES / LATER_COLUMNS s
 0001 leaves them out.
 
 Revision ID: 0005
-Revises: 0003 (the lead re-chains revisions when parallel branches merge)
+Revises: 0004 (the lead re-chains revisions when parallel branches merge)
 """
 
 import sqlalchemy as sa

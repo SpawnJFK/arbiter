@@ -11,7 +11,7 @@
 
 import { api, ApiError, newIdempotencyKey, parseError } from "./api";
 import type { Translator } from "./i18n/core";
-import type { UploadedFile, UploadTicket } from "./types";
+import type { FileOptions, UploadedFile, UploadTicket } from "./types";
 
 export type UploadProgress = { loaded: number; total: number; phase: "sending" | "processing" };
 
@@ -60,10 +60,12 @@ async function multipartFallback(
   sourceLang: string,
   onProgress?: (p: UploadProgress) => void,
   signal?: AbortSignal,
+  options?: FileOptions,
 ): Promise<UploadedFile> {
   const form = new FormData();
   form.set("file", file);
   form.set("source_lang", sourceLang);
+  if (options && Object.keys(options).length > 0) form.set("options", JSON.stringify(options));
   const res = await xhrSend(
     t,
     "POST",
@@ -83,15 +85,17 @@ export async function uploadSourceFile(
   sourceLang: string,
   onProgress?: (p: UploadProgress) => void,
   signal?: AbortSignal,
+  options?: FileOptions,
 ): Promise<UploadedFile> {
   const contentType = guessType(file);
+  const opts = options && Object.keys(options).length > 0 ? options : undefined;
   let ticket: UploadTicket;
   try {
-    ticket = await api.createUpload({ filename: file.name, size: file.size, content_type: contentType, source_lang: sourceLang });
+    ticket = await api.createUpload({ filename: file.name, size: file.size, content_type: contentType, source_lang: sourceLang, options: opts });
   } catch (e) {
     // Direct uploads unavailable (older API, mock mode): use the multipart endpoint.
     if (e instanceof ApiError && (e.status === 405 || e.status === 501 || (e.status === 404 && e.code !== "module_disabled"))) {
-      return multipartFallback(t, file, sourceLang, onProgress, signal);
+      return multipartFallback(t, file, sourceLang, onProgress, signal, opts);
     }
     throw e;
   }

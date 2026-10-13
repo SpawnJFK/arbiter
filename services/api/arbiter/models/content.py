@@ -51,6 +51,9 @@ class FileAsset(Base):
     source_lang: Mapped[str] = mapped_column(String(16))
     segment_count: Mapped[int] = mapped_column(Integer, default=0)
     word_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Format handler options given at upload (XML rules, subtitle line limits). Extract, quote
+    # and merge all use the same options (migration 0011, D-076).
+    options: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = created_at_column()
 

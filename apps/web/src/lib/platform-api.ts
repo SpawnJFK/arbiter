@@ -10,9 +10,18 @@ export interface ModuleInfo {
   enabled: boolean;
 }
 
+/** Paid add-on on top of a module (D-077). Billing writes them; the org UI only shows them. */
+export interface AddonInfo {
+  key: string;
+  name: string;
+  module: string;
+  enabled: boolean;
+}
+
 export interface OrgModules {
   enabled: string[];
   catalog: ModuleInfo[];
+  addons?: AddonInfo[];
 }
 
 export interface CustomRole {
@@ -110,6 +119,7 @@ export interface AdminOrg {
   kind?: string;
   modules?: string[];
   catalog: ModuleInfo[];
+  addons?: AddonInfo[];
 }
 
 const enc = encodeURIComponent;
@@ -136,8 +146,8 @@ export function platformEndpoints(item: Transport) {
       send<Member>("PATCH", `/users/${enc(id)}`, body),
     deactivateMember: (id: string) => send<null>("DELETE", `/users/${enc(id)}`),
 
-    audit: (f: AuditFilters & ListParams = {}) => get<ListResponse<AuditEvent>>("/audit", { ...f, ...page(f) }),
-    auditExportUrl: (f: AuditFilters = {}) => item.downloadUrl("/audit/export", { ...f }),
+    auditLog: (f: AuditFilters & ListParams = {}) => get<ListResponse<AuditEvent>>("/audit", { ...f, ...page(f) }),
+    auditLogExportUrl: (f: AuditFilters = {}) => item.downloadUrl("/audit/export", { ...f }),
 
     sso: () => get<SsoConfig>("/org/sso"),
     saveSso: (body: SsoInput) => send<SsoConfig>("PUT", "/org/sso", body),

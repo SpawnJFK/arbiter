@@ -324,7 +324,7 @@ def preview(job_id: str, p: Customer, db: DB) -> Response:
     except FileNotFoundError:
         raise NotFound("the source file is no longer stored (retention)") from None
     segs = list(db.execute(select(Segment).where(Segment.job_id == job.id).order_by(Segment.seq)).scalars())
-    html, mode = pv.render(fa.filename, original, segs, job.target_lang)
+    html, mode = pv.render(fa.filename, original, segs, job.target_lang, fa.options)
     return Response(
         html,
         media_type="text/html; charset=utf-8",

@@ -539,7 +539,8 @@ def admin_override(session: Session, org: Organization, data: dict[str, Any]) ->
     """POST /admin/orgs/{id}/subscription. Contract deals, comps and corrections.
 
     plan (+ seats, status, interval, currency, period_end) creates or updates the org's
-    `admin` subscription; modules_add / modules_remove set entitlement overrides;
+    `admin` subscription; modules_add / modules_remove and addons_add / addons_remove set
+    entitlement overrides;
     platform_fee_percent, payment_terms_days, po_number, provider change the org's billing
     settings. A provider (paddle/stripe) subscription is never edited here: change it at the
     provider, the webhook updates us.
@@ -595,6 +596,8 @@ def admin_override(session: Session, org: Organization, data: dict[str, Any]) ->
             sub.updated_at = now
     if "modules_add" in data or "modules_remove" in data:
         entitlements.set_overrides(org, data.get("modules_add"), data.get("modules_remove"))
+    if "addons_add" in data or "addons_remove" in data:
+        entitlements.set_addon_overrides(org, data.get("addons_add"), data.get("addons_remove"))
     if data.get("platform_fee_percent") is not None:
         fees.set_platform_fee_percent(org, data["platform_fee_percent"])
     billing_patch: dict[str, Any] = {}
@@ -675,13 +678,14 @@ def subscription_view(session: Session, org: Organization, *, admin: bool = Fals
         select(func.count(User.id)).where(User.org_id == org.id, User.is_active.is_(True))
     ).scalar_one()
     period = current_period()
-    from arbiter.platform.modules import org_modules
+    from arbiter.platform.modules import addon_catalog, org_modules
 
     out: dict[str, Any] = {
         "subscription": sub_view(sub),
         "pending": sub_view(pending),
         "plan": catalog.plan_view(plan) if plan is not None else None,
         "modules": sorted(org_modules(org)),
+        "addons": [a["key"] for a in addon_catalog(org) if a["enabled"]],
         "seats_used": int(seats_used),
         "period": period,
         "meters": meters(session, org.id, plan, period),
@@ -694,6 +698,7 @@ def subscription_view(session: Session, org: Organization, *, admin: bool = Fals
         billing = (org.settings or {}).get("billing") or {}
         out["org_id"] = org.id
         out["overrides"] = entitlements.overrides(org)
+        out["addon_overrides"] = entitlements.addon_overrides(org)
         out["payment_terms_days"] = billing.get("payment_terms_days", 14)
         out["po_number"] = billing.get("po_number", "")
         out["provider_override"] = billing.get("provider")

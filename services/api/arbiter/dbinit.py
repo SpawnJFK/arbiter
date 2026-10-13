@@ -91,6 +91,7 @@ LATER_COLUMNS: dict[str, frozenset[str]] = {
     "jobs": frozenset({"account_id", "workflow", "client_approved_at", "senate_count", "cost_vendors"}),
     "users": frozenset({"role_id"}),  # 0005_platform
     "segments": frozenset({"locked_by", "locked_at"}),
+    "files": frozenset({"options"}),  # 0011_file_options_addons
     # 0010_billing
     "invoices": frozenset(
         {"kind", "provider", "provider_ref", "provider_invoice_number", "provider_url", "due_at", "paid_at"}

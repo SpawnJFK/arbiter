@@ -1,16 +1,16 @@
 """Plans and credit packs: the catalog customers buy from (D-072).
 
 The catalog is DATA in the plans and credit_packs tables, edited by the platform admin.
-`STARTER_PLANS` and `STARTER_PACKS` below only seed an empty database (migration 0010 and
+`STARTER_PLANS` and `STARTER_PACKS` below only seed an empty database (migration 0011 and
 `python -m arbiter.cli seed-plans`); seeding never overwrites an existing row.
 
 STARTING VALUES, not market-validated. The owner sets real prices before launch.
 
-    plan        modules                                          month EUR   seats
-    starter     tms, ai                                          49          2
-    team        + pm, community                                  199         5
-    business    + engine, auditor, strings                       599         15
-    enterprise  every module, priced by contract (custom)        -           50
+    plan        modules                                          month EUR   seats   add-ons
+    starter     tms, ai                                          49          2       -
+    team        + pm, community                                  199         5       -
+    business    + engine, auditor, strings                       599         15      byok
+    enterprise  every module, priced by contract (custom)        -           50      all
 
 Plan JSON shapes (money and quantities are decimal strings):
     prices / seat_prices  {"month": {"EUR": "49.00"}, "year": {"EUR": "490.00"}}
@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 from arbiter.billing.ledger import money
 from arbiter.errors import Invalid, NotFound
 from arbiter.models import CreditPack, Plan
-from arbiter.platform.modules import MODULES
+from arbiter.platform.modules import ADDONS, MODULES
 
 INTERVALS = ("month", "year")
 METERED_UNITS = ("word", "ai_unit")
@@ -79,6 +79,7 @@ STARTER_PLANS: tuple[dict[str, Any], ...] = (
         "name": "Business",
         "description": "Adds the engine API, the quality auditor and software strings.",
         "modules": ["tms", "ai", "pm", "community", "engine", "auditor", "strings"],
+        "addons": ["byok"],
         "prices": {"month": {"EUR": "599.00", "USD": "659.00"}, "year": {"EUR": "5990.00", "USD": "6590.00"}},
         "seat_prices": {
             "month": {"EUR": "25.00", "USD": "28.00"},
@@ -98,6 +99,7 @@ STARTER_PLANS: tuple[dict[str, Any], ...] = (
         "name": "Enterprise",
         "description": "Every module, contract pricing, invoices with terms, PO and bank transfer.",
         "modules": list(MODULES),
+        "addons": list(ADDONS),
         "prices": {},
         "seat_prices": {},
         "included": {},
@@ -179,6 +181,12 @@ def normalize_plan(data: dict[str, Any], *, partial: bool = False) -> dict[str, 
                 if dep not in mods:
                     mods.append(dep)
         out["modules"] = [m for m in MODULES if m in mods]
+    if "addons" in data:
+        addons = list(dict.fromkeys(data.get("addons") or []))
+        unknown = [a for a in addons if a not in ADDONS]
+        if unknown:
+            raise Invalid(f"unknown add-on(s): {', '.join(unknown)}", {"allowed": list(ADDONS)})
+        out["addons"] = [a for a in ADDONS if a in addons]
     for f in ("prices", "seat_prices"):
         if f in data:
             out[f] = _price_table(data.get(f), f)
@@ -293,6 +301,7 @@ def plan_view(plan: Plan, *, admin: bool = False) -> dict[str, Any]:
         "name": plan.name,
         "description": plan.description,
         "modules": list(plan.modules or []),
+        "addons": list(plan.addons or []),
         "prices": plan.prices or {},
         "seat_prices": plan.seat_prices or {},
         "included": plan.included or {},

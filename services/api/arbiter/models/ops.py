@@ -24,6 +24,7 @@ class UploadSession(Base):
     size: Mapped[int] = mapped_column(BigInteger)  # declared by the client, checked on complete
     content_type: Mapped[str] = mapped_column(String(200))
     source_lang: Mapped[str] = mapped_column(String(16))
+    options: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)  # handler options (0011)
     storage_key: Mapped[str] = mapped_column(String(400))
     status: Mapped[str] = mapped_column(String(16), default="pending")  # pending | completed | rejected
     file_id: Mapped[str | None] = mapped_column(ForeignKey("files.id"), nullable=True)

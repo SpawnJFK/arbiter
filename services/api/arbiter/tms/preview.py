@@ -43,9 +43,15 @@ def _page(body: str, lang: str, title: str) -> str:
     )
 
 
-def render(filename: str, original: bytes, segments: list[Any], target_lang: str) -> tuple[str, str]:
-    """Returns (html, mode) with mode rich | side_by_side."""
-    handler = get_handler(filename)
+def render(
+    filename: str,
+    original: bytes,
+    segments: list[Any],
+    target_lang: str,
+    options: dict[str, Any] | None = None,
+) -> tuple[str, str]:
+    """Returns (html, mode) with mode rich | side_by_side. `options`: the file's handler options."""
+    handler = get_handler(filename, options)
     if handler.name in RICH_FORMATS:
         try:
             merged = handler.merge(original, target_map(segments), target_lang)

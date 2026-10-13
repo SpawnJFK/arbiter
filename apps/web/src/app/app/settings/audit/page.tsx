@@ -48,7 +48,7 @@ export default async function AuditPage({
     until: sp.until && DAY.test(sp.until) ? nextDay(sp.until) : undefined,
   };
   const [page, exportUrl] = await withAuth(
-    async (api) => [await api.audit({ ...filters, offset, limit: PAGE }), api.auditExportUrl(filters)] as const,
+    async (api) => [await api.auditLog({ ...filters, offset, limit: PAGE }), api.auditLogExportUrl(filters)] as const,
     "/app/settings/audit",
   );
   const qs = (o: number) => {

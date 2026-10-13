@@ -2,14 +2,14 @@
 
 Tables: plans, credit_packs, subscriptions, billing_customers, credit_ledger, billing_events,
 payout_accounts, payout_batches. Columns on invoices: kind, provider, provider_ref,
-provider_invoice_number, provider_url, due_at, paid_at. Seeds the starter plans and credit
-packs (editable data; the admin plans editor changes them afterwards).
+provider_invoice_number, provider_url, due_at, paid_at. The starter plans and credit packs
+are seeded by 0011.
 
 Hand-written. `alembic upgrade head` on an empty database must equal metadata.create_all;
 the tables and columns are listed in dbinit.LATER_TABLES / LATER_COLUMNS.
 
 Revision ID: 0010
-Revises: 0003
+Revises: 0009
 """
 
 import sqlalchemy as sa
@@ -165,15 +165,8 @@ def upgrade() -> None:
     op.add_column("invoices", sa.Column("due_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("invoices", sa.Column("paid_at", sa.DateTime(timezone=True), nullable=True))
     op.create_index("ix_invoices_provider_ref", "invoices", ["provider_ref"])
-
-    # Starter catalog (editable data afterwards). Same function the CLI `seed-plans` runs.
-    from sqlalchemy.orm import Session
-
-    from arbiter.billing.catalog import seed_starter_catalog
-
-    session = Session(bind=op.get_bind())
-    seed_starter_catalog(session)
-    session.flush()
+    # The starter catalog is seeded by 0011, after plans.addons exists: the seed goes through
+    # the ORM model, which always has the newest columns.
 
 
 def downgrade() -> None:

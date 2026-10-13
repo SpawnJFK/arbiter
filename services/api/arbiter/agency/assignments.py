@@ -426,7 +426,15 @@ def _offer_text(job: Job, a: VendorAssignment) -> str:
 def _message_to(
     a: VendorAssignment, to: str | None, subject: str, body: str, link: str | None = None
 ) -> None:
-    record = vnd.notify(to, subject, body, link=link, session=object_session(a), org_id=a.org_id)
+    session = object_session(a)
+    name = ""
+    if session is not None and a.vendor_id:
+        v = session.get(Vendor, a.vendor_id)
+        name = v.name if v else ""
+    elif session is not None and a.user_id:
+        u = session.get(User, a.user_id)
+        name = (u.name or "") if u else ""
+    record = vnd.notify(to, subject, body, link=link, session=session, org_id=a.org_id, name=name)
     a.messages = [*list(a.messages or []), record]
 
 

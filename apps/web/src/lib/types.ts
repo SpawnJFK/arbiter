@@ -133,7 +133,12 @@ export interface UploadedFile {
   segment_count: number;
   word_count: number;
   warnings: string[];
+  /** Format handler options stored with the file (D-076), e.g. {max_chars_per_line: 42}. */
+  options?: FileOptions | null;
 }
+
+/** Format handler options (D-076): subtitles take max_chars_per_line, XML takes rules and dialect. */
+export type FileOptions = Record<string, unknown>;
 
 /** POST /uploads: where and how to send the bytes for a direct upload. */
 export interface UploadTicket {
@@ -727,6 +732,8 @@ export interface Plan {
   name: string;
   description: string;
   modules: ModuleKey[];
+  /** Add-ons the plan includes (D-077): eu_processing, byok, custom_models. */
+  addons?: string[];
   prices: PriceTable;
   seat_prices: PriceTable;
   included: Partial<Record<"word" | "ai_unit", string>>;

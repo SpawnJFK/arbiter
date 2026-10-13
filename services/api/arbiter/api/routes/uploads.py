@@ -28,7 +28,7 @@ from sqlalchemy import select
 
 from arbiter import storage
 from arbiter.api.deps import DB, Customer, require_module
-from arbiter.api.routes.files import clean_filename, file_view, register_file
+from arbiter.api.routes.files import clean_filename, file_view, parse_options, register_file
 from arbiter.api.routes.projects import idempotent_replay, idempotent_store
 from arbiter.config import get_settings
 from arbiter.errors import Conflict, Invalid, NotFound
@@ -56,6 +56,8 @@ class UploadIn(BaseModel):
     size: int = Field(ge=1, le=MAX_FILE_BYTES)
     content_type: str = Field(default="application/octet-stream", min_length=1, max_length=200)
     source_lang: str = Field(min_length=2, max_length=16)
+    # Format handler options (D-076), e.g. {"max_line_length": 42} for subtitles or XML rules.
+    options: dict[str, Any] | None = None
 
 
 def upload_view(u: UploadSession, req: storage.PresignedRequest, backend: str) -> dict[str, Any]:
@@ -83,10 +85,18 @@ def create_upload(
     body: UploadIn, p: Customer, db: DB, idempotency_key: Annotated[str | None, Header()] = None
 ) -> Any:
     filename = clean_filename(body.filename)
-    get_handler(filename)  # unsupported extension -> 422 unsupported_file before any bytes move
+    opts = parse_options(body.options)
+    # unsupported extension or options the handler refuses -> 422 before any bytes move
+    get_handler(filename, opts)
     source_lang = body.source_lang.strip()
     content_type = _content_type(body.content_type)
-    payload = {"filename": filename, "size": body.size, "ct": content_type, "source_lang": source_lang}
+    payload = {
+        "filename": filename,
+        "size": body.size,
+        "ct": content_type,
+        "source_lang": source_lang,
+        "options": opts,
+    }
     replay = idempotent_replay(db, p, "uploads", idempotency_key, payload)
     if replay is not None:
         return replay
@@ -103,6 +113,7 @@ def create_upload(
         size=body.size,
         content_type=content_type,
         source_lang=source_lang,
+        options=opts,
         storage_key=key,
         status="pending",
         expires_at=utcnow() + timedelta(seconds=settings.upload_url_ttl_seconds),
@@ -171,7 +182,14 @@ def complete_upload(
     sha = hashlib.sha256(data).hexdigest()
     try:
         fa, warnings = register_file(
-            db, p.org_id, u.filename, data, u.source_lang, sha256=sha, stored_key=u.storage_key
+            db,
+            p.org_id,
+            u.filename,
+            data,
+            u.source_lang,
+            sha256=sha,
+            stored_key=u.storage_key,
+            options=u.options,
         )
     except FormatError:
         storage.delete(u.storage_key)
